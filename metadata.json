@@ -1,0 +1,8 @@
+{
+  "name": "CatchRank",
+  "description": "De slimme webapp voor sportvissers: loggen, analyseren en ranken.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

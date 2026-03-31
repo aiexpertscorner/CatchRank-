@@ -1,0 +1,209 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Auth UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (required)
+    //   - email: string (required, private)
+    //   - photoURL: string (optional)
+    //   - xp: number (required)
+    //   - level: number (required)
+    //   - stats: map (optional)
+    //   - rank: number (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: catches
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - authorName: string (required)
+    //   - authorPhoto: string (optional)
+    //   - species: string (required)
+    //   - speciesId: string (optional)
+    //   - weight: number (optional)
+    //   - length: number (optional)
+    //   - photoURL: string (optional)
+    //   - spotId: string (optional)
+    //   - spotName: string (optional)
+    //   - sessionId: string (optional)
+    //   - timestamp: timestamp (required)
+    //   - status: string (required, enum: ['draft', 'complete', 'pending'])
+    //   - incompleteFields: list (optional)
+    //   - xpEarned: number (optional)
+    //   - isPrivate: bool (optional)
+    //
+    // Collection: sessions
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - startTime: timestamp (required)
+    //   - endTime: timestamp (optional)
+    //   - status: string (required, enum: ['active', 'completed', 'draft'])
+    //   - catchIds: list (optional)
+    //   - spotIds: list (optional)
+    //   - totalXp: number (optional)
+    //
+    // Collection: spots
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - isPrivate: bool (required)
+    //   - waterType: string (optional)
+    //   - coordinates: map (optional)
+    //
+    // Collection: species
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - xpValue: number (required)
+    //
+    // Collection: clubs
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - ownerId: string (required)
+    //   - isPrivate: bool (required)
+    //
+    // Collection: club_members
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required)
+    //   - clubId: string (required)
+    //   - role: string (required, enum: ['owner', 'admin', 'member'])
+    //
+    // Collection: club_feed
+    // Document ID: auto-generated
+    // Fields:
+    //   - clubId: string (required)
+    //   - type: string (required, enum: ['catch', 'session', 'announcement'])
+    //   - authorId: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "j.vandenbol@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 50 &&
+             isValidEmail(data.email) &&
+             data.xp is number && data.xp >= 0 &&
+             data.level is number && data.level >= 1;
+    }
+
+    function isValidCatch(data) {
+      return data.userId == request.auth.uid &&
+             data.species is string && data.species.size() > 0 &&
+             data.status in ['draft', 'complete', 'pending'] &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL));
+    }
+
+    function isValidSession(data) {
+      return data.userId == request.auth.uid &&
+             data.status in ['active', 'completed', 'draft'];
+    }
+
+    function isValidSpot(data) {
+      return data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.isPrivate is bool;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                    request.resource.data.email == resource.data.email;
+    }
+
+    match /catches/{catchId} {
+      allow read: if isAuthenticated() && (resource.data.isPrivate == false || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidCatch(request.resource.data);
+      allow update: if isDocOwner() && isValidCatch(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow update: if isDocOwner() && isValidSession(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /spots/{spotId} {
+      allow read: if isAuthenticated() && (resource.data.isPrivate == false || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidSpot(request.resource.data);
+      allow update: if isDocOwner() && isValidSpot(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /species/{speciesId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /clubs/{clubId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    match /club_members/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /club_feed/{feedId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+  }
+}

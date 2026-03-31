@@ -1,0 +1,170 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile data including XP, level, and aggregated stats.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Public display name" },
+        "email": { "type": "string", "format": "email", "description": "Private email address" },
+        "photoURL": { "type": "string", "format": "uri", "description": "Profile picture URL" },
+        "xp": { "type": "integer", "description": "Total experience points" },
+        "level": { "type": "integer", "description": "Current user level" },
+        "bio": { "type": "string", "description": "Short user biography" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "totalCatches": { "type": "integer" },
+            "totalSessions": { "type": "integer" },
+            "totalSpots": { "type": "integer" },
+            "speciesCount": { "type": "integer" },
+            "personalRecords": { "type": "object", "description": "Map of species to max length/weight" }
+          }
+        },
+        "rank": { "type": "integer", "description": "Cached global rank" },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "email", "xp", "level"]
+    },
+    "Catch": {
+      "title": "Catch Log",
+      "description": "A single fish catch record with draft support.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "authorName": { "type": "string", "description": "Denormalized for feeds" },
+        "authorPhoto": { "type": "string", "description": "Denormalized for feeds" },
+        "species": { "type": "string" },
+        "speciesId": { "type": "string", "description": "Reference to species collection" },
+        "weight": { "type": "number" },
+        "length": { "type": "number" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "spotId": { "type": "string" },
+        "spotName": { "type": "string", "description": "Denormalized for display" },
+        "sessionId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["draft", "complete", "pending"], "description": "Log status" },
+        "incompleteFields": { "type": "array", "items": { "type": "string" }, "description": "Fields missing for completion" },
+        "weather": { "type": "object" },
+        "bait": { "type": "string" },
+        "technique": { "type": "string" },
+        "xpEarned": { "type": "integer" },
+        "isPrivate": { "type": "boolean" }
+      },
+      "required": ["userId", "timestamp", "status"]
+    },
+    "Session": {
+      "title": "Fishing Session",
+      "description": "A period of fishing activity.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "spotIds": { "type": "array", "items": { "type": "string" } },
+        "catchIds": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["active", "completed", "draft"] },
+        "notes": { "type": "string" },
+        "totalXp": { "type": "integer" }
+      },
+      "required": ["userId", "startTime", "status"]
+    },
+    "Spot": {
+      "title": "Fishing Spot",
+      "description": "A specific location for fishing.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "coordinates": { "type": "object" },
+        "waterType": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "description": { "type": "string" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "totalCatches": { "type": "integer" },
+            "topSpecies": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "required": ["userId", "name", "isPrivate"]
+    },
+    "Species": {
+      "title": "Fish Species",
+      "description": "Reference data for fish species.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "scientificName": { "type": "string" },
+        "description": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "xpValue": { "type": "integer", "description": "Base XP for catching this species" }
+      },
+      "required": ["name"]
+    },
+    "Club": {
+      "title": "Fishing Club",
+      "description": "A community group of anglers.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "memberCount": { "type": "integer" },
+        "photoURL": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "totalCatches": { "type": "integer" },
+            "totalXp": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["name", "ownerId"]
+    },
+    "ClubMember": {
+      "title": "Club Membership",
+      "description": "Mapping of users to clubs.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "clubId": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "member"] },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "userDisplayName": { "type": "string", "description": "Denormalized" },
+        "userPhotoURL": { "type": "string", "description": "Denormalized" }
+      },
+      "required": ["userId", "clubId", "role"]
+    },
+    "ClubFeedItem": {
+      "title": "Club Feed Activity",
+      "description": "Activity items in a club's feed.",
+      "type": "object",
+      "properties": {
+        "clubId": { "type": "string" },
+        "type": { "type": "string", "enum": ["catch", "session", "announcement"] },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "contentId": { "type": "string", "description": "ID of the related catch/session" },
+        "text": { "type": "string", "description": "For announcements or comments" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clubId", "type", "authorId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/catches/{catchId}": { "schema": "Catch", "description": "Catch logs" },
+    "/sessions/{sessionId}": { "schema": "Session", "description": "Fishing sessions" },
+    "/spots/{spotId}": { "schema": "Spot", "description": "Fishing spots" },
+    "/species/{speciesId}": { "schema": "Species", "description": "Reference species" },
+    "/clubs/{clubId}": { "schema": "Club", "description": "Fishing clubs" },
+    "/club_members/{memberId}": { "schema": "ClubMember", "description": "Club memberships" },
+    "/club_feed/{feedId}": { "schema": "ClubFeedItem", "description": "Club activity feed" }
+  }
+}
