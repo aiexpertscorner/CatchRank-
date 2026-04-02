@@ -13,7 +13,7 @@ import {
 import { Button, Card } from './ui/Base';
 import { Input, Textarea, Select, Checkbox } from './ui/Inputs';
 import { motion } from 'motion/react';
-import { db } from '../firebase';
+import { db } from '../lib/firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../App';
 import { toast } from 'sonner';

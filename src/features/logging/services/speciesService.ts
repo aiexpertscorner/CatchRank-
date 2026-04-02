@@ -1,0 +1,52 @@
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
+import { Species } from '../../../types';
+
+/**
+ * Species Service
+ * Provides a list of common fish species and fetches from Firestore.
+ */
+
+const COMMON_SPECIES: Species[] = [
+  { id: 'snoek', name: 'Snoek', xpValue: 50 },
+  { id: 'baars', name: 'Baars', xpValue: 30 },
+  { id: 'snoekbaars', name: 'Snoekbaars', xpValue: 60 },
+  { id: 'karper', name: 'Karper', xpValue: 80 },
+  { id: 'brasem', name: 'Brasem', xpValue: 20 },
+  { id: 'zeebaars', name: 'Zeebaars', xpValue: 70 },
+  { id: 'forel', name: 'Forel', xpValue: 40 },
+  { id: 'meerval', name: 'Meerval', xpValue: 100 },
+  { id: 'roofblei', name: 'Roofblei', xpValue: 55 },
+  { id: 'winde', name: 'Winde', xpValue: 35 },
+];
+
+export const speciesService = {
+  /**
+   * Get all species from Firestore or return common ones as fallback.
+   */
+  async getAllSpecies(): Promise<Species[]> {
+    try {
+      const q = query(collection(db, 'species'), orderBy('name', 'asc'));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        return COMMON_SPECIES;
+      }
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Species));
+    } catch (error) {
+      console.error('Error fetching species:', error);
+      return COMMON_SPECIES;
+    }
+  },
+
+  /**
+   * Get common species for quick selection.
+   */
+  getCommonSpecies(): Species[] {
+    return COMMON_SPECIES;
+  }
+};

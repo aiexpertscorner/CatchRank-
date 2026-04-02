@@ -10,7 +10,7 @@ import {
 import { Button, Card } from './ui/Base';
 import { Input } from './ui/Inputs';
 import { motion } from 'motion/react';
-import { loggingService } from '../services/loggingService';
+import { loggingService } from '../features/logging/services/loggingService';
 import { useAuth } from '../App';
 import { toast } from 'sonner';
 

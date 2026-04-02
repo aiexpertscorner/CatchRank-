@@ -1,33 +1,46 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  User, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
+} from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db } from './lib/firebase';
 import { UserProfile } from './types';
 import { AppShell } from './components/layout/AppShell';
-import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
-import Onboarding from './pages/Onboarding';
-import Catches from './pages/Catches';
-import Sessions from './pages/Sessions';
-import Spots from './pages/Spots';
-import Stats from './pages/Stats';
-import Rankings from './pages/Rankings';
-import Clubs from './pages/Clubs';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import Gear from './pages/Gear';
-import Tools from './pages/Tools';
-import Knowledge from './pages/Knowledge';
-import WeatherForecast from './pages/tools/WeatherForecast';
-import { AskDick } from './pages/AskDick';
 import { Toaster } from 'sonner';
+import { ENV } from './config/env';
+
+// Feature-based Screens
+import Dashboard from './features/dashboard/screens/Dashboard';
+import Login from './features/auth/screens/Login';
+import Onboarding from './features/auth/screens/Onboarding';
+import Profile from './features/auth/screens/Profile';
+import Settings from './features/auth/screens/Settings';
+import Catches from './features/logging/screens/Catches';
+import Sessions from './features/logging/screens/Sessions';
+import Spots from './features/spots/screens/Spots';
+import Gear from './features/gear/screens/Gear';
+import Rankings from './features/community/screens/Rankings';
+import Clubs from './features/community/screens/Clubs';
+import Stats from './features/stats/screens/Stats';
+import Knowledge from './features/knowledge/screens/Knowledge';
+import Tools from './features/tools/screens/Tools';
+import AskDick from './features/tools/screens/AskDick';
+import WeatherForecast from './features/weather/screens/WeatherForecast';
 
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -45,54 +58,31 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // --- AUTH BYPASS FOR DEV ---
-  const BYPASS_AUTH = true; // Set to false to re-enable real auth
-  const MOCK_USER = { uid: 'dev-user-123', email: 'visser@catchrank.nl', displayName: 'Test Visser' } as User;
-  const MOCK_PROFILE: UserProfile = {
-    uid: 'dev-user-123',
-    displayName: 'Test Visser',
-    email: 'visser@catchrank.nl',
-    xp: 1250,
-    level: 12,
-    onboardingStatus: 'complete',
-    createdAt: new Date(),
-    stats: {
-      totalCatches: 42,
-      totalSessions: 18,
-      totalSpots: 7,
-      speciesCount: 5
-    }
-  };
-  // ----------------------------
-
   useEffect(() => {
-    if (BYPASS_AUTH) {
-      setUser(MOCK_USER);
-      setProfile(MOCK_PROFILE);
-      setLoading(false);
-      return;
-    }
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          setProfile(userDoc.data() as UserProfile);
-        } else {
-          // Create initial profile
-          const newProfile: UserProfile = {
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || 'Visser',
-            email: firebaseUser.email || '',
-            photoURL: firebaseUser.photoURL || undefined,
-            xp: 0,
-            level: 1,
-            onboardingStatus: 'welcome',
-            createdAt: serverTimestamp(),
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
-          setProfile(newProfile);
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            setProfile(userDoc.data() as UserProfile);
+          } else {
+            // Create initial profile
+            const newProfile: UserProfile = {
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName || 'Visser',
+              email: firebaseUser.email || '',
+              photoURL: firebaseUser.photoURL || undefined,
+              xp: 0,
+              level: 1,
+              onboardingStatus: 'welcome',
+              createdAt: serverTimestamp(),
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+            setProfile(newProfile);
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error);
         }
       } else {
         setProfile(null);
@@ -103,12 +93,31 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Sign in error:', error);
+      throw error;
+    }
+  };
+
+  const loginWithEmail = async (email: string, password: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  const registerWithEmail = async (email: string, password: string) => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error('Register error:', error);
+      throw error;
     }
   };
 
@@ -122,10 +131,6 @@ export default function App() {
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    if (BYPASS_AUTH) {
-      setProfile(prev => prev ? { ...prev, ...data } : null);
-      return;
-    }
     try {
       await updateDoc(doc(db, 'users', user.uid), data);
       setProfile(prev => prev ? { ...prev, ...data } : null);
@@ -137,7 +142,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-main">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand shadow-[0_0_15px_rgba(244,194,13,0.3)]"></div>
       </div>
     );
   }
@@ -145,7 +150,16 @@ export default function App() {
   const showOnboarding = user && profile && profile.onboardingStatus !== 'complete';
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout, updateProfile }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      loading, 
+      loginWithGoogle, 
+      loginWithEmail, 
+      registerWithEmail, 
+      logout, 
+      updateProfile 
+    }}>
       <Toaster position="top-right" richColors closeButton />
       <Router>
         <Routes>
@@ -162,13 +176,15 @@ export default function App() {
             <Route path="/stats" element={<Stats />} />
             <Route path="/rankings" element={<Rankings />} />
             <Route path="/clubs" element={<Clubs />} />
-            <Route path="/ask-dick" element={<AskDick />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/gear" element={<Gear />} />
             <Route path="/tools" element={<Tools />} />
-            <Route path="/tools/weather-forecast" element={<WeatherForecast />} />
+            <Route path="/tools/ask-dick" element={<AskDick />} />
+            <Route path="/tools/weather" element={<WeatherForecast />} />
             <Route path="/knowledge" element={<Knowledge />} />
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
       </Router>

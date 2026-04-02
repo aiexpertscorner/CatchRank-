@@ -150,30 +150,84 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
 Input.displayName = 'Input';
 
-export interface ProgressBarProps extends React.HTMLAttributes<HTMLDivElement> {
-  value: number;
-  max?: number;
+export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
-  subLabel?: string;
+  error?: string;
+  icon?: React.ReactNode;
+  options: { value: string; label: string }[];
 }
 
-export const ProgressBar: React.FC<ProgressBarProps> = ({ value, max = 100, label, subLabel, className, ...props }) => {
-  const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
-
-  return (
-    <div className={cn('space-y-2', className)} {...props}>
-      {(label || subLabel) && (
-        <div className="flex justify-between items-end">
-          {label && <span className="text-sm font-bold text-text-primary">{label}</span>}
-          {subLabel && <span className="text-xs font-bold text-text-muted uppercase tracking-wider">{subLabel}</span>}
+export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, label, error, icon, options, ...props }, ref) => {
+    return (
+      <div className="space-y-2 w-full">
+        {label && (
+          <label className="text-xs font-bold text-text-muted uppercase tracking-[0.15em] ml-1">
+            {label}
+          </label>
+        )}
+        <div className="relative group">
+          {icon && (
+            <div className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand transition-colors pointer-events-none">
+              {icon}
+            </div>
+          )}
+          <select
+            ref={ref}
+            className={cn(
+              "w-full bg-surface-soft border border-border-subtle rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 text-sm md:text-base text-text-primary focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all duration-300 appearance-none",
+              icon && "pl-10 md:pl-12",
+              error && "border-danger focus:border-danger focus:ring-danger/10",
+              className
+            )}
+            {...props}
+          >
+            <option value="" disabled>Selecteer een optie</option>
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+            </svg>
+          </div>
         </div>
-      )}
-      <div className="progress-track">
-        <div 
-          className="progress-fill" 
-          style={{ width: `${percentage}%` }}
-        />
+        {error && <p className="text-xs font-bold text-danger ml-1">{error}</p>}
       </div>
-    </div>
-  );
-};
+    );
+  }
+);
+
+Select.displayName = 'Select';
+
+export interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  error?: string;
+}
+
+export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaProps>(
+  ({ className, label, error, ...props }, ref) => {
+    return (
+      <div className="space-y-2 w-full">
+        {label && (
+          <label className="text-xs font-bold text-text-muted uppercase tracking-[0.15em] ml-1">
+            {label}
+          </label>
+        )}
+        <textarea
+          ref={ref}
+          className={cn(
+            "w-full bg-surface-soft border border-border-subtle rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 text-sm md:text-base text-text-primary placeholder:text-text-dim focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all duration-300 min-h-[100px] resize-none",
+            error && "border-danger focus:border-danger focus:ring-danger/10",
+            className
+          )}
+          {...props}
+        />
+        {error && <p className="text-xs font-bold text-danger ml-1">{error}</p>}
+      </div>
+    );
+  }
+);
+
+TextArea.displayName = 'TextArea';

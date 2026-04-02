@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, Badge } from './ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
-import { loggingService } from '../services/loggingService';
+import { loggingService } from '../features/logging/services/loggingService';
 import { useAuth } from '../App';
 import { toast } from 'sonner';
 

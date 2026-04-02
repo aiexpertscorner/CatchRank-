@@ -27,7 +27,7 @@ import { Button } from '../ui/Base';
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Fish, label: 'Logboek', path: '/catches' },
-  { icon: MessageSquare, label: 'Vraag Dick', path: '/ask-dick' },
+  { icon: MessageSquare, label: 'Vraag Dick', path: '/tools/ask-dick' },
   { icon: History, label: 'Sessies', path: '/sessions' },
   { icon: MapPin, label: 'Stekken', path: '/spots' },
   { icon: BarChart3, label: 'Statistieken', path: '/stats' },

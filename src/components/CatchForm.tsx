@@ -16,18 +16,29 @@ import {
   AlertCircle,
   Sparkles,
   X,
-  Weight
+  Weight,
+  Droplets,
+  Navigation,
+  Cloud,
+  Sun,
+  Moon,
+  Save,
+  Trash2
 } from 'lucide-react';
-import { Button, Card, Badge, ProgressBar } from './ui/Base';
-import { Input, Select, Textarea } from './ui/Inputs';
+import { Button, Card, Badge } from './ui/Base';
+import { ProgressBar } from './ui/Data';
+import { Input, Textarea, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Label } from './ui/Inputs';
 import { motion, AnimatePresence } from 'motion/react';
-import { loggingService } from '../services/loggingService';
+import { loggingService } from '../features/logging/services/loggingService';
+import { speciesService } from '../features/logging/services/speciesService';
+import { weatherService } from '../features/weather/services/weatherService';
 import { useAuth } from '../App';
 import { Catch, Species, Spot } from '../types';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from '../lib/firebase';
 import { toast } from 'sonner';
 import { SpotModal } from './SpotModal';
+import { cn } from '../lib/utils';
 
 interface CatchFormProps {
   initialData?: Partial<Catch>;
@@ -56,6 +67,9 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     notes: '',
     status: 'complete',
     isPrivate: false,
+    weather: {},
+    water: {},
+    gear: {},
     ...initialData
   });
 
@@ -71,59 +85,93 @@ export const CatchForm: React.FC<CatchFormProps> = ({
   const fetchData = async () => {
     if (!profile) return;
     
-    // Fetch species
-    const speciesSnap = await getDocs(collection(db, 'species'));
-    setSpeciesList(speciesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Species)));
+    try {
+      // Fetch species
+      const species = await speciesService.getAllSpecies();
+      setSpeciesList(species);
 
-    // Fetch user spots
-    const spotsQuery = query(collection(db, 'spots'), where('userId', '==', profile.uid));
-    const spotsSnap = await getDocs(spotsQuery);
-    setSpotsList(spotsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Spot)));
+      // Fetch user spots
+      const spotsQuery = query(collection(db, 'spots'), where('userId', '==', profile.uid));
+      const spotsSnap = await getDocs(spotsQuery);
+      setSpotsList(spotsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Spot)));
 
-    // Get smart suggestions
-    const smartSuggestions = await loggingService.getSmartSuggestions(profile.uid);
-    setSuggestions(smartSuggestions);
+      // Get smart suggestions
+      const smartSuggestions = await loggingService.getSmartSuggestions(profile.uid);
+      setSuggestions(smartSuggestions);
+    } catch (error) {
+      console.error('Error fetching form data:', error);
+    }
   };
 
   useEffect(() => {
     fetchData();
   }, [profile]);
 
+  // Auto-fetch weather when spot changes
+  useEffect(() => {
+    if (formData.spotId) {
+      const selectedSpot = spotsList.find(s => s.id === formData.spotId);
+      if (selectedSpot?.coordinates) {
+        fetchWeatherForLocation(selectedSpot.coordinates.lat, selectedSpot.coordinates.lng);
+      }
+    }
+  }, [formData.spotId]);
+
+  const fetchWeatherForLocation = async (lat: number, lng: number) => {
+    try {
+      const weatherData = await weatherService.fetchWeather(`${lat},${lng}`);
+      setFormData(prev => ({
+        ...prev,
+        weather: {
+          temp: weatherData.current.temp_c,
+          description: weatherData.current.condition.text,
+          icon: weatherData.current.condition.icon,
+          windSpeed: weatherData.current.wind_kph,
+          windDirection: 0, // Simplified for now
+          pressure: weatherData.current.pressure_mb,
+          humidity: weatherData.current.humidity,
+          uvIndex: weatherData.current.uv,
+        }
+      }));
+      toast.info('Weergegevens automatisch opgehaald');
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+    }
+  };
+
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => setStep(s => s - 1);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (isDraft = false) => {
     if (!profile) return;
     setLoading(true);
     try {
+      const finalStatus = isDraft ? 'draft' : 'complete';
+      const finalData = { ...formData, status: finalStatus };
+      
       let catchId = formData.id;
       if (catchId) {
-        await loggingService.completeCatch(catchId, formData);
+        await loggingService.updateCatch(catchId, finalData);
       } else {
-        // In a real app, you'd have a full create method.
-        // For now, we'll use the quickCatch logic and then update.
-        catchId = await loggingService.quickCatch(profile.uid, formData.photoURL || '');
-        await loggingService.completeCatch(catchId, formData);
+        catchId = await loggingService.createCatch(profile.uid, finalData);
       }
 
       if (activeSessionId && catchId) {
         await loggingService.linkCatchToSession(catchId, activeSessionId, formData.spotId);
       }
 
-      toast.success('Vangst succesvol gelogd!', {
-        description: `Je hebt +${formData.xpEarned || 25} XP verdiend.`
+      const xp = loggingService.calculateXP(finalData);
+      
+      toast.success(isDraft ? 'Concept opgeslagen!' : 'Vangst succesvol gelogd!', {
+        description: isDraft ? 'Je kunt deze later afmaken.' : `Je hebt +${xp} XP verdiend.`
       });
       onComplete(catchId);
     } catch (error) {
       console.error('Catch logging error:', error);
-      toast.error('Fout bij het loggen van de vangst.');
+      toast.error('Fout bij het opslaan van de vangst.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const applySuggestion = (field: keyof Catch, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleQuickSelect = (field: keyof Catch, value: string) => {
@@ -134,42 +182,43 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     { title: 'De Vis', icon: Fish },
     { title: 'Maten', icon: Scale },
     { title: 'Details', icon: MapPin },
+    { title: 'Omgeving', icon: Cloud },
     { title: 'Review', icon: Check }
   ];
 
+  const progress = (step / steps.length) * 100;
+
   return (
-    <Card variant="premium" className="max-w-4xl mx-auto overflow-hidden border-none shadow-premium rounded-[3rem]">
+    <Card variant="premium" className="w-full max-w-2xl mx-auto overflow-hidden border-none shadow-premium rounded-[2rem] md:rounded-[3rem] bg-surface-card flex flex-col max-h-[90vh]">
       {/* Stepper Header */}
-      <div className="bg-surface-soft/40 border-b border-border-subtle p-10">
-        <div className="flex items-center justify-between mb-10">
-          <div>
-            <h2 className="text-4xl font-bold tracking-tight text-primary">Vangst Loggen</h2>
-            <p className="text-lg text-text-muted mt-2 font-medium">Leg je vangst vast in detail voor je dagboek</p>
+      <div className="bg-surface-soft/40 border-b border-border-subtle p-6 md:p-8 flex-shrink-0">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-brand/10 rounded-xl flex items-center justify-center">
+              <Fish className="w-6 h-6 text-brand" />
+            </div>
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight text-text-primary">Vangst Loggen</h2>
+              <p className="text-xs md:text-sm text-text-muted font-medium">Stap {step} van {steps.length}: {steps[step-1].title}</p>
+            </div>
           </div>
-          <Badge variant="xp" className="px-5 py-2 text-xs">Stap {step} van 4</Badge>
+          <button onClick={onCancel} className="p-2 text-text-muted hover:text-text-primary transition-colors">
+            <X className="w-6 h-6" />
+          </button>
         </div>
-        <div className="flex items-center gap-4">
-          {steps.map((s, i) => (
-            <React.Fragment key={i}>
-              <div 
-                className={`w-14 h-14 rounded-[1.25rem] flex items-center justify-center transition-all duration-700 ${
-                  step > i + 1 ? 'bg-success text-white shadow-lg shadow-success/20' : 
-                  step === i + 1 ? 'bg-accent text-white shadow-premium-accent scale-110' : 
-                  'bg-white text-text-muted border border-border-subtle shadow-sm'
-                }`}
-              >
-                <s.icon className={`w-7 h-7 ${step === i + 1 ? 'animate-pulse' : ''}`} />
-              </div>
-              {i < steps.length - 1 && (
-                <div className={`flex-1 h-1.5 rounded-full transition-all duration-700 ${step > i + 1 ? 'bg-success' : 'bg-border-subtle'}`} />
-              )}
-            </React.Fragment>
-          ))}
+        
+        <div className="relative h-1.5 w-full bg-surface-soft rounded-full overflow-hidden">
+          <motion.div 
+            className="absolute top-0 left-0 h-full bg-brand shadow-[0_0_10px_rgba(244,194,13,0.4)]"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
         </div>
       </div>
 
       {/* Form Content */}
-      <div className="p-12 min-h-[500px]">
+      <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
         <AnimatePresence mode="wait">
           {step === 1 && (
             <motion.div
@@ -177,45 +226,51 @@ export const CatchForm: React.FC<CatchFormProps> = ({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-12"
+              className="space-y-8"
             >
-              <div className="space-y-8">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em]">Wat heb je gevangen?</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <Select 
-                    label="Vissoort"
-                    value={formData.species}
-                    onChange={(e) => setFormData({ ...formData, species: e.target.value })}
-                    options={speciesList.map(s => ({ label: s.name, value: s.name }))}
-                    placeholder="Kies een soort..."
-                  />
-                  <div className="flex flex-col justify-end">
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <Label>Welke vis heb je gevangen?</Label>
+                  <div className="grid grid-cols-1 gap-4">
+                    <Select 
+                      value={formData.species} 
+                      onValueChange={(val) => setFormData({ ...formData, species: val })}
+                    >
+                      <SelectTrigger className="h-14 rounded-2xl bg-bg-main border-border-subtle">
+                        <SelectValue placeholder="Kies een vissoort..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {speciesList.map(s => (
+                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Input 
-                      label="Of typ handmatig"
+                      placeholder="Of typ handmatig..."
                       value={formData.species}
                       onChange={(e) => setFormData({ ...formData, species: e.target.value })}
-                      placeholder="Bijv. Snoekbaars"
+                      className="h-14 rounded-2xl bg-bg-main border-border-subtle"
                     />
                   </div>
                 </div>
-                
+
                 {suggestions && suggestions.species.length > 0 && (
-                  <div className="space-y-4">
-                    <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] flex items-center gap-2.5">
-                      <Sparkles className="w-4 h-4 text-accent" /> Slimme Suggesties
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] flex items-center gap-2">
+                      <Sparkles className="w-3 h-3 text-brand" /> Veel gevangen
                     </p>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                       {suggestions.species.map(s => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => handleQuickSelect('species', s)}
-                          className={`px-5 py-2.5 rounded-[1rem] text-sm font-bold border transition-all duration-500 ${
+                          className={cn(
+                            "px-4 py-2 rounded-xl text-xs font-bold border transition-all",
                             formData.species === s 
-                              ? 'bg-accent text-white border-accent shadow-premium-accent' 
-                              : 'bg-white border-border-subtle text-text-secondary hover:border-accent/40 hover:bg-accent/5'
-                          }`}
+                              ? 'bg-brand text-bg-main border-brand shadow-premium-accent' 
+                              : 'bg-surface-soft border-border-subtle text-text-secondary hover:border-brand/40'
+                          )}
                         >
                           {s}
                         </button>
@@ -225,24 +280,24 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                 )}
               </div>
 
-              <div className="space-y-8">
-                <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em]">Foto toevoegen</label>
-                <div className="aspect-video w-full bg-surface-soft/30 border-2 border-dashed border-border-subtle rounded-[2.5rem] flex flex-col items-center justify-center gap-6 cursor-pointer hover:border-accent/40 hover:bg-accent/5 transition-all duration-500 overflow-hidden relative group shadow-inner">
+              <div className="space-y-4">
+                <Label>Foto van je vangst</Label>
+                <div className="aspect-video w-full bg-surface-soft/30 border-2 border-dashed border-border-subtle rounded-3xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-brand/40 hover:bg-brand/5 transition-all overflow-hidden relative group">
                   {formData.photoURL ? (
                     <>
-                      <img src={formData.photoURL} alt="Vangst" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
-                      <div className="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex items-center justify-center backdrop-blur-[4px]">
-                        <Button variant="secondary" className="rounded-2xl h-14 px-8 font-bold text-lg" icon={<Camera className="w-6 h-6" />}>Wijzigen</Button>
+                      <img src={formData.photoURL} alt="Vangst" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                        <Button variant="secondary" size="sm" icon={<Camera className="w-4 h-4" />}>Wijzigen</Button>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div className="w-24 h-24 bg-white rounded-[1.5rem] shadow-premium flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-                        <Camera className="w-12 h-12 text-accent" />
+                      <div className="w-16 h-16 bg-surface-card rounded-2xl shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Camera className="w-8 h-8 text-brand" />
                       </div>
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-primary">Foto uploaden</p>
-                        <p className="text-base text-text-muted mt-2 font-medium">Sleep je foto hierheen of klik om te kiezen</p>
+                        <p className="text-sm font-bold text-text-primary">Foto toevoegen</p>
+                        <p className="text-xs text-text-muted mt-1">Klik om een foto te kiezen</p>
                       </div>
                     </>
                   )}
@@ -257,43 +312,42 @@ export const CatchForm: React.FC<CatchFormProps> = ({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-12"
+              className="space-y-8"
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                <div className="space-y-5">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em] flex items-center gap-3">
-                    <Scale className="w-5 h-5 text-accent" /> Gewicht (gram)
-                  </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-brand" /> Gewicht (gram)
+                  </Label>
                   <Input 
                     type="number"
                     value={formData.weight || ''}
                     onChange={(e) => setFormData({ ...formData, weight: Number(e.target.value) })}
                     placeholder="Bijv. 1250"
-                    className="text-4xl font-bold h-24 bg-white border-border-subtle focus:border-accent rounded-[1.5rem] px-8 shadow-sm"
+                    className="text-2xl font-bold h-16 bg-bg-main border-border-subtle focus:border-brand rounded-2xl px-6"
                   />
                 </div>
-                <div className="space-y-5">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em] flex items-center gap-3">
-                    <Ruler className="w-5 h-5 text-accent" /> Lengte (cm)
-                  </label>
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <Ruler className="w-4 h-4 text-brand" /> Lengte (cm)
+                  </Label>
                   <Input 
                     type="number"
                     value={formData.length || ''}
                     onChange={(e) => setFormData({ ...formData, length: Number(e.target.value) })}
                     placeholder="Bijv. 45"
-                    className="text-4xl font-bold h-24 bg-white border-border-subtle focus:border-accent rounded-[1.5rem] px-8 shadow-sm"
+                    className="text-2xl font-bold h-16 bg-bg-main border-border-subtle focus:border-brand rounded-2xl px-6"
                   />
                 </div>
               </div>
 
-              <div className="p-10 bg-accent/5 border border-accent/10 rounded-[2.5rem] flex items-center gap-8 shadow-inner">
-                <div className="w-20 h-20 bg-accent/10 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 shadow-sm">
-                  <Zap className="w-10 h-10 text-accent" />
+              <div className="p-6 bg-brand/5 border border-brand/10 rounded-3xl flex items-center gap-6">
+                <div className="w-12 h-12 bg-brand/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-6 h-6 text-brand" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-primary">XP Berekening</p>
-                  <p className="text-lg text-text-secondary mt-1 font-medium">Op basis van soort en gewicht verdien je naar schatting <span className="text-accent font-black">+35 XP</span>.</p>
+                  <p className="text-sm font-bold text-text-primary">XP Schatting</p>
+                  <p className="text-xs text-text-secondary mt-0.5">Je verdient ongeveer <span className="text-brand font-black">+35 XP</span> met deze vangst.</p>
                 </div>
               </div>
             </motion.div>
@@ -305,83 +359,47 @@ export const CatchForm: React.FC<CatchFormProps> = ({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-12"
+              className="space-y-8"
             >
-              <div className="space-y-10">
+              <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em]">Visstek</label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-water h-10 text-[11px] font-black uppercase tracking-[0.2em] hover:bg-water/5 px-4 rounded-xl"
+                  <Label>Visstek</Label>
+                  <button 
                     onClick={() => setIsSpotModalOpen(true)}
-                    icon={<Plus className="w-4 h-4" />}
+                    className="text-[10px] font-black text-brand uppercase tracking-widest flex items-center gap-1 hover:opacity-80"
                   >
-                    Nieuwe Stek
-                  </Button>
+                    <Plus className="w-3 h-3" /> Nieuwe Stek
+                  </button>
                 </div>
                 <Select 
-                  label=""
-                  value={formData.spotId}
-                  onChange={(e) => setFormData({ ...formData, spotId: e.target.value })}
-                  options={spotsList.map(s => ({ label: s.name, value: s.id! }))}
-                  placeholder="Kies een stek..."
-                />
+                  value={formData.spotId} 
+                  onValueChange={(val) => setFormData({ ...formData, spotId: val })}
+                >
+                  <SelectTrigger className="h-14 rounded-2xl bg-bg-main border-border-subtle">
+                    <SelectValue placeholder="Kies een stek..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {spotsList.map(s => (
+                      <SelectItem key={s.id} value={s.id!}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  <div className="space-y-5">
-                    <Input 
-                      label="Aas"
-                      value={formData.baitId}
-                      onChange={(e) => setFormData({ ...formData, baitId: e.target.value })}
-                      placeholder="Bijv. Shads 10cm"
-                    />
-                    {suggestions && suggestions.baits.length > 0 && (
-                      <div className="flex flex-wrap gap-3">
-                        {suggestions.baits.map(b => (
-                          <button
-                            key={b}
-                            type="button"
-                            onClick={() => handleQuickSelect('baitId', b)}
-                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] border transition-all duration-500 ${
-                              formData.baitId === b 
-                                ? 'bg-accent text-white border-accent shadow-sm' 
-                                : 'bg-white border-border-subtle text-text-muted hover:border-accent/40'
-                            }`}
-                          >
-                            {b}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-5">
-                    <Input 
-                      label="Techniek"
-                      value={formData.techniqueId}
-                      onChange={(e) => setFormData({ ...formData, techniqueId: e.target.value })}
-                      placeholder="Bijv. Verticalen"
-                    />
-                    {suggestions && suggestions.techniques.length > 0 && (
-                      <div className="flex flex-wrap gap-3">
-                        {suggestions.techniques.map(t => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => handleQuickSelect('techniqueId', t)}
-                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] border transition-all duration-500 ${
-                              formData.techniqueId === t 
-                                ? 'bg-accent text-white border-accent shadow-sm' 
-                                : 'bg-white border-border-subtle text-text-muted hover:border-accent/40'
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Input 
+                    label="Aas"
+                    value={formData.baitId}
+                    onChange={(e) => setFormData({ ...formData, baitId: e.target.value })}
+                    placeholder="Bijv. Shads 10cm"
+                    className="h-14 rounded-2xl bg-bg-main border-border-subtle"
+                  />
+                  <Input 
+                    label="Techniek"
+                    value={formData.techniqueId}
+                    onChange={(e) => setFormData({ ...formData, techniqueId: e.target.value })}
+                    placeholder="Bijv. Verticalen"
+                    className="h-14 rounded-2xl bg-bg-main border-border-subtle"
+                  />
                 </div>
 
                 <Textarea 
@@ -389,8 +407,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Hoe was de dril? Wat viel op?"
-                  rows={5}
-                  className="rounded-[1.5rem] p-6 text-lg"
+                  className="rounded-2xl bg-bg-main border-border-subtle p-4"
                 />
               </div>
             </motion.div>
@@ -402,35 +419,115 @@ export const CatchForm: React.FC<CatchFormProps> = ({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-12"
+              className="space-y-8"
             >
-              <div className="p-12 bg-surface-soft/40 rounded-[3rem] border border-border-subtle text-center relative overflow-hidden shadow-inner">
-                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-accent to-transparent opacity-60" />
-                
-                <div className="w-28 h-28 bg-success/10 rounded-[2rem] flex items-center justify-center mx-auto mb-10 shadow-inner">
-                  <Check className="w-14 h-14 text-success" />
-                </div>
-                <h3 className="text-4xl font-bold text-primary mb-4 tracking-tight">Klaar om te loggen!</h3>
-                <p className="text-xl text-text-secondary mb-12 max-w-md mx-auto font-medium">Controleer je gegevens voordat je de vangst definitief toevoegt aan je dagboek.</p>
-                
-                <div className="grid grid-cols-2 gap-8 text-left">
-                  <div className="p-8 bg-white rounded-[2rem] shadow-sm border border-border-subtle hover:shadow-premium transition-all duration-500">
-                    <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em] mb-3">Soort</p>
-                    <p className="text-2xl font-bold text-primary">{formData.species || 'Onbekend'}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <Label className="flex items-center gap-2">
+                    <Cloud className="w-4 h-4 text-brand" /> Weergegevens
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 bg-surface-soft rounded-2xl border border-border-subtle">
+                      <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Temp</p>
+                      <p className="text-sm font-bold text-text-primary">{formData.weather?.temp ? `${formData.weather.temp}°C` : '--'}</p>
+                    </div>
+                    <div className="p-4 bg-surface-soft rounded-2xl border border-border-subtle">
+                      <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Wind</p>
+                      <p className="text-sm font-bold text-text-primary">{formData.weather?.windSpeed ? `${formData.weather.windSpeed} km/h` : '--'}</p>
+                    </div>
                   </div>
-                  <div className="p-8 bg-white rounded-[2rem] shadow-sm border border-border-subtle hover:shadow-premium transition-all duration-500">
-                    <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.25em] mb-3">Afmetingen</p>
-                    <p className="text-2xl font-bold text-primary">{formData.length}cm • {formData.weight}g</p>
+                </div>
+
+                <div className="space-y-4">
+                  <Label className="flex items-center gap-2">
+                    <Droplets className="w-4 h-4 text-brand" /> Watercondities
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select 
+                      value={formData.water?.clarity} 
+                      onValueChange={(val) => setFormData({ ...formData, water: { ...formData.water, clarity: val as any } })}
+                    >
+                      <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs">
+                        <SelectValue placeholder="Helderheid" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="clear">Helder</SelectItem>
+                        <SelectItem value="murky">Troebel</SelectItem>
+                        <SelectItem value="stained">Gekleurd</SelectItem>
+                        <SelectItem value="very_murky">Erg troebel</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input 
+                      type="number"
+                      placeholder="Diepte (m)"
+                      value={formData.water?.depth || ''}
+                      onChange={(e) => setFormData({ ...formData, water: { ...formData.water, depth: Number(e.target.value) } })}
+                      className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
+                    />
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-6 p-8 bg-accent/5 border border-accent/10 rounded-[2rem] shadow-inner">
-                <div className="w-14 h-14 bg-accent/10 rounded-2xl flex items-center justify-center shadow-sm">
-                  <Zap className="w-7 h-7 text-accent" />
+              <div className="space-y-4">
+                <Label className="flex items-center gap-2">
+                  <Save className="w-4 h-4 text-brand" /> Gear / Uitrusting
+                </Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Input 
+                    placeholder="Hengel"
+                    value={formData.gear?.rodId || ''}
+                    onChange={(e) => setFormData({ ...formData, gear: { ...formData.gear, rodId: e.target.value } })}
+                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
+                  />
+                  <Input 
+                    placeholder="Molen"
+                    value={formData.gear?.reelId || ''}
+                    onChange={(e) => setFormData({ ...formData, gear: { ...formData.gear, reelId: e.target.value } })}
+                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
+                  />
+                  <Input 
+                    placeholder="Kunstaas"
+                    value={formData.gear?.lureId || ''}
+                    onChange={(e) => setFormData({ ...formData, gear: { ...formData.gear, lureId: e.target.value } })}
+                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
+                  />
                 </div>
-                <p className="text-xl font-bold text-primary">Je verdient <span className="text-accent font-black">+45 XP</span> met deze log!</p>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 5 && (
+            <motion.div
+              key="step5"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-8"
+            >
+              <div className="p-8 bg-surface-soft/40 rounded-3xl border border-border-subtle text-center">
+                <div className="w-20 h-20 bg-success/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Check className="w-10 h-10 text-success" />
+                </div>
+                <h3 className="text-2xl font-bold text-text-primary mb-2">Klaar om te loggen!</h3>
+                <p className="text-sm text-text-secondary mb-8">Controleer je gegevens voordat je de vangst opslaat.</p>
+                
+                <div className="grid grid-cols-2 gap-4 text-left">
+                  <div className="p-4 bg-bg-main rounded-2xl border border-border-subtle">
+                    <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Vissoort</p>
+                    <p className="text-sm font-bold text-text-primary truncate">{formData.species || 'Onbekend'}</p>
+                  </div>
+                  <div className="p-4 bg-bg-main rounded-2xl border border-border-subtle">
+                    <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Maten</p>
+                    <p className="text-sm font-bold text-text-primary">{formData.length || '--'}cm • {formData.weight || '--'}g</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-6 bg-brand/5 border border-brand/10 rounded-3xl">
+                <div className="w-10 h-10 bg-brand/10 rounded-xl flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-brand" />
+                </div>
+                <p className="text-sm font-bold text-text-primary">Je verdient <span className="text-brand font-black">+{loggingService.calculateXP(formData)} XP</span>!</p>
               </div>
             </motion.div>
           )}
@@ -438,33 +535,34 @@ export const CatchForm: React.FC<CatchFormProps> = ({
       </div>
 
       {/* Footer Actions */}
-      <div className="p-12 bg-surface-soft/40 border-t border-border-subtle flex items-center justify-between">
+      <div className="p-6 md:p-8 bg-surface-soft/40 border-t border-border-subtle flex items-center justify-between flex-shrink-0">
         <Button 
           variant="ghost" 
           onClick={step === 1 ? onCancel : handleBack}
           disabled={loading}
-          className="text-text-muted hover:text-primary font-bold text-lg h-14 px-8"
+          className="text-text-muted hover:text-text-primary font-bold"
         >
           {step === 1 ? 'Annuleren' : 'Vorige'}
         </Button>
-        <div className="flex gap-6">
-          {formData.status === 'draft' && step < 4 && (
+        <div className="flex gap-3">
+          {step < steps.length && (
             <Button 
               variant="secondary" 
-              onClick={handleSubmit}
-              loading={loading}
-              className="rounded-2xl h-14 px-8 font-bold text-lg"
+              onClick={() => handleSubmit(true)}
+              isLoading={loading}
+              className="rounded-xl px-4"
+              icon={<Save className="w-4 h-4" />}
             >
-              Concept Opslaan
+              Concept
             </Button>
           )}
           <Button 
-            className="px-14 h-18 text-2xl rounded-2xl shadow-premium-accent font-bold transition-all hover:-translate-y-1"
-            onClick={step === 4 ? handleSubmit : handleNext}
-            loading={loading}
-            icon={step === 4 ? <Check className="w-8 h-8" /> : <ChevronRight className="w-8 h-8" />}
+            className="px-8 h-14 rounded-xl shadow-premium-accent font-bold"
+            onClick={step === steps.length ? () => handleSubmit(false) : handleNext}
+            isLoading={loading}
+            icon={step === steps.length ? <Check className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           >
-            {step === 4 ? 'Vangst Opslaan' : 'Volgende'}
+            {step === steps.length ? 'Opslaan' : 'Volgende'}
           </Button>
         </div>
       </div>
@@ -477,7 +575,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
             onClose={() => setIsSpotModalOpen(false)}
             onSuccess={(spotId) => {
               setFormData(prev => ({ ...prev, spotId }));
-              fetchData(); // Refresh spots list
+              fetchData();
             }}
           />
         )}
