@@ -59,8 +59,8 @@ export default function Profile() {
 
         const sessionsQuery = query(
           collection(db, 'sessions'),
-          where('userId', '==', profile.uid),
-          orderBy('startTime', 'desc'),
+          where('ownerUserId', '==', profile.uid),
+          orderBy('startedAt', 'desc'),
           limit(10)
         );
         const sessionsSnapshot = await getDocs(sessionsQuery);
@@ -329,21 +329,21 @@ function SessionsTab({ sessions }: { sessions: Session[] }) {
                   </div>
                   <div>
                     <h4 className="text-xl font-bold text-text-primary tracking-tight">
-                      {s.location?.name || 'Sessie aan het water'}
+                      {s.title || 'Sessie aan het water'}
                     </h4>
                     <p className="text-xs text-text-muted font-medium">
-                      {s.startTime ? format(s.startTime.toDate(), 'EEEE d MMMM yyyy', { locale: nl }) : 'Onbekende datum'}
+                      {s.startedAt ? format(s.startedAt.toDate(), 'EEEE d MMMM yyyy', { locale: nl }) : 'Onbekende datum'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <Fish className="w-4 h-4 text-brand" />
-                    <span className="text-sm font-bold text-text-secondary">{s.catchIds?.length || 0} vangsten</span>
+                    <span className="text-sm font-bold text-text-secondary">{s.linkedCatchIds?.length || 0} vangsten</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-brand" />
-                    <span className="text-sm font-bold text-text-secondary">+{s.totalXp || 0} XP</span>
+                    <span className="text-sm font-bold text-text-secondary">+{s.statsSummary?.totalXp || 0} XP</span>
                   </div>
                 </div>
               </div>

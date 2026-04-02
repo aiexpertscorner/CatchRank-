@@ -100,24 +100,29 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="relative w-full max-w-md bg-surface border-t sm:border border-border-subtle rounded-t-[3rem] sm:rounded-[3rem] shadow-premium overflow-hidden max-h-[95vh] flex flex-col"
+            className="relative w-full max-w-md bg-surface border-t sm:border border-border-subtle rounded-t-[2.5rem] sm:rounded-[3rem] shadow-premium overflow-hidden max-h-[95vh] flex flex-col"
           >
+            {/* Mobile Drag Handle */}
+            <div className="flex justify-center pt-3 pb-1 sm:hidden">
+              <div className="w-12 h-1.5 bg-border-subtle rounded-full opacity-50" />
+            </div>
+
             {/* Header */}
-            <div className="p-6 sm:p-8 border-b border-border-subtle flex items-center justify-between bg-gradient-to-r from-surface-soft/50 to-white sticky top-0 z-10">
-              <div className="flex items-center gap-4 sm:gap-5">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-accent/10 rounded-2xl sm:rounded-[1.25rem] flex items-center justify-center shadow-inner">
-                  <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-accent" />
+            <div className="px-6 py-4 sm:p-8 border-b border-border-subtle flex items-center justify-between bg-gradient-to-r from-surface-soft/50 to-white sticky top-0 z-10">
+              <div className="flex items-center gap-3 sm:gap-5">
+                <div className="w-10 h-10 sm:w-14 sm:h-14 bg-accent/10 rounded-xl sm:rounded-[1.25rem] flex items-center justify-center shadow-inner">
+                  <Zap className="w-5 h-5 sm:w-7 sm:h-7 text-accent" />
                 </div>
                 <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-primary tracking-tight">Quick Catch</h3>
-                  <p className="text-[9px] sm:text-[10px] text-text-muted font-black uppercase tracking-[0.3em]">Sportvisgoeroe Dick Beet • Snel Loggen</p>
+                  <h3 className="text-lg sm:text-2xl font-black text-primary tracking-tight">Quick Catch</h3>
+                  <p className="text-[8px] sm:text-[10px] text-text-muted font-black uppercase tracking-[0.2em] sm:tracking-[0.3em]">Dick Beet • Snel Loggen</p>
                 </div>
               </div>
               <button 
                 onClick={onClose}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl hover:bg-surface-soft flex items-center justify-center transition-all text-text-muted hover:text-primary hover:rotate-90 duration-300"
+                className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl hover:bg-surface-soft flex items-center justify-center transition-all text-text-muted hover:text-primary hover:rotate-90 duration-300"
               >
-                <X className="w-6 h-6 sm:w-7 sm:h-7" />
+                <X className="w-5 h-5 sm:w-7 sm:h-7" />
               </button>
             </div>
 
@@ -247,7 +252,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-6 sm:p-8 bg-surface-soft/30 border-t border-border-subtle flex gap-4 sm:gap-5 pb-safe">
+            <div className="p-6 sm:p-8 bg-surface-soft/30 border-t border-border-subtle flex gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-8">
               {step === 'confirm' && (
                 <Button 
                   variant="ghost" 

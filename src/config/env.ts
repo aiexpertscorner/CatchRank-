@@ -20,6 +20,7 @@ export const FEATURE_FLAGS = {
  */
 export const STORAGE_KEYS = {
   WEATHER_API_KEY: 'catchrank_weather_api_key',
+  OPENWEATHER_API_KEY: 'catchrank_openweather_api_key',
   WEATHER_LOCATION: 'weatherLocation',
 };
 
@@ -29,6 +30,13 @@ export const STORAGE_KEYS = {
 export const getWeatherApiKey = () => 
   localStorage.getItem(STORAGE_KEYS.WEATHER_API_KEY) || 
   (import.meta as any).env.VITE_WEATHER_API_KEY;
+
+/**
+ * Get the OpenWeather API key from local storage or environment.
+ */
+export const getOpenWeatherApiKey = () => 
+  localStorage.getItem(STORAGE_KEYS.OPENWEATHER_API_KEY) || 
+  (import.meta as any).env.VITE_OPENWEATHER_API_KEY;
 
 /**
  * Set the Weather API key in local storage.

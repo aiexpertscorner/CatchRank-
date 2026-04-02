@@ -152,11 +152,18 @@ export interface Session {
   linkedSetupIds: string[];
   linkedGearIds: string[];
   linkedProductIds: string[];
+  gearIds?: string[]; // Alias for linkedGearIds
+  participantIds?: string[]; // Alias for participantUserIds
   weatherSnapshotStart?: any;
   weatherSnapshotEnd?: any;
   forecastSummary?: string;
   visibility: 'public' | 'friends' | 'private';
-  notes?: string;
+  notes?: string | { text: string; timestamp: any; type?: 'note' | 'event' | 'spot_change' }[];
+  metadata?: {
+    method?: string;
+    waterType?: string;
+    targetSpecies?: string[];
+  };
   statsSummary?: {
     totalCatches: number;
     totalXp: number;

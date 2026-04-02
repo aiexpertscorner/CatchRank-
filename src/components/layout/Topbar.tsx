@@ -18,6 +18,7 @@ import Logo from '../Logo';
 import { Button, Badge } from '../ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
 import { QuickActionMenu } from './QuickActionMenu';
+import { ActiveSessionHeader } from './ActiveSessionHeader';
 
 interface TopbarProps {
   onMenuClick?: () => void;
@@ -42,6 +43,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
         <Logo size="sm" withText={false} />
       </div>
 
+      {/* Active Session Header (Mobile/Tablet) */}
+      <div className="flex md:hidden">
+        <ActiveSessionHeader />
+      </div>
+
       {/* Search Bar (Desktop) */}
       <div className={cn(
         "hidden md:flex items-center gap-3 px-5 py-3 bg-white rounded-2xl border transition-all duration-300 w-full max-w-md shadow-sm",
@@ -58,6 +64,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
         <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-surface border border-border-subtle rounded-lg text-[9px] font-black text-text-muted uppercase tracking-widest">
           <span className="opacity-50">⌘</span>K
         </div>
+      </div>
+
+      {/* Active Session Header (Desktop) */}
+      <div className="hidden md:flex">
+        <ActiveSessionHeader />
       </div>
 
       {/* Right Actions */}

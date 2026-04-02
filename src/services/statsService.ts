@@ -28,7 +28,7 @@ export const statsService = {
     // Fetch all sessions
     const sessionsQuery = query(
       collection(db, 'sessions'),
-      where('userId', '==', userId)
+      where('ownerUserId', '==', userId)
     );
     const sessionsSnapshot = await getDocs(sessionsQuery);
     const sessions = sessionsSnapshot.docs.map(doc => doc.data() as Session);
@@ -52,13 +52,13 @@ export const statsService = {
 
     // Total XP
     const totalXp = catches.reduce((acc, c) => acc + (c.xpEarned || 0), 0) + 
-                   sessions.reduce((acc, s) => acc + (s.totalXp || 0), 0);
+                   sessions.reduce((acc, s) => acc + (s.statsSummary?.totalXp || 0), 0);
 
     // Total Hours
     let totalHours = 0;
     sessions.forEach(s => {
-      if (s.startTime && s.endTime) {
-        totalHours += Math.abs(differenceInHours(s.endTime.toDate(), s.startTime.toDate()));
+      if (s.startedAt && s.endedAt) {
+        totalHours += Math.abs(differenceInHours(s.endedAt.toDate(), s.startedAt.toDate()));
       }
     });
 

@@ -98,17 +98,23 @@ export const loggingService = {
   },
 
   /**
-   * Start a new fishing session.
+   * Create a new fishing session (live or retro).
    */
-  async startSession(userId: string, location?: { lat: number; lng: number; name?: string }): Promise<string> {
+  async createSession(userId: string, data: Partial<Session>): Promise<string> {
     const sessionData: Partial<Session> = {
-      userId,
-      startTime: serverTimestamp(),
-      status: 'active',
-      spotIds: [],
-      catchIds: [],
-      location,
-      isActive: true,
+      ...data,
+      ownerUserId: userId,
+      participantUserIds: [userId, ...(data.participantUserIds || [])],
+      status: data.status || (data.mode === 'live' ? 'live' : 'completed'),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      linkedSpotIds: data.linkedSpotIds || [],
+      linkedCatchIds: data.linkedCatchIds || [],
+      linkedSetupIds: data.linkedSetupIds || [],
+      linkedGearIds: data.linkedGearIds || [],
+      linkedProductIds: data.linkedProductIds || [],
+      spotTimeline: data.spotTimeline || [],
+      visibility: data.visibility || 'public',
     };
 
     const docRef = await addDoc(collection(db, 'sessions'), sessionData);
@@ -116,15 +122,51 @@ export const loggingService = {
   },
 
   /**
+   * Start a new live fishing session.
+   */
+  async startSession(userId: string, data: Partial<Session>): Promise<string> {
+    return this.createSession(userId, {
+      ...data,
+      mode: 'live',
+      status: 'live',
+      startedAt: serverTimestamp(),
+    });
+  },
+
+  /**
    * End an active session.
    */
-  async endSession(sessionId: string, notes?: string): Promise<void> {
+  async endSession(sessionId: string, notes?: string, stats?: any): Promise<void> {
     const docRef = doc(db, 'sessions', sessionId);
     await updateDoc(docRef, {
-      endTime: serverTimestamp(),
+      endedAt: serverTimestamp(),
       status: 'completed',
-      isActive: false,
       notes,
+      statsSummary: stats,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Switch spot within a session.
+   */
+  async switchSessionSpot(sessionId: string, newSpotId: string, newSpotName: string): Promise<void> {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    
+    await updateDoc(sessionRef, {
+      activeSpotId: newSpotId,
+      linkedSpotIds: arrayUnion(newSpotId),
+      spotTimeline: arrayUnion({
+        spotId: newSpotId,
+        name: newSpotName,
+        arrivedAt: serverTimestamp(),
+      }),
+      notes: arrayUnion({
+        text: `Verplaatst naar ${newSpotName}`,
+        timestamp: serverTimestamp(),
+        type: 'spot_change'
+      }),
+      updatedAt: serverTimestamp(),
     });
   },
 
@@ -137,14 +179,51 @@ export const loggingService = {
 
     const sessionRef = doc(db, 'sessions', sessionId);
     const updateData: any = {
-      catchIds: arrayUnion(catchId)
+      linkedCatchIds: arrayUnion(catchId),
+      updatedAt: serverTimestamp()
     };
 
     if (spotId) {
-      updateData.spotIds = arrayUnion(spotId);
+      updateData.linkedSpotIds = arrayUnion(spotId);
     }
 
     await updateDoc(sessionRef, updateData);
+  },
+
+  /**
+   * Add a note/event to the session timeline.
+   */
+  async addSessionNote(sessionId: string, note: string): Promise<void> {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    await updateDoc(sessionRef, {
+      notes: arrayUnion({
+        text: note,
+        timestamp: serverTimestamp(),
+      }),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Pause an active session.
+   */
+  async pauseSession(sessionId: string): Promise<void> {
+    const docRef = doc(db, 'sessions', sessionId);
+    await updateDoc(docRef, {
+      status: 'paused',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Resume a paused session.
+   */
+  async resumeSession(sessionId: string): Promise<void> {
+    const docRef = doc(db, 'sessions', sessionId);
+    await updateDoc(docRef, {
+      status: 'live',
+      updatedAt: serverTimestamp(),
+    });
   },
 
   /**

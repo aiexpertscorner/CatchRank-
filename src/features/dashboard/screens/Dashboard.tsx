@@ -36,6 +36,8 @@ import { toast } from 'sonner';
 import { statsService, UserStats } from '../../../services/statsService';
 import { loggingService } from '../../logging/services/loggingService';
 
+import { useSession } from '../../../contexts/SessionContext';
+
 /**
  * Dashboard Screen
  * Part of the 'dashboard' feature module.
@@ -45,9 +47,9 @@ import { loggingService } from '../../logging/services/loggingService';
 export default function Dashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const { activeSession, endActiveSession } = useSession();
   const [recentCatches, setRecentCatches] = useState<Catch[]>([]);
   const [incompleteCatches, setIncompleteCatches] = useState<Catch[]>([]);
-  const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,23 +79,6 @@ export default function Dashboard() {
       setLoading(false);
     });
 
-    const sessionQuery = query(
-      collection(db, 'sessions'),
-      where('userId', '==', profile.uid),
-      where('isActive', '==', true),
-      limit(1)
-    );
-
-    const unsubscribeSession = onSnapshot(sessionQuery, (snapshot) => {
-      if (!snapshot.empty) {
-        setActiveSession({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Session);
-      } else {
-        setActiveSession(null);
-      }
-    }, (error) => {
-      console.error("Error fetching session:", error);
-    });
-
     const loadStats = async () => {
       try {
         const userStats = await statsService.calculateUserStats(profile.uid);
@@ -106,20 +91,15 @@ export default function Dashboard() {
 
     return () => {
       unsubscribeCatches();
-      unsubscribeSession();
     };
   }, [profile]);
 
   const handleEndSession = async () => {
     if (!activeSession?.id) return;
     try {
-      await loggingService.endSession(activeSession.id);
-      toast.success('Sessie beëindigd!', {
-        description: 'Je statistieken zijn bijgewerkt.'
-      });
+      await endActiveSession();
     } catch (error) {
       console.error('End session error:', error);
-      toast.error('Fout bij beëindigen sessie.');
     }
   };
 
@@ -268,17 +248,17 @@ export default function Dashboard() {
                       <div className="w-2 h-2 bg-brand rounded-full animate-pulse shadow-[0_0_10px_rgba(244,194,13,1)]"></div>
                       <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">Live Sessie Actief</span>
                     </div>
-                    <h3 className="text-2xl md:text-4xl text-text-primary font-bold tracking-tight">{activeSession.location?.name || 'Sessie Bezig'}</h3>
+                    <h3 className="text-2xl md:text-4xl text-text-primary font-bold tracking-tight">{activeSession.title || 'Sessie Bezig'}</h3>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-text-secondary">
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-brand" />
                         <span className="font-bold">
-                          {activeSession.startTime ? format(activeSession.startTime.toDate(), 'HH:mm', { locale: nl }) : '--:--'}
+                          {activeSession.startedAt ? format(activeSession.startedAt.toDate(), 'HH:mm', { locale: nl }) : '--:--'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Fish className="w-4 h-4 text-brand" />
-                        <span className="font-bold">{activeSession.catchIds?.length || 0} vangsten</span>
+                        <span className="font-bold">{activeSession.linkedCatchIds?.length || 0} vangsten</span>
                       </div>
                     </div>
                   </div>

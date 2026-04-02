@@ -34,10 +34,13 @@ import { loggingService } from '../services/loggingService';
  * Displays a list of all user fishing sessions with active session tracking.
  */
 
+import { useSession } from '../../../contexts/SessionContext';
+import { SessionDashboard } from './SessionDashboard';
+
 export default function Sessions() {
   const { profile } = useAuth();
+  const { activeSession, endActiveSession, pauseActiveSession, resumeActiveSession } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
@@ -47,14 +50,13 @@ export default function Sessions() {
 
     const q = query(
       collection(db, 'sessions'),
-      where('userId', '==', profile.uid),
-      orderBy('startTime', 'desc')
+      where('ownerUserId', '==', profile.uid),
+      orderBy('startedAt', 'desc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allSessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session));
       setSessions(allSessions);
-      setActiveSession(allSessions.find(s => s.status === 'active') || null);
       setLoading(false);
     }, (error) => {
       console.error("Error fetching sessions:", error);
@@ -74,165 +76,136 @@ export default function Sessions() {
     return () => unsubscribe();
   }, [profile]);
 
-  const handleEndSession = async (id: string) => {
-    try {
-      await loggingService.endSession(id);
-      toast.success('Sessie beëindigd!');
-    } catch (error) {
-      toast.error('Fout bij beëindigen sessie');
-    }
-  };
-
   return (
     <PageLayout>
       <PageHeader 
         title="Vis Sessies" 
-        subtitle={`${sessions.length} sessies aan de waterkant`}
+        subtitle={activeSession ? 'Je bent momenteel aan het vissen!' : `${sessions.length} sessies aan de waterkant`}
         actions={
-          <Button 
-            icon={<Plus className="w-4 h-4" />} 
-            onClick={() => setIsSessionModalOpen(true)}
-            className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
-          >
-            Nieuwe Sessie
-          </Button>
+          !activeSession && (
+            <Button 
+              icon={<Plus className="w-4 h-4" />} 
+              onClick={() => setIsSessionModalOpen(true)}
+              className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+            >
+              Nieuwe Sessie
+            </Button>
+          )
         }
       />
 
-      <div className="space-y-8 pb-32">
-        {/* Active Session Banner */}
-        <AnimatePresence>
-          {activeSession && (
+      <div className="space-y-6 md:space-y-8 pb-32">
+        {/* Active Session Dashboard */}
+        <AnimatePresence mode="wait">
+          {activeSession ? (
             <motion.div
-              initial={{ opacity: 0, y: -20 }}
+              key="active-dashboard"
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              className="px-2 md:px-0"
             >
-              <Card variant="premium" className="bg-brand/10 border border-brand/30 p-6 md:p-8 rounded-2xl md:rounded-[2rem] relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 blur-3xl -mr-32 -mt-32" />
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-brand rounded-full animate-pulse shadow-[0_0_10px_rgba(244,194,13,1)]"></div>
-                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">Huidige Sessie Actief</span>
-                    </div>
-                    <h3 className="text-2xl md:text-4xl text-text-primary font-bold tracking-tight">{activeSession.location?.name || 'Sessie Bezig'}</h3>
-                    <div className="flex flex-wrap items-center gap-6 text-xs text-text-secondary">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-brand" />
-                        <span className="font-bold">Gestart om {activeSession.startTime ? format(activeSession.startTime.toDate(), 'HH:mm', { locale: nl }) : '--:--'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Fish className="w-4 h-4 text-brand" />
-                        <span className="font-bold">{activeSession.catchIds?.length || 0} vangsten</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <Button 
-                      variant="secondary" 
-                      className="flex-1 md:flex-none h-12 px-8 rounded-xl font-bold"
-                      onClick={() => activeSession.id && handleEndSession(activeSession.id)}
-                    >
-                      <Square className="w-4 h-4 mr-2 fill-current" />
-                      Sessie Stoppen
-                    </Button>
-                  </div>
+              <SessionDashboard session={activeSession} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="stats-history"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-6 md:space-y-8"
+            >
+              {/* Stats Summary */}
+              <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 px-2 md:px-0">
+                <Card className="p-3 md:p-4 bg-surface-card border border-border-subtle rounded-xl md:rounded-2xl text-center space-y-0.5 md:space-y-1">
+                  <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest">Totaal Tijd</p>
+                  <p className="text-lg md:text-xl font-bold text-text-primary">{stats?.totalHours || 0}u</p>
+                </Card>
+                <Card className="p-3 md:p-4 bg-surface-card border border-border-subtle rounded-xl md:rounded-2xl text-center space-y-0.5 md:space-y-1">
+                  <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest">Gem. Vangsten</p>
+                  <p className="text-lg md:text-xl font-bold text-text-primary">{stats?.averageCatchesPerSession.toFixed(1) || 0}</p>
+                </Card>
+                <Card className="p-3 md:p-4 bg-surface-card border border-border-subtle rounded-xl md:rounded-2xl text-center space-y-0.5 md:space-y-1">
+                  <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest">Top Soort</p>
+                  <p className="text-lg md:text-xl font-bold text-text-primary truncate px-1">{stats?.topSpecies[0]?.name || '--'}</p>
+                </Card>
+                <Card className="p-3 md:p-4 bg-surface-card border border-border-subtle rounded-xl md:rounded-2xl text-center space-y-0.5 md:space-y-1">
+                  <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest">Success Rate</p>
+                  <p className="text-lg md:text-xl font-bold text-text-primary">{stats?.totalSessions ? Math.round((stats.totalCatches / stats.totalSessions) * 100) : 0}%</p>
+                </Card>
+              </section>
+
+              {/* Sessions List */}
+              <section className="space-y-4 px-2 md:px-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-base md:text-lg font-bold text-text-primary uppercase tracking-tight">Sessie Historie</h3>
+                  <Button variant="ghost" size="sm" className="text-brand font-black text-[9px] md:text-[10px] uppercase tracking-widest">Filteren</Button>
                 </div>
-              </Card>
+                
+                <div className="space-y-3 md:space-y-4">
+                  {loading ? (
+                    [...Array(3)].map((_, i) => (
+                      <div key={i} className="h-24 md:h-32 bg-surface-card animate-pulse rounded-xl md:rounded-2xl border border-border-subtle" />
+                    ))
+                  ) : sessions.length > 0 ? (
+                    sessions.filter(s => s.status !== 'live' && s.status !== 'paused').map((s) => (
+                      <Card key={s.id} className="p-4 md:p-6 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl md:rounded-2xl group cursor-pointer overflow-hidden relative">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+                          <div className="flex items-center gap-3 md:gap-4">
+                            <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg md:rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-105 transition-transform duration-500">
+                              <History className="w-6 h-6 md:w-7 md:h-7" />
+                            </div>
+                            <div>
+                              <h4 className="text-lg md:text-xl font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">
+                                {s.title || 'Sessie aan het water'}
+                              </h4>
+                              <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-text-muted font-medium mt-0.5 md:mt-1">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                                  {s.startedAt ? format(s.startedAt.toDate(), 'd MMM yyyy', { locale: nl }) : 'Onbekend'}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                                  {s.startedAt ? format(s.startedAt.toDate(), 'HH:mm', { locale: nl }) : '--:--'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between md:justify-end gap-6 md:gap-8 border-t md:border-t-0 border-border-subtle/50 pt-3 md:pt-0">
+                            <div className="text-center md:text-right">
+                              <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest mb-0.5 md:mb-1">Vangsten</p>
+                              <div className="flex items-center justify-center md:justify-end gap-1.5">
+                                <Fish className="w-3 h-3 md:w-3.5 md:h-3.5 text-brand" />
+                                <span className="text-base md:text-lg font-bold text-text-primary">{s.linkedCatchIds?.length || 0}</span>
+                              </div>
+                            </div>
+                            <div className="text-center md:text-right">
+                              <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest mb-0.5 md:mb-1">XP</p>
+                              <div className="flex items-center justify-center md:justify-end gap-1.5">
+                                <Zap className="w-3 h-3 md:w-3.5 md:h-3.5 text-brand" />
+                                <span className="text-base md:text-lg font-bold text-text-primary">+{s.statsSummary?.totalXp || 0}</span>
+                              </div>
+                            </div>
+                            <div className="hidden md:block pl-4 border-l border-border-subtle">
+                              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))
+                  ) : (
+                    <Card className="p-8 md:p-12 text-center border-dashed border border-border-subtle bg-surface-soft/20 rounded-xl md:rounded-2xl">
+                      <Clock className="w-10 h-10 md:w-12 md:h-12 text-brand/20 mx-auto mb-4" />
+                      <h3 className="text-lg md:text-xl font-bold mb-2 text-text-primary">Nog geen sessies</h3>
+                      <p className="text-xs md:text-sm text-text-secondary mb-6">Start je eerste sessie om je voortgang bij te houden.</p>
+                      <Button onClick={() => setIsSessionModalOpen(true)} className="rounded-xl">Eerste Sessie Starten</Button>
+                    </Card>
+                  )}
+                </div>
+              </section>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Stats Summary */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 px-2 md:px-0">
-          <Card className="p-4 bg-surface-card border border-border-subtle rounded-2xl text-center space-y-1">
-            <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Totaal Tijd</p>
-            <p className="text-xl font-bold text-text-primary">{stats?.totalHours || 0}u</p>
-          </Card>
-          <Card className="p-4 bg-surface-card border border-border-subtle rounded-2xl text-center space-y-1">
-            <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Gem. Vangsten</p>
-            <p className="text-xl font-bold text-text-primary">{stats?.averageCatchesPerSession.toFixed(1) || 0} / sessie</p>
-          </Card>
-          <Card className="p-4 bg-surface-card border border-border-subtle rounded-2xl text-center space-y-1">
-            <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Top Soort</p>
-            <p className="text-xl font-bold text-text-primary truncate px-2">{stats?.topSpecies[0]?.name || '--'}</p>
-          </Card>
-          <Card className="p-4 bg-surface-card border border-border-subtle rounded-2xl text-center space-y-1">
-            <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Success Rate</p>
-            <p className="text-xl font-bold text-text-primary">{stats?.totalSessions ? Math.round((stats.totalCatches / stats.totalSessions) * 100) : 0}%</p>
-          </Card>
-        </section>
-
-        {/* Sessions List */}
-        <section className="space-y-4 px-2 md:px-0">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-text-primary uppercase tracking-tight">Sessie Historie</h3>
-            <Button variant="ghost" size="sm" className="text-brand font-black text-[10px] uppercase tracking-widest">Filteren</Button>
-          </div>
-          
-          <div className="space-y-4">
-            {loading ? (
-              [...Array(3)].map((_, i) => (
-                <div key={i} className="h-32 bg-surface-card animate-pulse rounded-2xl border border-border-subtle" />
-              ))
-            ) : sessions.length > 0 ? (
-              sessions.filter(s => s.status !== 'active').map((s) => (
-                <Card key={s.id} className="p-6 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group cursor-pointer overflow-hidden relative">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-110 transition-transform duration-500">
-                        <History className="w-7 h-7" />
-                      </div>
-                      <div>
-                        <h4 className="text-xl font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">
-                          {s.location?.name || 'Sessie aan het water'}
-                        </h4>
-                        <div className="flex items-center gap-3 text-xs text-text-muted font-medium mt-1">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5" />
-                            {s.startTime ? format(s.startTime.toDate(), 'd MMMM yyyy', { locale: nl }) : 'Onbekend'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            {s.startTime ? format(s.startTime.toDate(), 'HH:mm', { locale: nl }) : '--:--'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-8">
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Vangsten</p>
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Fish className="w-3.5 h-3.5 text-brand" />
-                          <span className="text-lg font-bold text-text-primary">{s.catchIds?.length || 0}</span>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">XP</p>
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Zap className="w-3.5 h-3.5 text-brand" />
-                          <span className="text-lg font-bold text-text-primary">+{s.totalXp || 0}</span>
-                        </div>
-                      </div>
-                      <div className="pl-4 border-l border-border-subtle">
-                        <ChevronRight className="w-6 h-6 text-text-muted group-hover:text-brand transition-colors" />
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              ))
-            ) : (
-              <Card className="p-12 text-center border-dashed border border-border-subtle bg-surface-soft/20 rounded-2xl">
-                <Clock className="w-12 h-12 text-brand/20 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2 text-text-primary">Nog geen sessies</h3>
-                <p className="text-sm text-text-secondary mb-6">Start je eerste sessie om je voortgang bij te houden.</p>
-                <Button onClick={() => setIsSessionModalOpen(true)}>Eerste Sessie Starten</Button>
-              </Card>
-            )}
-          </div>
-        </section>
       </div>
 
       {/* Session Modal */}

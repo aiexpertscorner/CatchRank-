@@ -53,6 +53,8 @@ export const useAuth = () => {
   return context;
 };
 
+import { SessionProvider } from './contexts/SessionContext';
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -160,34 +162,36 @@ export default function App() {
       logout, 
       updateProfile 
     }}>
-      <Toaster position="top-right" richColors closeButton />
-      <Router>
-        <Routes>
-          <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-          
-          {/* Onboarding Route */}
-          <Route path="/onboarding" element={user ? (profile?.onboardingStatus === 'complete' ? <Navigate to="/" /> : <Onboarding />) : <Navigate to="/login" />} />
+      <SessionProvider>
+        <Toaster position="top-right" richColors closeButton />
+        <Router>
+          <Routes>
+            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+            
+            {/* Onboarding Route */}
+            <Route path="/onboarding" element={user ? (profile?.onboardingStatus === 'complete' ? <Navigate to="/" /> : <Onboarding />) : <Navigate to="/login" />} />
 
-          <Route element={user ? (showOnboarding ? <Navigate to="/onboarding" /> : <AppShell />) : <Navigate to="/login" />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/catches" element={<Catches />} />
-            <Route path="/sessions" element={<Sessions />} />
-            <Route path="/spots" element={<Spots />} />
-            <Route path="/stats" element={<Stats />} />
-            <Route path="/rankings" element={<Rankings />} />
-            <Route path="/clubs" element={<Clubs />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/gear" element={<Gear />} />
-            <Route path="/tools" element={<Tools />} />
-            <Route path="/tools/ask-dick" element={<AskDick />} />
-            <Route path="/tools/weather" element={<WeatherForecast />} />
-            <Route path="/knowledge" element={<Knowledge />} />
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" />} />
-          </Route>
-        </Routes>
-      </Router>
+            <Route element={user ? (showOnboarding ? <Navigate to="/onboarding" /> : <AppShell />) : <Navigate to="/login" />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/catches" element={<Catches />} />
+              <Route path="/sessions" element={<Sessions />} />
+              <Route path="/spots" element={<Spots />} />
+              <Route path="/stats" element={<Stats />} />
+              <Route path="/rankings" element={<Rankings />} />
+              <Route path="/clubs" element={<Clubs />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/gear" element={<Gear />} />
+              <Route path="/tools" element={<Tools />} />
+              <Route path="/tools/ask-dick" element={<AskDick />} />
+              <Route path="/tools/weather" element={<WeatherForecast />} />
+              <Route path="/knowledge" element={<Knowledge />} />
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" />} />
+            </Route>
+          </Routes>
+        </Router>
+      </SessionProvider>
     </AuthContext.Provider>
   );
 }
