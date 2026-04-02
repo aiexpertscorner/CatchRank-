@@ -57,19 +57,61 @@
     },
     "Session": {
       "title": "Fishing Session",
-      "description": "A period of fishing activity.",
+      "description": "A comprehensive fishing session record supporting live and retro modes, multiple participants, and spot timelines.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "startTime": { "type": "string", "format": "date-time" },
-        "endTime": { "type": "string", "format": "date-time" },
-        "spotIds": { "type": "array", "items": { "type": "string" } },
-        "catchIds": { "type": "array", "items": { "type": "string" } },
-        "status": { "type": "string", "enum": ["active", "completed", "draft"] },
+        "id": { "type": "string" },
+        "ownerUserId": { "type": "string", "description": "The user who started/created the session" },
+        "participantUserIds": { "type": "array", "items": { "type": "string" }, "description": "All users currently in the session" },
+        "invitedUserIds": { "type": "array", "items": { "type": "string" } },
+        "acceptedUserIds": { "type": "array", "items": { "type": "string" } },
+        "pendingUserIds": { "type": "array", "items": { "type": "string" } },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "sessionType": { "type": "string", "description": "e.g., solo, group, competition" },
+        "mode": { "type": "string", "enum": ["live", "retro"] },
+        "status": { "type": "string", "enum": ["draft", "planned", "live", "paused", "ended", "completed", "pending_acceptance", "archived"] },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "endedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "durationMinutes": { "type": "integer" },
+        "activeSpotId": { "type": "string", "description": "Current spot for live sessions" },
+        "linkedSpotIds": { "type": "array", "items": { "type": "string" } },
+        "spotTimeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "spotId": { "type": "string" },
+              "name": { "type": "string" },
+              "arrivedAt": { "type": "string", "format": "date-time" },
+              "leftAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "linkedCatchIds": { "type": "array", "items": { "type": "string" } },
+        "linkedSetupIds": { "type": "array", "items": { "type": "string" }, "description": "IDs from user_setups" },
+        "linkedGearIds": { "type": "array", "items": { "type": "string" }, "description": "IDs from user_gear" },
+        "linkedProductIds": { "type": "array", "items": { "type": "string" }, "description": "IDs from affiliate_products" },
+        "weatherSnapshotStart": { "type": "object" },
+        "weatherSnapshotEnd": { "type": "object" },
+        "forecastSummary": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["public", "friends", "private"] },
         "notes": { "type": "string" },
-        "totalXp": { "type": "integer" }
+        "statsSummary": {
+          "type": "object",
+          "properties": {
+            "totalCatches": { "type": "integer" },
+            "totalXp": { "type": "integer" },
+            "speciesCount": { "type": "integer" }
+          }
+        },
+        "acceptanceStateByUser": { "type": "object", "description": "Map of userId to acceptance status" },
+        "createdFromLiveFlow": { "type": "boolean" },
+        "savedAsDraftForParticipants": { "type": "boolean" }
       },
-      "required": ["userId", "startTime", "status"]
+      "required": ["ownerUserId", "mode", "status", "createdAt", "updatedAt"]
     },
     "Spot": {
       "title": "Fishing Spot",

@@ -125,17 +125,46 @@ export interface Catch {
 
 export interface Session {
   id?: string;
-  userId: string;
-  startTime: any;
-  endTime?: any;
-  spotIds: string[];
-  catchIds: string[];
-  status: 'active' | 'completed' | 'draft';
+  ownerUserId: string;
+  participantUserIds: string[];
+  invitedUserIds: string[];
+  acceptedUserIds: string[];
+  pendingUserIds: string[];
+  title?: string;
+  description?: string;
+  sessionType?: string;
+  mode: 'live' | 'retro';
+  status: 'draft' | 'planned' | 'live' | 'paused' | 'ended' | 'completed' | 'pending_acceptance' | 'archived';
+  startedAt?: any;
+  endedAt?: any;
+  createdAt: any;
+  updatedAt: any;
+  durationMinutes?: number;
+  activeSpotId?: string;
+  linkedSpotIds: string[];
+  spotTimeline: {
+    spotId: string;
+    name: string;
+    arrivedAt: any;
+    leftAt?: any;
+  }[];
+  linkedCatchIds: string[];
+  linkedSetupIds: string[];
+  linkedGearIds: string[];
+  linkedProductIds: string[];
+  weatherSnapshotStart?: any;
+  weatherSnapshotEnd?: any;
+  forecastSummary?: string;
+  visibility: 'public' | 'friends' | 'private';
   notes?: string;
-  totalXp?: number;
-  isActive?: boolean; // Legacy support
-  weather?: any;
-  location?: { lat: number; lng: number; name?: string };
+  statsSummary?: {
+    totalCatches: number;
+    totalXp: number;
+    speciesCount: number;
+  };
+  acceptanceStateByUser?: Record<string, 'pending' | 'accepted' | 'declined'>;
+  createdFromLiveFlow?: boolean;
+  savedAsDraftForParticipants?: boolean;
 }
 
 export interface Spot {
