@@ -177,14 +177,13 @@ export default function Rankings() {
       </div>
 
       <div className="space-y-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex flex-col md:flex-row gap-6 items-center justify-between mb-10">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-            <TabsList className="grid grid-cols-3 w-full md:w-96 bg-surface-soft/50 p-1.5 rounded-2xl border border-border-subtle">
-              <TabsTrigger value="global" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3">Globaal</TabsTrigger>
-              <TabsTrigger value="friends" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3">Vrienden</TabsTrigger>
-              <TabsTrigger value="clubs" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3">Clubs</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <TabsList className="grid grid-cols-3 w-full md:grid-cols-3 md:w-96 bg-surface-soft/50 p-1.5 rounded-2xl border border-border-subtle">
+            <TabsTrigger value="global" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3">Globaal</TabsTrigger>
+            <TabsTrigger value="friends" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3">Vrienden</TabsTrigger>
+            <TabsTrigger value="clubs" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3">Clubs</TabsTrigger>
+          </TabsList>
 
           <div className="relative w-full md:w-80 group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted group-focus-within:text-brand transition-colors" />
@@ -259,6 +258,8 @@ export default function Rankings() {
             ))}
           </div>
         </TabsContent>
+      </Tabs>
+
 
         {/* XP Info Card */}
         <Card className="p-8 bg-brand text-white border-none shadow-premium rounded-[2.5rem] relative overflow-hidden group">

@@ -13,21 +13,21 @@ interface PageHeaderProps {
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, badge, actions, className }) => {
   return (
-    <div className={cn("flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 px-2 md:px-0", className)}>
-      <div className="space-y-2">
+    <div className={cn("flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 mb-8 md:mb-12 px-2 md:px-0", className)}>
+      <div className="space-y-1.5 md:space-y-2">
         {badge && (
           <Badge 
             variant="accent" 
-            className="mb-3 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-sm"
+            className="mb-2 md:mb-3 px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] shadow-sm"
           >
             {badge}
           </Badge>
         )}
-        <h1 className="text-pretty leading-[1.1]">{title}</h1>
-        {subtitle && <p className="text-text-secondary text-lg md:text-xl font-medium max-w-2xl">{subtitle}</p>}
+        <h1 className="text-2xl md:text-5xl text-pretty leading-[1.1] font-bold tracking-tight">{title}</h1>
+        {subtitle && <p className="text-text-secondary text-base md:text-xl font-medium max-w-2xl">{subtitle}</p>}
       </div>
       {actions && (
-        <div className="flex items-center gap-4 mt-4 md:mt-0">
+        <div className="flex items-center gap-3 md:gap-4 mt-2 md:mt-0">
           {actions}
         </div>
       )}

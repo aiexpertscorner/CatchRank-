@@ -61,38 +61,31 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-3 md:gap-6">
+      <div className="flex items-center gap-2 md:gap-4">
         {/* Quick Action Button (Desktop) */}
         <div className="hidden md:block">
           <QuickActionMenu className="scale-90" />
         </div>
-
+ 
         {/* Notifications */}
-        <button className="relative p-3 hover:bg-surface-soft rounded-2xl transition-all group border border-transparent hover:border-border-subtle shadow-sm hover:shadow-md">
-          <Bell className="w-6 h-6 text-text-secondary group-hover:text-accent transition-colors" />
-          <span className="absolute top-2.5 right-2.5 w-3 h-3 bg-danger border-2 border-surface rounded-full shadow-sm"></span>
+        <button className="relative w-10 h-10 flex items-center justify-center hover:bg-surface-soft rounded-xl transition-all group border border-transparent active:scale-95">
+          <Bell className="w-5 h-5 text-text-secondary group-hover:text-brand transition-colors" />
+          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-danger border-2 border-surface rounded-full shadow-sm"></span>
         </button>
-
+ 
         {/* User Profile Dropdown */}
         <div className="relative">
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-3 p-1.5 hover:bg-surface-soft rounded-[1.5rem] transition-all group border border-transparent hover:border-border-subtle shadow-sm hover:shadow-md"
+            className="flex items-center gap-2 p-0.5 hover:bg-surface-soft rounded-2xl transition-all group border border-transparent active:scale-95"
           >
             <div className="relative">
               <img 
                 src={profile?.photoURL || `https://ui-avatars.com/api/?name=${profile?.displayName}`} 
                 alt="Profile" 
-                className="w-10 h-10 rounded-xl border-2 border-accent/20 shadow-sm object-cover"
+                className="w-9 h-9 rounded-xl border-2 border-brand/10 shadow-sm object-cover"
               />
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success border-2 border-surface rounded-full shadow-sm"></div>
-            </div>
-            <div className="hidden lg:block text-left">
-              <p className="text-sm font-black text-text-primary leading-tight tracking-tight">{profile?.displayName}</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Zap className="w-3 h-3 text-accent" />
-                <span className="text-[9px] font-black text-text-muted uppercase tracking-[0.15em]">Level {profile?.level}</span>
-              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-success border-2 border-surface rounded-full shadow-sm"></div>
             </div>
             <ChevronDown className={cn("hidden lg:block w-4 h-4 text-text-muted transition-transform duration-300", isProfileOpen && "rotate-180")} />
           </button>

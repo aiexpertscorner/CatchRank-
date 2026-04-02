@@ -18,9 +18,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizes = {
-      sm: 'px-4 py-2 text-xs rounded-xl',
-      md: 'px-6 py-3 text-sm rounded-[1rem]',
-      lg: 'px-8 py-4 text-base rounded-2xl',
+      sm: 'px-3 py-1.5 text-[10px] rounded-lg',
+      md: 'px-4 py-2.5 text-xs md:px-6 md:py-3 md:text-sm rounded-xl',
+      lg: 'px-6 py-3.5 text-sm md:px-8 md:py-4 md:text-base rounded-2xl',
     };
 
     return (
@@ -83,9 +83,9 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 export const Card: React.FC<CardProps> = ({ children, className, hoverable = false, padding = 'md', variant = 'default', ...props }) => {
   const paddings = {
     none: 'p-0',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
+    sm: 'p-3 md:p-4',
+    md: 'p-4 md:p-6',
+    lg: 'p-6 md:p-8',
   };
 
   const variants = {
@@ -97,7 +97,7 @@ export const Card: React.FC<CardProps> = ({ children, className, hoverable = fal
   return (
     <div 
       className={cn(
-        'rounded-[2rem] transition-all duration-500',
+        'rounded-2xl md:rounded-[2rem] transition-all duration-500',
         variants[variant],
         hoverable && 'hover:shadow-premium hover:-translate-y-1 cursor-pointer',
         paddings[padding],
@@ -109,6 +109,46 @@ export const Card: React.FC<CardProps> = ({ children, className, hoverable = fal
     </div>
   );
 };
+
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  error?: string;
+  icon?: React.ReactNode;
+}
+
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, label, error, icon, ...props }, ref) => {
+    return (
+      <div className="space-y-2 w-full">
+        {label && (
+          <label className="text-xs font-bold text-text-muted uppercase tracking-[0.15em] ml-1">
+            {label}
+          </label>
+        )}
+        <div className="relative group">
+          {icon && (
+            <div className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand transition-colors">
+              {icon}
+            </div>
+          )}
+          <input
+            ref={ref}
+            className={cn(
+              "w-full bg-surface-soft border border-border-subtle rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 text-sm md:text-base text-text-primary placeholder:text-text-dim focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all duration-300",
+              icon && "pl-10 md:pl-12",
+              error && "border-danger focus:border-danger focus:ring-danger/10",
+              className
+            )}
+            {...props}
+          />
+        </div>
+        {error && <p className="text-xs font-bold text-danger ml-1">{error}</p>}
+      </div>
+    );
+  }
+);
+
+Input.displayName = 'Input';
 
 export interface ProgressBarProps extends React.HTMLAttributes<HTMLDivElement> {
   value: number;

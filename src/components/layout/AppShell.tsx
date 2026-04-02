@@ -17,6 +17,7 @@ import {
   Trophy, 
   Users, 
   Wrench,
+  BookOpen,
   User,
   LogOut
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const mobileNavItems = [
   { icon: Trophy, label: 'Rankings', path: '/rankings' },
   { icon: Users, label: 'Community', path: '/clubs' },
   { icon: Wrench, label: 'Tools', path: '/tools' },
+  { icon: BookOpen, label: 'Kennis', path: '/knowledge' },
   { icon: User, label: 'Profiel', path: '/profile' },
 ];
 

@@ -1,3 +1,24 @@
+export interface UserSettings {
+  units: {
+    weight: 'kg' | 'lb';
+    length: 'cm' | 'inch';
+  };
+  theme: 'dark' | 'light' | 'system';
+  notifications: {
+    push: boolean;
+    email: boolean;
+    clubActivity: boolean;
+    newAchievements: boolean;
+  };
+}
+
+export interface UserPrivacy {
+  profileVisibility: 'public' | 'friends' | 'private';
+  logVisibility: 'public' | 'friends' | 'private';
+  showLocation: boolean;
+  showStats: boolean;
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -6,6 +27,11 @@ export interface UserProfile {
   xp: number;
   level: number;
   bio?: string;
+  onboardingStatus?: 'welcome' | 'profile' | 'preferences' | 'location' | 'complete';
+  experienceLevel?: 'beginner' | 'intermediate' | 'advanced';
+  favoriteSpecies?: string[];
+  fishingTypes?: string[];
+  locationPreference?: { lat: number; lng: number; name: string };
   stats?: {
     totalCatches: number;
     totalSessions: number;
@@ -13,6 +39,8 @@ export interface UserProfile {
     speciesCount: number;
     personalRecords?: Record<string, { length?: number; weight?: number }>;
   };
+  settings?: UserSettings;
+  privacy?: UserPrivacy;
   rank?: number;
   badges?: {
     id: string;
@@ -134,4 +162,42 @@ export interface ClubFeedItem {
   contentId?: string;
   text?: string;
   createdAt: any;
+}
+
+export interface FishingTool {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  category: 'weather' | 'analysis' | 'planning' | 'utility';
+  path: string;
+  isPremium?: boolean;
+  isNew?: boolean;
+  status: 'active' | 'beta' | 'coming_soon';
+}
+
+export interface KnowledgeContent {
+  id: string;
+  title: string;
+  slug: string;
+  category: 'species' | 'how-to' | 'guides' | 'academy';
+  summary: string;
+  content: string;
+  photoURL?: string;
+  authorId?: string;
+  authorName?: string;
+  publishedAt: any;
+  tags: string[];
+  relatedSpeciesIds?: string[];
+  relatedToolIds?: string[];
+}
+
+export interface ToolResult {
+  id: string;
+  userId: string;
+  toolId: string;
+  input: any;
+  output: any;
+  createdAt: any;
+  expiresAt?: any;
 }

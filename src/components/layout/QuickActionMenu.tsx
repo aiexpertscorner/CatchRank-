@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Camera, 
@@ -6,98 +8,223 @@ import {
   MapPin, 
   X, 
   FileEdit,
-  ChevronRight
+  ChevronRight,
+  Zap,
+  Fish,
+  ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { Button } from '../ui/Base';
 import { QuickCatchModal } from '../QuickCatchModal';
 
 interface QuickActionMenuProps {
   className?: string;
-  onAction?: (action: string) => void;
 }
 
 export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({ className }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isQuickCatchOpen, setIsQuickCatchOpen] = useState(false);
+  const navigate = useNavigate();
 
   const actions = [
-    { id: 'catch', label: 'Nieuwe Vangst', icon: Camera, color: 'bg-accent', description: 'Leg je vangst direct vast' },
-    { id: 'session', label: 'Nieuwe Sessie', icon: History, color: 'bg-primary', description: 'Start een live vissessie' },
-    { id: 'spot', label: 'Nieuwe Stek', icon: MapPin, color: 'bg-water', description: 'Sla een nieuwe visplek op' },
-    { id: 'draft', label: 'Hervat Concept', icon: FileEdit, color: 'bg-warning', description: 'Maak je laatste log af' },
+    { 
+      id: 'catch', 
+      label: 'Nieuwe Vangst', 
+      icon: Camera, 
+      color: 'bg-accent', 
+      description: 'Leg je vangst direct vast',
+      xp: '+10 XP'
+    },
+    { 
+      id: 'session', 
+      label: 'Nieuwe Sessie', 
+      icon: History, 
+      color: 'bg-primary', 
+      description: 'Start een live vissessie',
+      xp: '+25 XP'
+    },
+    { 
+      id: 'spot', 
+      label: 'Nieuwe Stek', 
+      icon: MapPin, 
+      color: 'bg-water', 
+      description: 'Sla een nieuwe visplek op',
+      xp: '+5 XP'
+    },
+    { 
+      id: 'gear', 
+      label: 'Nieuwe Gear', 
+      icon: ShoppingBag, 
+      color: 'bg-blue-500', 
+      description: 'Voeg materiaal toe aan je kist',
+      xp: '+5 XP'
+    },
+    { 
+      id: 'draft', 
+      label: 'Hervat Concept', 
+      icon: FileEdit, 
+      color: 'bg-warning', 
+      description: 'Maak je laatste log af',
+      xp: 'Voltooi'
+    },
   ];
 
   const handleAction = (id: string) => {
     setIsOpen(false);
-    if (id === 'catch') {
-      setIsQuickCatchOpen(true);
+    switch (id) {
+      case 'catch':
+        setIsQuickCatchOpen(true);
+        break;
+      case 'session':
+        navigate('/sessions');
+        break;
+      case 'spot':
+        navigate('/spots');
+        break;
+      case 'gear':
+        navigate('/gear');
+        break;
+      case 'draft':
+        navigate('/catches?filter=draft');
+        break;
+      default:
+        break;
     }
-    // Other actions would navigate or open other modals
   };
 
   return (
     <>
-      <div className={cn("relative z-50", className)}>
-        <AnimatePresence>
-          {isOpen && (
-            <>
-              {/* Backdrop */}
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-black/60 backdrop-blur-md"
-              />
-
-              {/* Menu */}
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="absolute bottom-24 right-0 md:right-auto md:left-0 w-80 bg-surface rounded-[2.5rem] shadow-2xl overflow-hidden border border-border-subtle z-[60]"
-              >
-                <div className="p-8 border-b border-border-subtle bg-surface-soft/50">
-                  <h4 className="text-2xl font-black text-text-primary tracking-tight">Snel Actie</h4>
-                  <p className="text-[10px] text-text-muted font-black uppercase tracking-[0.2em] mt-2">Wat wil je doen?</p>
-                </div>
-                <div className="p-3 space-y-1">
-                  {actions.map((action) => (
-                    <button
-                      key={action.id}
-                      onClick={() => handleAction(action.id)}
-                      className="w-full flex items-center gap-5 p-5 rounded-[1.5rem] hover:bg-surface-soft transition-all group text-left"
-                    >
-                      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-110 duration-300", action.color)}>
-                        <action.icon className="w-7 h-7" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-lg font-black text-text-primary group-hover:text-accent transition-colors tracking-tight">{action.label}</p>
-                        <p className="text-xs font-medium text-text-muted truncate">{action.description}</p>
-                      </div>
-                      <div className="w-10 h-10 rounded-xl bg-surface-soft flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all group-hover:bg-accent group-hover:text-white">
-                        <ChevronRight className="w-5 h-5" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-
-        {/* Toggle Button */}
+      <div className={cn("relative", className)}>
+        {/* Toggle Button - Premium Floating Action Button */}
         <button 
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            "w-16 h-16 rounded-[1.5rem] flex items-center justify-center shadow-premium transition-all active:scale-95 z-50 group",
+            "w-14 h-14 rounded-2xl flex items-center justify-center shadow-premium transition-all active:scale-90 z-50 group relative overflow-hidden",
             isOpen ? "bg-primary text-white" : "bg-accent text-white hover:shadow-premium-accent/40"
           )}
         >
-          <Plus className={cn("w-10 h-10 transition-all duration-500", isOpen ? "rotate-[135deg]" : "rotate-0")} />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <Plus className={cn("w-8 h-8 transition-all duration-500 relative z-10", isOpen ? "rotate-[135deg]" : "rotate-0")} />
         </button>
+
+        {/* Portal for Menu and Backdrop */}
+        {typeof document !== 'undefined' && createPortal(
+          <AnimatePresence>
+            {isOpen && (
+              <div className="fixed inset-0 z-[100] flex flex-col justify-end">
+                {/* Backdrop - High-end Blur */}
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsOpen(false)}
+                  className="absolute inset-0 bg-black/60 backdrop-blur-md"
+                />
+
+                {/* Menu Content - Foldable Bottom Sheet */}
+                <motion.div 
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.8 }}
+                  drag="y"
+                  dragConstraints={{ top: 0 }}
+                  dragElastic={0.2}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.y > 100) setIsOpen(false);
+                  }}
+                  className="relative bg-surface rounded-t-[2.5rem] shadow-[0_-20px_80px_rgba(0,0,0,0.4)] overflow-hidden border-t border-border-subtle pb-safe touch-none"
+                >
+                  {/* Drag Handle - Visual cue for "foldable" */}
+                  <div className="w-12 h-1 bg-border-subtle/40 rounded-full mx-auto mt-3 mb-1" />
+                  
+                  {/* Header Section - Premium Branding */}
+                  <div className="px-6 pt-4 pb-1">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-lg bg-accent/10 flex items-center justify-center">
+                            <Zap className="w-3 h-3 text-accent" />
+                          </div>
+                          <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">Snel Loggen</span>
+                        </div>
+                        <h4 className="text-2xl font-black text-primary tracking-tight leading-tight">
+                          Wat gaan we <span className="text-accent italic">vangen?</span>
+                        </h4>
+                      </div>
+                      <button 
+                        onClick={() => setIsOpen(false)}
+                        className="w-10 h-10 rounded-xl bg-surface-soft flex items-center justify-center text-text-muted hover:text-primary transition-all active:scale-90 shadow-sm"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions Grid - Tactile and High-Contrast */}
+                  <div className="px-4 py-4 grid grid-cols-1 gap-2.5">
+                    {actions.map((action, index) => (
+                      <motion.button
+                        key={action.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 + 0.1 }}
+                        whileHover={{ x: 8 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleAction(action.id)}
+                        className="w-full flex items-center gap-4 p-4 rounded-2xl bg-surface-soft/40 hover:bg-white hover:shadow-premium transition-all group text-left relative overflow-hidden border border-transparent hover:border-border-subtle"
+                      >
+                        <div className={cn(
+                          "w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg transition-all group-hover:scale-110 duration-500 group-hover:rotate-3 shrink-0 relative overflow-hidden", 
+                          action.color
+                        )}>
+                          <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-50" />
+                          <action.icon className="w-6 h-6 relative z-10" />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <p className="text-lg font-black text-primary group-hover:text-accent transition-colors tracking-tight">
+                              {action.label}
+                            </p>
+                            <div className="flex items-center gap-1 bg-accent/5 px-2 py-0.5 rounded-full border border-accent/10 shadow-sm">
+                              <Zap className="w-2.5 h-2.5 text-accent animate-pulse" />
+                              <span className="text-[9px] font-black text-accent uppercase tracking-wider">
+                                {action.xp}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-[12px] font-medium text-text-muted leading-relaxed truncate opacity-80">{action.description}</p>
+                        </div>
+
+                        <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center text-text-muted group-hover:bg-accent group-hover:text-white transition-all border border-border-subtle/50 group-hover:border-accent">
+                          <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+
+                        {action.id === 'draft' && (
+                          <div className="absolute top-0 right-0 w-2 h-full bg-warning animate-pulse" />
+                        )}
+                      </motion.button>
+                    ))}
+                  </div>
+
+                  {/* Footer Quote - Integrated and Personal */}
+                  <div className="px-6 py-6 bg-gradient-to-b from-transparent to-surface-soft/40 text-center">
+                    <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-white rounded-2xl shadow-premium border border-border-subtle group hover:scale-105 transition-transform">
+                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Fish className="w-3.5 h-3.5 text-primary group-hover:animate-bounce" />
+                      </div>
+                      <p className="text-[10px] font-black text-text-secondary uppercase tracking-[0.12em]">
+                        "Geen vis is te groot voor <span className="text-primary">CatchRank</span>!"
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
       </div>
 
       <QuickCatchModal 

@@ -155,6 +155,27 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["clubId", "type", "authorId", "createdAt"]
+    },
+    "UserStats": {
+      "title": "User Statistics",
+      "description": "Aggregated statistics for a user over different time periods.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "period": { "type": "string", "enum": ["all", "year", "month", "week"] },
+        "periodValue": { "type": "string", "description": "e.g., '2024', '2024-03', '2024-W12'" },
+        "totalCatches": { "type": "integer" },
+        "totalSessions": { "type": "integer" },
+        "totalWeight": { "type": "number" },
+        "avgLength": { "type": "number" },
+        "avgWeight": { "type": "number" },
+        "speciesBreakdown": { "type": "object", "description": "Map of speciesId to count" },
+        "spotPerformance": { "type": "object", "description": "Map of spotId to catchCount" },
+        "bestTimeOfDay": { "type": "object", "description": "Map of hour to catchCount" },
+        "bestBait": { "type": "object", "description": "Map of bait to catchCount" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "period", "totalCatches"]
     }
   },
   "firestore": {
@@ -165,6 +186,7 @@
     "/species/{speciesId}": { "schema": "Species", "description": "Reference species" },
     "/clubs/{clubId}": { "schema": "Club", "description": "Fishing clubs" },
     "/club_members/{memberId}": { "schema": "ClubMember", "description": "Club memberships" },
-    "/club_feed/{feedId}": { "schema": "ClubFeedItem", "description": "Club activity feed" }
+    "/club_feed/{feedId}": { "schema": "ClubFeedItem", "description": "Club activity feed" },
+    "/user_stats/{statsId}": { "schema": "UserStats", "description": "Aggregated user statistics" }
   }
 }
