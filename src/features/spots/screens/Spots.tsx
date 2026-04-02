@@ -8,6 +8,7 @@ import {
   Navigation, 
   Lock, 
   Globe, 
+  Users,
   Fish, 
   TrendingUp,
   Map as MapIcon,
@@ -67,7 +68,8 @@ export default function Spots() {
 
   const filteredSpots = spots.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.waterType?.toLowerCase().includes(searchQuery.toLowerCase())
+    s.waterType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.waterBodyName?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -168,8 +170,10 @@ export default function Spots() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="text-lg font-bold text-text-primary tracking-tight truncate">{s.name}</h4>
-                        {s.isPrivate ? (
+                        {s.visibility === 'private' ? (
                           <Lock className="w-3 h-3 text-text-dim" />
+                        ) : s.visibility === 'friends' ? (
+                          <Users className="w-3 h-3 text-accent/60" />
                         ) : (
                           <Globe className="w-3 h-3 text-success/60" />
                         )}

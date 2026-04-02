@@ -32,25 +32,28 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: editingSpot?.name || '',
-    type: editingSpot?.waterType || 'Kanaal',
+    waterType: editingSpot?.waterType || 'canal',
+    waterBodyName: editingSpot?.waterBodyName || '',
     description: editingSpot?.description || '',
-    isPrivate: editingSpot?.isPrivate ?? true
+    visibility: editingSpot?.visibility || 'private'
   });
 
   useEffect(() => {
     if (editingSpot) {
       setFormData({
         name: editingSpot.name,
-        type: editingSpot.waterType || 'Kanaal',
+        waterType: editingSpot.waterType || 'canal',
+        waterBodyName: editingSpot.waterBodyName || '',
         description: editingSpot.description || '',
-        isPrivate: editingSpot.isPrivate ?? true
+        visibility: editingSpot.visibility || 'private'
       });
     } else {
       setFormData({
         name: '',
-        type: 'Kanaal',
+        waterType: 'canal',
+        waterBodyName: '',
         description: '',
-        isPrivate: true
+        visibility: 'private'
       });
     }
   }, [editingSpot, isOpen]);
@@ -65,20 +68,30 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
 
     setLoading(true);
     try {
+      const spotData = {
+        ...formData,
+        userId: profile.uid,
+        authorName: profile.displayName,
+        authorPhoto: profile.photoURL || '',
+        updatedAt: serverTimestamp(),
+        coordinates: { lat: 52.3676, lng: 4.9041 }, // Placeholder for now
+        isPrivate: formData.visibility === 'private' // Backward compatibility
+      };
+
       if (editingSpot?.id) {
-        await updateDoc(doc(db, 'spots', editingSpot.id), {
-          ...formData,
-          waterType: formData.type,
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(doc(db, 'spots', editingSpot.id), spotData);
         toast.success('Stek bijgewerkt!');
       } else {
         const docRef = await addDoc(collection(db, 'spots'), {
-          ...formData,
-          waterType: formData.type,
-          userId: profile.uid,
+          ...spotData,
           createdAt: serverTimestamp(),
-          location: { lat: 52.3676, lng: 4.9041 } // Placeholder
+          stats: {
+            totalCatches: 0,
+            totalSessions: 0,
+            topSpecies: [],
+            avgRating: 0,
+            ratingCount: 0
+          }
         });
         toast.success('Stek toegevoegd!');
         if (onSuccess) onSuccess(docRef.id);
@@ -146,41 +159,43 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
             <div className="space-y-3">
               <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Type Water</label>
               <Select 
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                value={formData.waterType}
+                onChange={(e) => setFormData({ ...formData, waterType: e.target.value })}
                 options={[
-                  { value: 'Kanaal', label: 'Kanaal' },
-                  { value: 'Plas', label: 'Plas' },
-                  { value: 'Rivier', label: 'Rivier' },
-                  { value: 'Polder', label: 'Polder' },
-                  { value: 'Haven', label: 'Haven' },
-                  { value: 'Zee', label: 'Zee' }
+                  { value: 'canal', label: 'Kanaal' },
+                  { value: 'lake', label: 'Plas / Meer' },
+                  { value: 'river', label: 'Rivier' },
+                  { value: 'polder', label: 'Polder' },
+                  { value: 'pond', label: 'Vijver' },
+                  { value: 'sea', label: 'Zee' }
                 ]}
                 className="h-16 rounded-2xl bg-surface-soft/30 border-border-subtle focus:border-accent font-bold text-lg"
               />
             </div>
             <div className="space-y-3">
-              <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Privacy</label>
-              <div 
-                onClick={() => setFormData({ ...formData, isPrivate: !formData.isPrivate })}
-                className="flex items-center justify-between h-16 px-6 bg-surface-soft/50 rounded-2xl border border-border-subtle hover:border-accent/30 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500",
-                    formData.isPrivate ? "bg-accent/10 text-accent" : "bg-water/10 text-water"
-                  )}>
-                    {formData.isPrivate ? <Lock className="w-5 h-5" /> : <Globe className="w-5 h-5" />}
-                  </div>
-                  <span className="text-base font-bold text-primary select-none">Geheime stek</span>
-                </div>
-                <Checkbox 
-                  checked={formData.isPrivate}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isPrivate: !!checked })}
-                  className="w-7 h-7 rounded-lg border-2 border-border-subtle data-[state=checked]:bg-accent data-[state=checked]:border-accent transition-all"
-                />
-              </div>
+              <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Zichtbaarheid</label>
+              <Select 
+                value={formData.visibility}
+                onChange={(e) => setFormData({ ...formData, visibility: e.target.value as any })}
+                options={[
+                  { value: 'private', label: 'Privé (Alleen ik)' },
+                  { value: 'friends', label: 'Vrienden' },
+                  { value: 'public', label: 'Openbaar' }
+                ]}
+                className="h-16 rounded-2xl bg-surface-soft/30 border-border-subtle focus:border-accent font-bold text-lg"
+              />
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">Naam Water (Optioneel)</label>
+            <Input 
+              placeholder="Bijv. Amsterdam-Rijnkanaal"
+              value={formData.waterBodyName}
+              onChange={(e) => setFormData({ ...formData, waterBodyName: e.target.value })}
+              icon={<Navigation className="w-6 h-6 text-accent" />}
+              className="h-16 rounded-2xl bg-surface-soft/30 border-border-subtle focus:border-accent font-bold text-lg px-6"
+            />
           </div>
 
           <div className="space-y-3">

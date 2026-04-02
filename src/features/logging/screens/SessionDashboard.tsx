@@ -32,12 +32,14 @@ import { Session, Catch, Spot, UserProfile } from '../../../types';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { Input } from '../../../components/ui/Inputs';
 import { useSession } from '../../../contexts/SessionContext';
+import { useAuth } from '../../../App';
 import { db } from '../../../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs } from 'firebase/firestore';
 import { formatDistanceToNow, format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { SpotSelectorModal } from '../../../components/SpotSelectorModal';
+import { ParticipantInviteModal } from '../../../components/ParticipantInviteModal';
 import { loggingService } from '../services/loggingService';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
@@ -51,8 +53,10 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
   const [catches, setCatches] = useState<Catch[]>([]);
   const [activeSpot, setActiveSpot] = useState<Spot | null>(null);
   const [participants, setParticipants] = useState<UserProfile[]>([]);
+  const [pendingParticipants, setPendingParticipants] = useState<UserProfile[]>([]);
   const [isQuickCatchOpen, setIsQuickCatchOpen] = useState(false);
   const [isSpotSelectorOpen, setIsSpotSelectorOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [elapsedTime, setElapsedTime] = useState<string>('');
   const [note, setNote] = useState('');
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
@@ -91,8 +95,21 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
       });
     }
 
+    // Fetch pending participants
+    if (session.pendingUserIds && session.pendingUserIds.length > 0) {
+      const pendingQ = query(
+        collection(db, 'users'),
+        where('uid', 'in', session.pendingUserIds)
+      );
+      getDocs(pendingQ).then(snapshot => {
+        setPendingParticipants(snapshot.docs.map(doc => doc.data() as UserProfile));
+      });
+    } else {
+      setPendingParticipants([]);
+    }
+
     return () => unsubscribe();
-  }, [session.id, session.activeSpotId, session.participantUserIds]);
+  }, [session.id, session.activeSpotId, session.participantUserIds, session.pendingUserIds]);
 
   useEffect(() => {
     if (!session.startedAt) return;
@@ -141,6 +158,9 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
       toast.error('Fout bij wisselen van stek');
     }
   };
+
+  const { profile } = useAuth();
+  const isOwner = profile?.uid === session.ownerUserId;
 
   const totalWeight = catches.reduce((sum, c) => sum + (c.weight || 0), 0);
   const totalLength = catches.reduce((sum, c) => sum + (c.length || 0), 0);
@@ -215,34 +235,36 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
               Vangst Loggen
             </Button>
             
-            <div className="flex gap-4 flex-1">
-              {session.status === 'live' ? (
+            {isOwner && (
+              <div className="flex gap-4 flex-1">
+                {session.status === 'live' ? (
+                  <Button 
+                    variant="secondary" 
+                    className="h-16 md:h-20 flex-1 rounded-2xl font-black border-border-subtle hover:bg-surface-soft"
+                    onClick={pauseActiveSession}
+                    icon={<Pause className="w-5 h-5 md:w-6 md:h-6" />}
+                  >
+                    Pauze
+                  </Button>
+                ) : (
+                  <Button 
+                    className="h-16 md:h-20 flex-1 rounded-2xl font-black bg-accent text-black shadow-premium-accent"
+                    onClick={resumeActiveSession}
+                    icon={<Play className="w-5 h-5 md:w-6 md:h-6 fill-current" />}
+                  >
+                    Hervat
+                  </Button>
+                )}
                 <Button 
-                  variant="secondary" 
-                  className="h-16 md:h-20 flex-1 rounded-2xl font-black border-border-subtle hover:bg-surface-soft"
-                  onClick={pauseActiveSession}
-                  icon={<Pause className="w-5 h-5 md:w-6 md:h-6" />}
+                  variant="ghost" 
+                  className="h-16 md:h-20 flex-1 rounded-2xl font-black text-danger hover:bg-danger/10 border border-danger/20"
+                  onClick={endActiveSession}
+                  icon={<Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />}
                 >
-                  Pauze
+                  Stop
                 </Button>
-              ) : (
-                <Button 
-                  className="h-16 md:h-20 flex-1 rounded-2xl font-black bg-accent text-black shadow-premium-accent"
-                  onClick={resumeActiveSession}
-                  icon={<Play className="w-5 h-5 md:w-6 md:h-6 fill-current" />}
-                >
-                  Hervat
-                </Button>
-              )}
-              <Button 
-                variant="ghost" 
-                className="h-16 md:h-20 flex-1 rounded-2xl font-black text-danger hover:bg-danger/10 border border-danger/20"
-                onClick={endActiveSession}
-                icon={<Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />}
-              >
-                Stop
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </Card>
@@ -367,6 +389,50 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
                 </Button>
               </div>
             </Card>
+
+            {/* Spot History / Timeline */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-3">
+                  <History className="w-5 h-5 text-accent" />
+                  <h3 className="text-xl font-black text-primary tracking-tight">Stek Historie</h3>
+                </div>
+                <Badge className="bg-surface-soft text-text-secondary rounded-lg font-black px-3">{session.spotTimeline?.length || 0}</Badge>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {session.spotTimeline && session.spotTimeline.length > 0 ? (
+                  [...session.spotTimeline].reverse().map((spot, idx) => (
+                    <Card key={`${spot.spotId}-${idx}`} className={cn(
+                      "p-4 rounded-2xl border bg-surface-card flex items-center justify-between group",
+                      session.activeSpotId === spot.spotId ? "border-accent/50 bg-accent/5" : "border-border-subtle"
+                    )}>
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center",
+                          session.activeSpotId === spot.spotId ? "bg-accent text-black" : "bg-surface-soft text-text-muted"
+                        )}>
+                          <MapPin className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-primary">{spot.name}</p>
+                          <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                            Sinds {format(spot.arrivedAt?.toDate() || new Date(), 'HH:mm')}
+                          </p>
+                        </div>
+                      </div>
+                      {session.activeSpotId === spot.spotId && (
+                        <Badge variant="success" className="bg-accent text-black border-none text-[8px] font-black uppercase tracking-widest">Actief</Badge>
+                      )}
+                    </Card>
+                  ))
+                ) : (
+                  <div className="col-span-full p-8 text-center border-2 border-dashed border-border-subtle rounded-[2rem] bg-surface-soft/10">
+                    <p className="text-text-secondary font-medium italic">Geen stek historie beschikbaar.</p>
+                  </div>
+                )}
+              </div>
+            </section>
 
             {/* Session Timeline */}
             <section className="space-y-4">
@@ -521,10 +587,11 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
                 <Users className="w-5 h-5 text-water" />
                 <h4 className="text-xl font-black text-primary tracking-tight">Deelnemers</h4>
               </div>
-              <Badge className="bg-water/10 text-water border-none font-black">{participants.length}</Badge>
+              <Badge className="bg-water/10 text-water border-none font-black">{participants.length + pendingParticipants.length}</Badge>
             </div>
 
             <div className="space-y-4">
+              {/* Accepted Participants */}
               {participants.map((p) => (
                 <div key={p.uid} className="flex items-center justify-between p-3 bg-surface-soft/30 rounded-2xl border border-border-subtle group hover:border-water/30 transition-all">
                   <div className="flex items-center gap-3">
@@ -541,7 +608,28 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
                   )}
                 </div>
               ))}
-              <Button variant="ghost" className="w-full h-12 rounded-xl border-2 border-dashed border-border-subtle text-text-muted hover:text-water hover:border-water/30 font-black text-xs uppercase tracking-widest">
+
+              {/* Pending Participants */}
+              {pendingParticipants.map((p) => (
+                <div key={p.uid} className="flex items-center justify-between p-3 bg-surface-soft/10 rounded-2xl border border-dashed border-border-subtle opacity-70">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-surface grayscale">
+                      <img src={p.photoURL || `https://ui-avatars.com/api/?name=${p.displayName}&background=random`} alt={p.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-text-secondary">{p.displayName}</p>
+                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest italic">Uitnodiging verstuurd</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest border-border-subtle text-text-muted">Pending</Badge>
+                </div>
+              ))}
+
+              <Button 
+                variant="ghost" 
+                className="w-full h-12 rounded-xl border-2 border-dashed border-border-subtle text-text-muted hover:text-water hover:border-water/30 font-black text-xs uppercase tracking-widest"
+                onClick={() => setIsInviteModalOpen(true)}
+              >
                 Vriend Uitnodigen +
               </Button>
             </div>
@@ -599,6 +687,12 @@ export const SessionDashboard: React.FC<SessionDashboardProps> = ({ session }) =
         onClose={() => setIsSpotSelectorOpen(false)}
         onSelect={handleSwitchSpot}
         currentSpotId={session.activeSpotId}
+      />
+
+      <ParticipantInviteModal 
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        session={session}
       />
     </div>
   );

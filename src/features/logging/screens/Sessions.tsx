@@ -12,7 +12,8 @@ import {
   Square,
   History,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Users
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -36,11 +37,13 @@ import { loggingService } from '../services/loggingService';
 
 import { useSession } from '../../../contexts/SessionContext';
 import { SessionDashboard } from './SessionDashboard';
+import { SessionInvitationCard } from '../../../components/SessionInvitationCard';
 
 export default function Sessions() {
   const { profile } = useAuth();
   const { activeSession, endActiveSession, pauseActiveSession, resumeActiveSession } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<Session[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
@@ -48,9 +51,10 @@ export default function Sessions() {
   useEffect(() => {
     if (!profile) return;
 
+    // Fetch sessions where user is owner or participant
     const q = query(
       collection(db, 'sessions'),
-      where('ownerUserId', '==', profile.uid),
+      where('participantUserIds', 'array-contains', profile.uid),
       orderBy('startedAt', 'desc')
     );
 
@@ -63,6 +67,18 @@ export default function Sessions() {
       setLoading(false);
     });
 
+    // Fetch pending invitations
+    const pendingQ = query(
+      collection(db, 'sessions'),
+      where('pendingUserIds', 'array-contains', profile.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribePending = onSnapshot(pendingQ, (snapshot) => {
+      const pending = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session));
+      setPendingInvitations(pending);
+    });
+
     const loadStats = async () => {
       try {
         const userStats = await statsService.calculateUserStats(profile.uid);
@@ -73,7 +89,10 @@ export default function Sessions() {
     };
     loadStats();
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubscribePending();
+    };
   }, [profile]);
 
   return (
@@ -95,6 +114,25 @@ export default function Sessions() {
       />
 
       <div className="space-y-6 md:space-y-8 pb-32">
+        {/* Pending Invitations */}
+        {pendingInvitations.length > 0 && profile && (
+          <section className="px-2 md:px-0 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-5 h-5 text-water" />
+              <h3 className="text-base md:text-lg font-black text-text-primary uppercase tracking-tight">Uitnodigingen ({pendingInvitations.length})</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pendingInvitations.map((session) => (
+                <SessionInvitationCard 
+                  key={session.id} 
+                  session={session} 
+                  userId={profile.uid} 
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Active Session Dashboard */}
         <AnimatePresence mode="wait">
           {activeSession ? (

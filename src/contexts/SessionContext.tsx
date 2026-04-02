@@ -42,10 +42,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
 
-    // Query for sessions owned by the user that are currently 'live' or 'paused'
+    // Query for sessions where user is a participant and status is 'live' or 'paused'
     const q = query(
       collection(db, 'sessions'),
-      where('ownerUserId', '==', profile.uid),
+      where('participantUserIds', 'array-contains', profile.uid),
       where('status', 'in', ['live', 'paused']),
       limit(1)
     );

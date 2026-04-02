@@ -177,14 +177,28 @@ export interface Session {
 export interface Spot {
   id?: string;
   userId: string;
+  authorName?: string;
+  authorPhoto?: string;
   name: string;
-  coordinates?: { lat: number; lng: number };
-  waterType?: string;
-  isPrivate: boolean;
   description?: string;
+  coordinates: { lat: number; lng: number };
+  waterType?: 'canal' | 'river' | 'lake' | 'pond' | 'sea' | 'polder';
+  waterBodyName?: string;
+  visibility: 'private' | 'friends' | 'public';
+  isPrivate?: boolean; // Legacy
+  techniques?: string[];
+  targetSpecies?: string[];
+  amenities?: string[];
+  photoURLs?: string[];
+  mainPhotoURL?: string;
+  createdAt: any;
+  updatedAt: any;
   stats?: {
     totalCatches: number;
+    totalSessions?: number;
     topSpecies: string[];
+    avgRating?: number;
+    ratingCount?: number;
   };
 }
 

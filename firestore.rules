@@ -53,10 +53,19 @@ service cloud.firestore {
     // Document ID: auto-generated
     // Fields:
     //   - userId: string (required)
+    //   - authorName: string (optional)
+    //   - authorPhoto: string (optional)
     //   - name: string (required)
-    //   - isPrivate: bool (required)
-    //   - waterType: string (optional)
-    //   - coordinates: map (optional)
+    //   - description: string (optional)
+    //   - coordinates: map (required, {lat: number, lng: number})
+    //   - waterType: string (optional, enum)
+    //   - waterBodyName: string (optional)
+    //   - visibility: string (required, enum: ['private', 'friends', 'public'])
+    //   - techniques: list (optional)
+    //   - targetSpecies: list (optional)
+    //   - photoURLs: list (optional)
+    //   - createdAt: timestamp (required)
+    //   - updatedAt: timestamp (required)
     //
     // Collection: species
     // Document ID: auto-generated
@@ -100,7 +109,10 @@ service cloud.firestore {
     }
 
     function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.userId;
+      return isAuthenticated() && (
+        (resource.data.userId == request.auth.uid) || 
+        (resource.data.ownerUserId == request.auth.uid)
+      );
     }
 
     function isAdmin() {
@@ -144,14 +156,20 @@ service cloud.firestore {
     }
 
     function isValidSession(data) {
-      return data.userId == request.auth.uid &&
-             data.status in ['active', 'completed', 'draft'];
+      return data.ownerUserId == request.auth.uid &&
+             data.status in ['active', 'completed', 'draft', 'live', 'paused'];
     }
 
     function isValidSpot(data) {
       return data.userId == request.auth.uid &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.isPrivate is bool;
+             data.visibility in ['private', 'friends', 'public'] &&
+             data.coordinates is map &&
+             data.coordinates.lat is number && data.coordinates.lng is number &&
+             (!('waterType' in data) || data.waterType in ['canal', 'river', 'lake', 'pond', 'sea', 'polder']) &&
+             (!('techniques' in data) || data.techniques is list) &&
+             (!('targetSpecies' in data) || data.targetSpecies is list) &&
+             (!('photoURLs' in data) || data.photoURLs is list);
     }
 
     // ===============================================================
@@ -173,14 +191,28 @@ service cloud.firestore {
     }
 
     match /sessions/{sessionId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.ownerUserId == request.auth.uid || 
+        (resource.data.participantUserIds is list && request.auth.uid in resource.data.participantUserIds) ||
+        (resource.data.invitedUserIds is list && request.auth.uid in resource.data.invitedUserIds)
+      );
       allow create: if isAuthenticated() && isValidSession(request.resource.data);
-      allow update: if isDocOwner() && isValidSession(request.resource.data);
+      allow update: if isAuthenticated() && (
+        // Owner can update everything
+        (resource.data.ownerUserId == request.auth.uid && isValidSession(request.resource.data)) ||
+        // Invited users can update their own invitation status
+        (resource.data.invitedUserIds is list && request.auth.uid in resource.data.invitedUserIds && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantUserIds', 'acceptedUserIds', 'pendingUserIds', 'acceptanceStateByUser', 'updatedAt']))
+      );
       allow delete: if isDocOwner();
     }
 
     match /spots/{spotId} {
-      allow read: if isAuthenticated() && (resource.data.isPrivate == false || resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated() && (
+        resource.data.visibility == 'public' || 
+        resource.data.userId == request.auth.uid ||
+        (resource.data.visibility == 'friends' && isAuthenticated()) // Simplified friends check for now
+      );
       allow create: if isAuthenticated() && isValidSpot(request.resource.data);
       allow update: if isDocOwner() && isValidSpot(request.resource.data);
       allow delete: if isDocOwner();

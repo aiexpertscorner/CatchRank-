@@ -115,24 +115,46 @@
     },
     "Spot": {
       "title": "Fishing Spot",
-      "description": "A specific location for fishing.",
+      "description": "A specific location for fishing (V2).",
       "type": "object",
       "properties": {
+        "id": { "type": "string" },
         "userId": { "type": "string" },
+        "authorName": { "type": "string", "description": "Denormalized for discovery" },
+        "authorPhoto": { "type": "string", "description": "Denormalized for discovery" },
         "name": { "type": "string" },
-        "coordinates": { "type": "object" },
-        "waterType": { "type": "string" },
-        "isPrivate": { "type": "boolean" },
         "description": { "type": "string" },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          },
+          "required": ["lat", "lng"]
+        },
+        "waterType": { "type": "string", "enum": ["canal", "river", "lake", "pond", "sea", "polder"] },
+        "waterBodyName": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["private", "friends", "public"] },
+        "isPrivate": { "type": "boolean", "description": "Legacy field for backward compatibility" },
+        "techniques": { "type": "array", "items": { "type": "string" } },
+        "targetSpecies": { "type": "array", "items": { "type": "string" } },
+        "amenities": { "type": "array", "items": { "type": "string" } },
+        "photoURLs": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "mainPhotoURL": { "type": "string", "format": "uri" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
         "stats": {
           "type": "object",
           "properties": {
             "totalCatches": { "type": "integer" },
-            "topSpecies": { "type": "array", "items": { "type": "string" } }
+            "totalSessions": { "type": "integer" },
+            "topSpecies": { "type": "array", "items": { "type": "string" } },
+            "avgRating": { "type": "number" },
+            "ratingCount": { "type": "integer" }
           }
         }
       },
-      "required": ["userId", "name", "isPrivate"]
+      "required": ["userId", "name", "visibility", "coordinates", "createdAt", "updatedAt"]
     },
     "Species": {
       "title": "Fish Species",

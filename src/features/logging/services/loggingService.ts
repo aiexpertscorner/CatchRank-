@@ -9,10 +9,12 @@ import {
   orderBy, 
   limit, 
   getDocs,
-  arrayUnion
+  getDoc,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { Catch, Session } from '../../../types';
+import { Catch, Session, Spot, UserProfile } from '../../../types';
 
 /**
  * Logging Service
@@ -24,14 +26,15 @@ export const loggingService = {
   /**
    * Quick Catch: Minimal entry point, saves as draft.
    */
-  async quickCatch(userId: string, photoURL: string, location?: { lat: number; lng: number }): Promise<string> {
+  async quickCatch(userId: string, photoURL: string, spotId?: string, location?: { lat: number; lng: number }): Promise<string> {
     const catchData: Partial<Catch> = {
       userId,
       photoURL,
       location,
+      spotId,
       timestamp: serverTimestamp(),
       status: 'draft',
-      incompleteFields: ['species', 'weight', 'length', 'spotId'],
+      incompleteFields: ['species', 'weight', 'length', !spotId ? 'spotId' : ''].filter(Boolean),
       xpEarned: 10, // Base XP for quick catch
     };
 
@@ -73,6 +76,31 @@ export const loggingService = {
       incompleteFields,
       xpEarned,
     });
+  },
+
+  /**
+   * Create a new spot.
+   */
+  async createSpot(userId: string, data: Partial<Spot>): Promise<string> {
+    const spotData: Partial<Spot> = {
+      ...data,
+      userId,
+      visibility: data.visibility || 'private',
+      isPrivate: data.visibility === 'private',
+      coordinates: data.coordinates || { lat: 52.3676, lng: 4.9041 },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      stats: {
+        totalCatches: 0,
+        totalSessions: 0,
+        topSpecies: [],
+        avgRating: 0,
+        ratingCount: 0
+      },
+    };
+
+    const docRef = await addDoc(collection(db, 'spots'), spotData);
+    return docRef.id;
   },
 
   /**
@@ -119,6 +147,82 @@ export const loggingService = {
 
     const docRef = await addDoc(collection(db, 'sessions'), sessionData);
     return docRef.id;
+  },
+
+  /**
+   * Search users by display name or email.
+   */
+  async searchUsers(searchTerm: string): Promise<UserProfile[]> {
+    if (!searchTerm || searchTerm.length < 2) return [];
+    
+    // Note: Firestore doesn't support full-text search easily.
+    // This is a simple prefix search for demo purposes.
+    const q = query(
+      collection(db, 'users'),
+      where('displayName', '>=', searchTerm),
+      where('displayName', '<=', searchTerm + '\uf8ff'),
+      limit(10)
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as UserProfile);
+  },
+
+  /**
+   * Invite a participant to a session.
+   */
+  async inviteParticipant(sessionId: string, userId: string): Promise<void> {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    
+    await updateDoc(sessionRef, {
+      invitedUserIds: arrayUnion(userId),
+      pendingUserIds: arrayUnion(userId),
+      [`acceptanceStateByUser.${userId}`]: 'pending',
+      updatedAt: serverTimestamp(),
+    });
+
+    // In a real app, you'd also create a notification document here.
+  },
+
+  /**
+   * Accept a session invitation.
+   */
+  async acceptInvitation(sessionId: string, userId: string): Promise<void> {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    
+    // Use a transaction or multiple updates to ensure consistency
+    await updateDoc(sessionRef, {
+      participantUserIds: arrayUnion(userId),
+      acceptedUserIds: arrayUnion(userId),
+      pendingUserIds: arrayRemove(userId),
+      [`acceptanceStateByUser.${userId}`]: 'accepted',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Decline a session invitation.
+   */
+  async declineInvitation(sessionId: string, userId: string): Promise<void> {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    
+    await updateDoc(sessionRef, {
+      pendingUserIds: arrayRemove(userId),
+      [`acceptanceStateByUser.${userId}`]: 'declined',
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Get session details.
+   */
+  async getSession(sessionId: string): Promise<Session | null> {
+    const docRef = doc(db, 'sessions', sessionId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as Session;
+    }
+    return null;
   },
 
   /**

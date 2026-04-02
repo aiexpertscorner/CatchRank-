@@ -52,10 +52,12 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
     try {
       // In a real app, you'd upload the photo to Storage first.
       // For this demo, we'll use the base64 string.
-      const catchId = await loggingService.quickCatch(profile.uid, photo);
+      // Inherit spotId from active session if available
+      const sessionSpotId = activeSessionId ? (await loggingService.getSession(activeSessionId))?.activeSpotId : undefined;
+      const catchId = await loggingService.quickCatch(profile.uid, photo, sessionSpotId);
       
       if (activeSessionId) {
-        await loggingService.linkCatchToSession(catchId, activeSessionId);
+        await loggingService.linkCatchToSession(catchId, activeSessionId, sessionSpotId);
       }
 
       toast.success('Vangst opgeslagen als concept!', {
