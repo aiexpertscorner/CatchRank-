@@ -35,8 +35,9 @@ import { SessionModal } from '../../../components/SessionModal';
 import { toast } from 'sonner';
 import { statsService, UserStats } from '../../../services/statsService';
 import { loggingService } from '../../logging/services/loggingService';
-
 import { useSession } from '../../../contexts/SessionContext';
+import { LevelBadge } from '../../../components/xp/LevelBadge';
+import { XpProgressBar } from '../../../components/xp/XpProgressBar';
 
 /**
  * Dashboard Screen
@@ -206,28 +207,36 @@ export default function Dashboard() {
 
       {/* Stats Overview */}
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 mb-10 md:mb-16 px-2 md:px-0">
-        <StatCard 
-          label="Huidig Level"
-          value={`Level ${profile?.level || 1}`}
-          icon={Zap}
-          variant="blue"
-          className="rounded-2xl md:rounded-[2rem] p-4 md:p-6 shadow-premium border-none bg-surface-card"
-        />
-        <StatCard 
-          label="Totaal XP"
-          value={(stats?.totalXp || profile?.xp || 0).toLocaleString()}
+        {/* XP + Level progress card — replaces static "Huidig Level" StatCard */}
+        <div className="col-span-2 md:col-span-1 premium-card rounded-2xl md:rounded-[2rem] p-4 md:p-5 shadow-premium border-none bg-surface-card space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand flex items-center justify-center flex-shrink-0 shadow-inner">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="stat-label">Progressie</p>
+                <p className="stat-value">{(profile?.xp || 0).toLocaleString()} XP</p>
+              </div>
+            </div>
+            <LevelBadge level={profile?.level || 1} size="sm" />
+          </div>
+          <XpProgressBar xp={profile?.xp || 0} compact />
+        </div>
+
+        <StatCard
+          label="Totaal Vangsten"
+          value={stats?.totalCatches || 0}
           icon={TrendingUp}
           variant="success"
-          trend={{ value: '+120', direction: 'up' }}
           className="rounded-2xl md:rounded-[2rem] p-4 md:p-6 shadow-premium border-none bg-surface-card"
         />
-        <StatCard 
-          label="Ranking"
-          value="#--"
+        <StatCard
+          label="Sessies"
+          value={stats?.totalSessions || 0}
           icon={Trophy}
           variant="aqua"
-          trend={{ value: 'Top 5%', direction: 'up' }}
-          className="col-span-2 md:col-span-1 rounded-2xl md:rounded-[2rem] p-4 md:p-6 shadow-premium border-none bg-surface-card"
+          className="rounded-2xl md:rounded-[2rem] p-4 md:p-6 shadow-premium border-none bg-surface-card"
         />
       </section>
 

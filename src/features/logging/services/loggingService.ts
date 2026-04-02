@@ -1,13 +1,13 @@
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  serverTimestamp, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  query,
+  where,
+  orderBy,
+  limit,
   getDocs,
   getDoc,
   arrayUnion,
@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Catch, Session, Spot, UserProfile } from '../../../types';
+import { xpService, getSpeciesXpBonus } from '../../../services/xpService';
 
 /**
  * Logging Service
@@ -25,8 +26,10 @@ import { Catch, Session, Spot, UserProfile } from '../../../types';
 export const loggingService = {
   /**
    * Quick Catch: Minimal entry point, saves as draft.
+   * Awards 10 base XP immediately for logging effort.
    */
   async quickCatch(userId: string, photoURL: string, spotId?: string, location?: { lat: number; lng: number }): Promise<string> {
+    const xpEarned = 10;
     const catchData: Partial<Catch> = {
       userId,
       photoURL,
@@ -35,20 +38,27 @@ export const loggingService = {
       timestamp: serverTimestamp(),
       status: 'draft',
       incompleteFields: ['species', 'weight', 'length', !spotId ? 'spotId' : ''].filter(Boolean),
-      xpEarned: 10, // Base XP for quick catch
+      xpEarned,
     };
 
     const docRef = await addDoc(collection(db, 'catches'), catchData);
+
+    // Award XP to user — fire-and-forget, non-blocking for UX
+    xpService.addXpToUser(userId, xpEarned).catch(err =>
+      console.error('XP award failed (quickCatch):', err)
+    );
+
     return docRef.id;
   },
 
   /**
    * Create a new catch (full or draft).
+   * Awards XP to the user after saving. XP includes species rarity bonus.
    */
   async createCatch(userId: string, data: Partial<Catch>): Promise<string> {
     const incompleteFields = this.calculateIncompleteFields(data);
     const xpEarned = this.calculateXP(data);
-    
+
     const catchData: Partial<Catch> = {
       ...data,
       userId,
@@ -59,23 +69,47 @@ export const loggingService = {
     };
 
     const docRef = await addDoc(collection(db, 'catches'), catchData);
+
+    // Award XP only for complete catches (drafts earn XP when completed via updateCatch)
+    if (catchData.status === 'complete' && xpEarned > 0) {
+      xpService.addXpToUser(userId, xpEarned).catch(err =>
+        console.error('XP award failed (createCatch):', err)
+      );
+    }
+
     return docRef.id;
   },
 
   /**
    * Update an existing catch.
+   * If the catch transitions from draft → complete, award XP to the user.
    */
-  async updateCatch(catchId: string, data: Partial<Catch>): Promise<void> {
+  async updateCatch(catchId: string, data: Partial<Catch>, userId?: string): Promise<void> {
     const docRef = doc(db, 'catches', catchId);
     const incompleteFields = this.calculateIncompleteFields(data);
     const xpEarned = this.calculateXP(data);
-    
+    const newStatus = data.status || (incompleteFields.length === 0 ? 'complete' : 'draft');
+
+    // Check if this is a draft → complete transition to award XP
+    let wasAlreadyComplete = false;
+    if (userId && newStatus === 'complete') {
+      const existing = await getDoc(docRef);
+      wasAlreadyComplete = existing.data()?.status === 'complete';
+    }
+
     await updateDoc(docRef, {
       ...data,
-      status: data.status || (incompleteFields.length === 0 ? 'complete' : 'draft'),
+      status: newStatus,
       incompleteFields,
       xpEarned,
     });
+
+    // Award XP only on first-time completion (draft → complete)
+    if (userId && newStatus === 'complete' && !wasAlreadyComplete && xpEarned > 0) {
+      xpService.addXpToUser(userId, xpEarned).catch(err =>
+        console.error('XP award failed (updateCatch):', err)
+      );
+    }
   },
 
   /**
@@ -123,15 +157,26 @@ export const loggingService = {
 
   /**
    * Calculate XP based on catch data.
+   * Base: 25 XP + species rarity bonus + data richness bonuses.
    */
   calculateXP(data: Partial<Catch>): number {
-    let xp = 25; // Base XP for a complete catch
+    let xp = 25; // Base XP for a logged catch
+
+    // Species rarity bonus (activates species.xpValue that was previously unused)
+    if (data.species) {
+      xp += getSpeciesXpBonus(data.species);
+    }
+
+    // Size bonuses
     if (data.length && data.length > 50) xp += 15;
     if (data.weight && data.weight > 2000) xp += 20;
+
+    // Data richness bonuses (incentivise complete logging)
     if (data.photoURL) xp += 10;
-    if (data.weather) xp += 5; // Bonus for environmental data
-    if (data.gear) xp += 5; // Bonus for gear data
-    if (data.notes && data.notes.length > 20) xp += 5; // Bonus for detailed notes
+    if (data.weather) xp += 5;
+    if (data.gear && Object.values(data.gear).some(Boolean)) xp += 5;
+    if (data.notes && data.notes.length > 20) xp += 5;
+
     return xp;
   },
 
@@ -257,9 +302,16 @@ export const loggingService = {
 
   /**
    * End an active session.
+   * Awards a session completion bonus to the owner (50 XP base).
+   * The ownerUserId is read from the session document.
    */
   async endSession(sessionId: string, notes?: string, stats?: any): Promise<void> {
     const docRef = doc(db, 'sessions', sessionId);
+
+    // Read session to get owner for XP award
+    const sessionSnap = await getDoc(docRef);
+    const ownerUserId: string | undefined = sessionSnap.data()?.ownerUserId;
+
     await updateDoc(docRef, {
       endedAt: serverTimestamp(),
       status: 'completed',
@@ -267,6 +319,14 @@ export const loggingService = {
       statsSummary: stats,
       updatedAt: serverTimestamp(),
     });
+
+    // Award session completion XP to owner — fire-and-forget
+    if (ownerUserId) {
+      const SESSION_COMPLETION_XP = 50;
+      xpService.addXpToUser(ownerUserId, SESSION_COMPLETION_XP).catch(err =>
+        console.error('XP award failed (endSession):', err)
+      );
+    }
   },
 
   /**

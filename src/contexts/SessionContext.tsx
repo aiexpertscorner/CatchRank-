@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
   limit,
   doc,
   updateDoc,
@@ -13,6 +13,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../App';
 import { Session } from '../types';
 import { toast } from 'sonner';
+import { xpService } from '../services/xpService';
 
 interface SessionContextType {
   activeSession: Session | null;
@@ -67,7 +68,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [profile]);
 
   const endActiveSession = async () => {
-    if (!activeSession) return;
+    if (!activeSession || !profile) return;
     try {
       await updateDoc(doc(db, 'sessions', activeSession.id!), {
         status: 'completed',
@@ -75,6 +76,14 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updatedAt: Timestamp.now()
       });
       toast.success('Sessie beëindigd en opgeslagen!');
+
+      // Award session completion XP to the owner
+      if (activeSession.ownerUserId === profile.uid) {
+        const SESSION_COMPLETION_XP = 50;
+        xpService.addXpToUser(profile.uid, SESSION_COMPLETION_XP).catch(err =>
+          console.error('XP award failed (endActiveSession):', err)
+        );
+      }
     } catch (error) {
       console.error('End session error:', error);
       toast.error('Fout bij beëindigen van sessie.');

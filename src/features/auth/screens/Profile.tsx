@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Trophy, 
-  TrendingUp, 
-  MapPin, 
-  Fish, 
-  Clock, 
-  Calendar, 
-  Settings as SettingsIcon, 
-  Share2, 
+import {
+  Trophy,
+  TrendingUp,
+  MapPin,
+  Fish,
+  Clock,
+  Calendar,
+  Settings as SettingsIcon,
+  Share2,
   ChevronRight,
   Star,
   Zap,
@@ -28,6 +28,8 @@ import { db } from '../../../lib/firebase';
 import { Catch, Session } from '../../../types';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { LevelBadge } from '../../../components/xp/LevelBadge';
+import { XpProgressBar } from '../../../components/xp/XpProgressBar';
 
 /**
  * Profile Screen
@@ -124,7 +126,7 @@ export default function Profile() {
                   <div className="space-y-2 md:pb-2">
                     <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
                       <h1 className="text-2xl md:text-4xl font-bold text-text-primary tracking-tight">{profile?.displayName}</h1>
-                      <Badge variant="accent" className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">Level {profile?.level}</Badge>
+                      <LevelBadge level={profile?.level || 1} showTitle size="md" />
                     </div>
                     <p className="text-sm md:text-base text-text-secondary font-medium max-w-md">
                       {profile?.bio || 'Gepassioneerd sportvisser uit Nederland. Altijd op zoek naar die ene monster snoekbaars!'}
@@ -132,14 +134,20 @@ export default function Profile() {
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-center gap-4 md:pb-2">
-                  <div className="text-center px-6 py-2 border-r border-border-subtle">
-                    <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">XP</p>
-                    <p className="text-xl font-bold text-brand">{profile?.xp.toLocaleString()}</p>
+                <div className="flex flex-col items-end gap-3 md:pb-2">
+                  <div className="flex items-center gap-4">
+                    <div className="text-center px-4 py-2 border-r border-border-subtle">
+                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">XP</p>
+                      <p className="text-xl font-bold text-brand">{(profile?.xp || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="text-center px-4 py-2">
+                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Level</p>
+                      <p className="text-xl font-bold text-text-primary">{profile?.level || 1}</p>
+                    </div>
                   </div>
-                  <div className="text-center px-6 py-2">
-                    <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Rank</p>
-                    <p className="text-xl font-bold text-text-primary">#12</p>
+                  {/* XP Progress towards next level */}
+                  <div className="w-full min-w-[180px] md:min-w-[240px]">
+                    <XpProgressBar xp={profile?.xp || 0} compact />
                   </div>
                 </div>
               </div>
