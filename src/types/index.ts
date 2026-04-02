@@ -186,9 +186,12 @@ export interface Spot {
   waterBodyName?: string;
   visibility: 'private' | 'friends' | 'public';
   isPrivate?: boolean; // Legacy
+  isFavorite?: boolean;
   techniques?: string[];
   targetSpecies?: string[];
   amenities?: string[];
+  linkedGearIds?: string[];
+  linkedSetupIds?: string[];
   photoURLs?: string[];
   mainPhotoURL?: string;
   createdAt: any;

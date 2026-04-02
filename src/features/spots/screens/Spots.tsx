@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   MapPin, 
@@ -13,16 +14,18 @@ import {
   TrendingUp,
   Map as MapIcon,
   Layers,
-  Maximize2
+  Maximize2,
+  Anchor
 } from 'lucide-react';
 import { useAuth } from '../../../App';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Spot } from '../../../types';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
+import { SpotModal } from '../../../components/SpotModal';
 
 /**
  * Spots Screen
@@ -32,17 +35,20 @@ import { toast } from 'sonner';
 
 export default function Spots() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [spots, setSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
 
     const q = query(
       collection(db, 'spots'),
-      where('userId', '==', profile.uid)
+      where('userId', '==', profile.uid),
+      orderBy('createdAt', 'desc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -81,6 +87,7 @@ export default function Spots() {
           <Button 
             icon={<Plus className="w-4 h-4" />} 
             className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+            onClick={() => setIsModalOpen(true)}
           >
             Nieuwe Stek
           </Button>
@@ -161,11 +168,16 @@ export default function Spots() {
                   key={s.id} 
                   padding="none" 
                   hoverable 
+                  onClick={() => navigate(`/spots/${s.id}`)}
                   className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden relative"
                 >
                   <div className="flex items-center gap-4 p-5">
-                    <div className="w-16 h-16 rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm">
-                      <MapPin className="w-8 h-8" />
+                    <div className="w-16 h-16 rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm overflow-hidden">
+                      {s.mainPhotoURL ? (
+                        <img src={s.mainPhotoURL} alt={s.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <MapPin className="w-8 h-8" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -178,15 +190,20 @@ export default function Spots() {
                           <Globe className="w-3 h-3 text-success/60" />
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-text-secondary font-medium">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary font-medium">
                         <span className="flex items-center gap-1">
                           <Layers className="w-3.5 h-3.5 text-brand" />
                           {s.waterType || 'Water'}
                         </span>
-                        <span className="text-text-dim">•</span>
+                        {s.waterBodyName && (
+                          <span className="flex items-center gap-1">
+                            <Anchor className="w-3 h-3 text-accent" />
+                            {s.waterBodyName}
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           <Fish className="w-3.5 h-3.5 text-brand" />
-                          {s.stats?.totalCatches || 0} vangsten
+                          {s.stats?.totalCatches || 0}
                         </span>
                       </div>
                     </div>
@@ -218,6 +235,10 @@ export default function Spots() {
           </div>
         )}
       </div>
+      <SpotModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </PageLayout>
   );
 }

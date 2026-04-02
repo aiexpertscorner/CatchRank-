@@ -87,7 +87,13 @@ export const loggingService = {
       userId,
       visibility: data.visibility || 'private',
       isPrivate: data.visibility === 'private',
+      isFavorite: data.isFavorite || false,
       coordinates: data.coordinates || { lat: 52.3676, lng: 4.9041 },
+      techniques: data.techniques || [],
+      targetSpecies: data.targetSpecies || [],
+      amenities: data.amenities || [],
+      linkedGearIds: data.linkedGearIds || [],
+      linkedSetupIds: data.linkedSetupIds || [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       stats: {
@@ -101,6 +107,18 @@ export const loggingService = {
 
     const docRef = await addDoc(collection(db, 'spots'), spotData);
     return docRef.id;
+  },
+
+  /**
+   * Update an existing spot.
+   */
+  async updateSpot(spotId: string, data: Partial<Spot>): Promise<void> {
+    const docRef = doc(db, 'spots', spotId);
+    await updateDoc(docRef, {
+      ...data,
+      isPrivate: data.visibility === 'private',
+      updatedAt: serverTimestamp(),
+    });
   },
 
   /**

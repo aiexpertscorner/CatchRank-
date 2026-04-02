@@ -25,6 +25,7 @@ import Settings from './features/auth/screens/Settings';
 import Catches from './features/logging/screens/Catches';
 import Sessions from './features/logging/screens/Sessions';
 import Spots from './features/spots/screens/Spots';
+import SpotDetail from './features/spots/screens/SpotDetail';
 import Gear from './features/gear/screens/Gear';
 import Rankings from './features/community/screens/Rankings';
 import Clubs from './features/community/screens/Clubs';
@@ -176,6 +177,7 @@ export default function App() {
               <Route path="/catches" element={<Catches />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/spots" element={<Spots />} />
+              <Route path="/spots/:id" element={<SpotDetail />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/rankings" element={<Rankings />} />
               <Route path="/clubs" element={<Clubs />} />

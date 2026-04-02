@@ -169,7 +169,11 @@ service cloud.firestore {
              (!('waterType' in data) || data.waterType in ['canal', 'river', 'lake', 'pond', 'sea', 'polder']) &&
              (!('techniques' in data) || data.techniques is list) &&
              (!('targetSpecies' in data) || data.targetSpecies is list) &&
-             (!('photoURLs' in data) || data.photoURLs is list);
+             (!('amenities' in data) || data.amenities is list) &&
+             (!('photoURLs' in data) || data.photoURLs is list) &&
+             (!('isFavorite' in data) || data.isFavorite is bool) &&
+             (!('linkedGearIds' in data) || data.linkedGearIds is list) &&
+             (!('linkedSetupIds' in data) || data.linkedSetupIds is list);
     }
 
     // ===============================================================
