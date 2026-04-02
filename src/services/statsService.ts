@@ -3,6 +3,48 @@ import { db } from '../lib/firebase';
 import { Catch, Session } from '../types';
 import { differenceInHours } from 'date-fns';
 
+/**
+ * Stats cache — localStorage with 1-hour TTL per user.
+ * Prevents re-reading all catches + sessions on every Dashboard visit.
+ * Cache is busted when a new catch or session is created (call bustStatsCache).
+ */
+const STATS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const STATS_CACHE_KEY = (uid: string) => `catchrank_stats_${uid}`;
+
+function readStatsCache(userId: string): UserStats | null {
+  try {
+    const raw = localStorage.getItem(STATS_CACHE_KEY(userId));
+    if (!raw) return null;
+    const { data, timestamp } = JSON.parse(raw);
+    if (Date.now() - timestamp > STATS_CACHE_TTL_MS) {
+      localStorage.removeItem(STATS_CACHE_KEY(userId));
+      return null;
+    }
+    return data as UserStats;
+  } catch {
+    return null;
+  }
+}
+
+function writeStatsCache(userId: string, stats: UserStats): void {
+  try {
+    localStorage.setItem(STATS_CACHE_KEY(userId), JSON.stringify({ data: stats, timestamp: Date.now() }));
+  } catch {
+    // localStorage full or unavailable — silently skip
+  }
+}
+
+/**
+ * Call this after a new catch or session is saved to bust the stats cache.
+ */
+export function bustStatsCache(userId: string): void {
+  try {
+    localStorage.removeItem(STATS_CACHE_KEY(userId));
+  } catch {
+    // ignore
+  }
+}
+
 export interface UserStats {
   totalCatches: number;
   totalSessions: number;
@@ -16,7 +58,13 @@ export interface UserStats {
 }
 
 export const statsService = {
-  async calculateUserStats(userId: string): Promise<UserStats> {
+  async calculateUserStats(userId: string, { forceRefresh = false } = {}): Promise<UserStats> {
+    // Return cached stats if available and not stale
+    if (!forceRefresh) {
+      const cached = readStatsCache(userId);
+      if (cached) return cached;
+    }
+
     // Fetch all catches
     const catchesQuery = query(
       collection(db, 'catches'),
@@ -98,7 +146,7 @@ export const statsService = {
       count
     }));
 
-    return {
+    const result: UserStats = {
       totalCatches,
       totalSessions,
       totalSpots,
@@ -107,7 +155,12 @@ export const statsService = {
       totalHours,
       averageCatchesPerSession,
       topSpecies,
-      monthlyActivity
+      monthlyActivity,
     };
+
+    // Write to localStorage cache before returning
+    writeStatsCache(userId, result);
+
+    return result;
   }
 };

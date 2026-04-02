@@ -16,6 +16,7 @@ import {
 import { db } from '../../../lib/firebase';
 import { Catch, Session, Spot, UserProfile } from '../../../types';
 import { xpService, getSpeciesXpBonus } from '../../../services/xpService';
+import { bustStatsCache } from '../../../services/statsService';
 
 /**
  * Logging Service
@@ -75,6 +76,7 @@ export const loggingService = {
       xpService.addXpToUser(userId, xpEarned).catch(err =>
         console.error('XP award failed (createCatch):', err)
       );
+      bustStatsCache(userId);
     }
 
     return docRef.id;
@@ -109,6 +111,7 @@ export const loggingService = {
       xpService.addXpToUser(userId, xpEarned).catch(err =>
         console.error('XP award failed (updateCatch):', err)
       );
+      bustStatsCache(userId);
     }
   },
 
@@ -326,6 +329,7 @@ export const loggingService = {
       xpService.addXpToUser(ownerUserId, SESSION_COMPLETION_XP).catch(err =>
         console.error('XP award failed (endSession):', err)
       );
+      bustStatsCache(ownerUserId);
     }
   },
 

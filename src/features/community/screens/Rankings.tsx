@@ -11,7 +11,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../../App';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { UserProfile } from '../../../types';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
@@ -41,29 +41,38 @@ export default function Rankings() {
       return;
     }
 
+    // In-memory cache: rankings rarely change — avoid persistent listener
+    // Refresh every 5 minutes at most (no onSnapshot needed for a leaderboard)
+    const RANKINGS_CACHE_TTL_MS = 5 * 60 * 1000;
+    const cacheKey = '__rankings_cache__';
+
+    type RankingsCache = { data: UserProfile[]; timestamp: number };
+    const sessionCache = (window as any)[cacheKey] as RankingsCache | undefined;
+    if (sessionCache && Date.now() - sessionCache.timestamp < RANKINGS_CACHE_TTL_MS) {
+      setRankings(sessionCache.data);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
-    // Fetch top 50 sorted by XP — this gives us the rank position for each user
     const usersQuery = query(
       collection(db, 'users'),
       orderBy('xp', 'desc'),
       limit(50)
     );
 
-    const unsubscribe = onSnapshot(
-      usersQuery,
-      (snapshot) => {
+    getDocs(usersQuery)
+      .then((snapshot) => {
         const users = snapshot.docs.map((d) => ({ uid: d.id, ...d.data() } as UserProfile));
+        (window as any)[cacheKey] = { data: users, timestamp: Date.now() };
         setRankings(users);
         setLoading(false);
-      },
-      (error) => {
+      })
+      .catch((error) => {
         console.error('Error fetching rankings:', error);
         setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
+      });
   }, [activeTab]);
 
   // Derive current user's rank from their position in the sorted list

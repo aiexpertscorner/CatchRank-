@@ -1,296 +1,796 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  ChevronRight, 
-  ShoppingBag, 
-  Star, 
-  Zap, 
-  Trophy,
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  Plus,
+  Search,
+  Star,
   Package,
-  ExternalLink,
-  Tag,
   Layers,
-  Settings as SettingsIcon,
+  ShoppingBag,
+  ExternalLink,
+  Heart,
+  Edit2,
+  Trash2,
   Grid,
   List as ListIcon,
-  Heart,
-  MoreVertical,
-  Edit2,
-  Trash2
+  Lightbulb,
+  X,
+  Loader2,
+  AlertCircle,
+  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
+import { gearService } from '../services/gearService';
+import { productFeedService } from '../services/productFeedService';
+import { GearItem, GearSetup, ProductCatalogItem, GEAR_CATEGORY_LABELS, GearCategory } from '../../../types';
+import { GearItemModal } from '../components/GearItemModal';
+import { SetupModal } from '../components/SetupModal';
+import { cn } from '../../../lib/utils';
 
 /**
- * Gear Screen (Mijn Vista / Gear)
- * Part of the 'gear' feature module.
- * Manages user fishing equipment, favorites, and setups.
- * Includes affiliate product discovery.
+ * Gear Screen — Mijn Visgear
+ * Fully functional core module replacing the previous mock-data placeholder.
+ *
+ * UX order per CLAUDE.md:
+ * 1. Eigen Gear   — user_gear Firestore
+ * 2. Favorieten   — filtered from eigen gear
+ * 3. Setups       — user_setups Firestore
+ * 4. Suggesties   — smart placeholder (future ML)
+ * 5. Ontdekken    — product_catalog Firestore cache (Fishinn + Bol)
  */
+
+type Tab = 'my-gear' | 'favorites' | 'setups' | 'suggestions' | 'discover';
+
+const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'my-gear',     label: 'Mijn Gear',   icon: Package },
+  { id: 'favorites',  label: 'Favorieten',  icon: Star },
+  { id: 'setups',     label: 'Setups',      icon: Layers },
+  { id: 'suggestions',label: 'Suggesties',  icon: Lightbulb },
+  { id: 'discover',   label: 'Ontdekken',   icon: ShoppingBag },
+];
+
+const CATEGORY_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: 'Alles' },
+  ...Object.entries(GEAR_CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l })),
+];
+
+const PRODUCT_STORE_FILTERS: { value: string; label: string }[] = [
+  { value: 'all',     label: 'Alle winkels' },
+  { value: 'fishinn', label: 'Fishinn' },
+  { value: 'bol',     label: 'Bol.com' },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Gear() {
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'my-gear' | 'setups' | 'discover'>('my-gear');
+
+  // ── Tab & search state ──────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<Tab>('my-gear');
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [storeFilter, setStoreFilter] = useState('all');
 
-  // Mock Data for Gear
-  const [myGear, setMyGear] = useState([
-    { id: '1', name: 'Sustain FJ 2500', brand: 'Shimano', category: 'Reels', isFavorite: true, photoURL: 'https://picsum.photos/seed/reel/400/400' },
-    { id: '2', name: 'Zodias 7\'0" ML', brand: 'Shimano', category: 'Rods', isFavorite: true, photoURL: 'https://picsum.photos/seed/rod/400/400' },
-    { id: '3', name: 'Kairiki 8 Steel Grey', brand: 'Shimano', category: 'Lines', isFavorite: false, photoURL: 'https://picsum.photos/seed/line/400/400' },
-    { id: '4', name: 'Shadow Rap Deep', brand: 'Rapala', category: 'Lures', isFavorite: false, photoURL: 'https://picsum.photos/seed/lure/400/400' },
-  ]);
+  // ── Data state ──────────────────────────────────────────────────────────
+  const [myGear, setMyGear] = useState<GearItem[]>([]);
+  const [setups, setSetups] = useState<GearSetup[]>([]);
+  const [products, setProducts] = useState<ProductCatalogItem[]>([]);
 
-  const [setups, setSetups] = useState([
-    { id: '1', name: 'Lichte Baars Setup', rod: 'Zodias ML', reel: 'Sustain 2500', line: 'Kairiki 0.10mm', catches: 42 },
-    { id: '2', name: 'Snoekbaars Verticalen', rod: 'Yasei BB', reel: 'Stradic 2500', line: 'Kairiki 0.13mm', catches: 18 },
-  ]);
+  const [gearLoading, setGearLoading] = useState(true);
+  const [setupsLoading, setSetupsLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
 
-  const [discoverProducts, setDiscoverProducts] = useState([
-    { id: 'd1', name: 'Stradic FM', brand: 'Shimano', price: '€159,00', store: 'Fishinn', img: 'https://picsum.photos/seed/stradic/400/400' },
-    { id: 'd2', name: 'Westin Swim 12cm', brand: 'Westin', price: '€14,95', store: 'Bol.com', img: 'https://picsum.photos/seed/westin/400/400' },
-    { id: 'd3', name: 'BKK Fangs BT-663', brand: 'BKK', price: '€8,50', store: 'Fishinn', img: 'https://picsum.photos/seed/hooks/400/400' },
-  ]);
+  // ── Modal state ─────────────────────────────────────────────────────────
+  const [isGearModalOpen, setIsGearModalOpen] = useState(false);
+  const [editingGear, setEditingGear] = useState<GearItem | null>(null);
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [editingSetup, setEditingSetup] = useState<GearSetup | null>(null);
 
-  const tabs = [
-    { id: 'my-gear', label: 'Mijn Gear', icon: Package },
-    { id: 'setups', label: 'Setups', icon: Layers },
-    { id: 'discover', label: 'Ontdekken', icon: ShoppingBag },
-  ] as const;
+  // ── Firestore subscriptions ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!profile) return;
 
-  const filteredGear = myGear.filter(g => 
-    g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    const unsubGear = gearService.subscribeToUserGear(
+      profile.uid,
+      (items) => { setMyGear(items); setGearLoading(false); },
+      (err) => { console.error('Gear sub error:', err); setGearLoading(false); }
+    );
+
+    const unsubSetups = gearService.subscribeToUserSetups(
+      profile.uid,
+      (items) => { setSetups(items); setSetupsLoading(false); },
+      (err) => { console.error('Setups sub error:', err); setSetupsLoading(false); }
+    );
+
+    return () => { unsubGear(); unsubSetups(); };
+  }, [profile]);
+
+  // ── Load products when Discover tab is active ───────────────────────────
+  useEffect(() => {
+    if (activeTab !== 'discover' || products.length > 0) return;
+
+    setProductsLoading(true);
+    const source = storeFilter !== 'all' ? (storeFilter as 'fishinn' | 'bol') : undefined;
+    productFeedService.getProducts(source, undefined, 60)
+      .then((items) => setProducts(items))
+      .catch((err) => console.error('Products load error:', err))
+      .finally(() => setProductsLoading(false));
+  }, [activeTab, storeFilter]);
+
+  // Reload products when store filter changes
+  useEffect(() => {
+    if (activeTab !== 'discover') return;
+    setProductsLoading(true);
+    setProducts([]);
+    const source = storeFilter !== 'all' ? (storeFilter as 'fishinn' | 'bol') : undefined;
+    productFeedService.getProducts(source, undefined, 60)
+      .then((items) => setProducts(items))
+      .catch(() => {})
+      .finally(() => setProductsLoading(false));
+  }, [storeFilter]);
+
+  // ── Derived data ────────────────────────────────────────────────────────
+  const favorites = myGear.filter((g) => g.isFavorite);
+
+  const filterGear = (items: GearItem[]) =>
+    items.filter((g) => {
+      const matchesSearch =
+        !searchQuery ||
+        g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        g.brand.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = categoryFilter === 'all' || g.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+
+  const filteredGear = filterGear(myGear);
+  const filteredFavorites = filterGear(favorites);
+
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch =
+      !searchQuery ||
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.brand?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
+
+  // ── Actions ─────────────────────────────────────────────────────────────
+  const openAddGear = () => { setEditingGear(null); setIsGearModalOpen(true); };
+  const openEditGear = (item: GearItem) => { setEditingGear(item); setIsGearModalOpen(true); };
+  const openAddSetup = () => { setEditingSetup(null); setIsSetupModalOpen(true); };
+  const openEditSetup = (s: GearSetup) => { setEditingSetup(s); setIsSetupModalOpen(true); };
+
+  const handleDeleteGear = async (item: GearItem) => {
+    if (!window.confirm(`"${item.name}" verwijderen uit Mijn Gear?`)) return;
+    try {
+      await gearService.deleteGearItem(item.id!, item.linkedSetupIds);
+      toast.success(`${item.name} verwijderd.`);
+    } catch {
+      toast.error('Verwijderen mislukt.');
+    }
+  };
+
+  const handleDeleteSetup = async (setup: GearSetup) => {
+    if (!window.confirm(`Setup "${setup.name}" verwijderen?`)) return;
+    try {
+      await gearService.deleteSetup(setup.id!, setup.gearIds);
+      toast.success(`Setup "${setup.name}" verwijderd.`);
+    } catch {
+      toast.error('Verwijderen mislukt.');
+    }
+  };
+
+  const handleToggleFavorite = async (item: GearItem) => {
+    try {
+      await gearService.toggleFavorite(item.id!, item.isFavorite);
+    } catch {
+      toast.error('Favoriet bijwerken mislukt.');
+    }
+  };
+
+  // ── Gear name lookup helper for setups ──────────────────────────────────
+  const gearName = (id?: string) => {
+    if (!id) return '—';
+    const g = myGear.find((x) => x.id === id);
+    return g ? `${g.brand} ${g.name}` : '—';
+  };
+
+  // ─── Header action ──────────────────────────────────────────────────────
+  const headerAction = activeTab === 'my-gear' || activeTab === 'favorites' ? (
+    <Button icon={<Plus className="w-4 h-4" />} className="rounded-xl h-11 px-5 font-bold shadow-premium-accent" onClick={openAddGear}>
+      Gear Toevoegen
+    </Button>
+  ) : activeTab === 'setups' ? (
+    <Button icon={<Plus className="w-4 h-4" />} className="rounded-xl h-11 px-5 font-bold shadow-premium-accent" onClick={openAddSetup} disabled={myGear.length === 0}>
+      Nieuwe Setup
+    </Button>
+  ) : null;
 
   return (
     <PageLayout>
-      <PageHeader 
-        title="Mijn Vista" 
-        subtitle="Beheer je gear en ontdek nieuwe items"
-        actions={
-          <Button 
-            icon={<Plus className="w-4 h-4" />} 
-            className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
-          >
-            Item Toevoegen
-          </Button>
-        }
-      />
+      <PageHeader title="Mijn Visgear" subtitle="Beheer je uitrusting, setups en ontdek nieuwe items" actions={headerAction} />
 
-      <div className="space-y-8 pb-32">
-        {/* Tab Navigation */}
+      <div className="space-y-6 pb-32">
+        {/* ── Tab Navigation ──────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 bg-surface-card p-1 rounded-2xl border border-border-subtle overflow-x-auto no-scrollbar mx-2 md:mx-0">
-          {tabs.map((tab) => (
+          {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.id 
-                  ? 'bg-brand text-bg-main shadow-lg shadow-brand/20' 
+              onClick={() => { setActiveTab(tab.id); setSearchQuery(''); setCategoryFilter('all'); }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 px-3 md:px-5 py-3 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap',
+                activeTab === tab.id
+                  ? 'bg-brand text-bg-main shadow-lg shadow-brand/20'
                   : 'text-text-muted hover:text-text-primary hover:bg-surface-soft'
-              }`}
+              )}
             >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
+              <tab.icon className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>
 
-        {/* Search & Filters */}
-        {activeTab !== 'discover' && (
-          <section className="flex flex-col md:flex-row gap-4 px-2 md:px-0">
+        {/* ── Search + Filters ────────────────────────────────────────────── */}
+        {(activeTab === 'my-gear' || activeTab === 'favorites' || activeTab === 'discover') && (
+          <section className="flex flex-col sm:flex-row gap-3 px-2 md:px-0">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-              <input 
+              <input
                 type="text"
-                placeholder="Zoek in je gear..."
+                placeholder={activeTab === 'discover' ? 'Zoek producten...' : 'Zoek in je gear...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-surface-card border border-border-subtle rounded-xl pl-12 pr-4 py-3 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
+                className="w-full bg-surface-card border border-border-subtle rounded-xl pl-11 pr-4 py-3 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-brand transition-all"
               />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
-            <div className="flex bg-surface-card border border-border-subtle rounded-xl p-1">
-              <button 
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-brand text-bg-main' : 'text-text-muted'}`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-brand text-bg-main' : 'text-text-muted'}`}
-              >
-                <ListIcon className="w-4 h-4" />
-              </button>
-            </div>
-          </section>
-        )}
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {activeTab === 'my-gear' && (
-              <div className={viewMode === 'grid' 
-                ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-2 md:px-0" 
-                : "space-y-3 px-2 md:px-0"
-              }>
-                {filteredGear.map((g) => (
-                  <Card 
-                    key={g.id} 
-                    padding="none" 
-                    hoverable 
-                    className={`group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col ${viewMode === 'list' ? 'flex-row h-24' : 'h-full'}`}
+            {/* Category filter (gear tabs) */}
+            {(activeTab === 'my-gear' || activeTab === 'favorites') && (
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                {CATEGORY_FILTER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setCategoryFilter(opt.value)}
+                    className={cn(
+                      'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
+                      categoryFilter === opt.value
+                        ? 'bg-brand text-bg-main border-brand'
+                        : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+                    )}
                   >
-                    <div className={`${viewMode === 'grid' ? 'aspect-square' : 'w-24 h-full'} relative overflow-hidden bg-surface-soft`}>
-                      <img src={g.photoURL} alt={g.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                      {g.isFavorite && (
-                        <div className="absolute top-2 right-2">
-                          <div className="w-6 h-6 rounded-lg bg-brand text-bg-main flex items-center justify-center shadow-lg">
-                            <Star className="w-3 h-3 fill-current" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4 flex-1 flex flex-col justify-between">
-                      <div>
-                        <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">{g.brand}</p>
-                        <h4 className="text-sm font-bold text-text-primary tracking-tight truncate">{g.name}</h4>
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <Badge variant="secondary" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">{g.category}</Badge>
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="text-text-muted hover:text-brand"><Edit2 className="w-3.5 h-3.5" /></button>
-                          <button className="text-text-muted hover:text-danger"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
+                    {opt.label}
+                  </button>
                 ))}
-                <button className={`rounded-2xl border-2 border-dashed border-border-subtle flex flex-col items-center justify-center gap-3 text-text-muted hover:text-brand hover:border-brand transition-all bg-surface-soft/20 group ${viewMode === 'grid' ? 'aspect-square' : 'h-24 w-full flex-row'}`}>
-                  <div className="w-10 h-10 rounded-full bg-surface-soft flex items-center justify-center group-hover:bg-brand/10 transition-colors">
-                    <Plus className="w-5 h-5" />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest">Voeg Gear Toe</span>
+              </div>
+            )}
+
+            {/* Store filter + view mode (discover tab) */}
+            {activeTab === 'discover' && (
+              <div className="flex gap-2">
+                {PRODUCT_STORE_FILTERS.map((f) => (
+                  <button
+                    key={f.value}
+                    onClick={() => setStoreFilter(f.value)}
+                    className={cn(
+                      'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
+                      storeFilter === f.value
+                        ? 'bg-brand text-bg-main border-brand'
+                        : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* View mode toggle (gear tabs) */}
+            {(activeTab === 'my-gear' || activeTab === 'favorites') && (
+              <div className="flex bg-surface-card border border-border-subtle rounded-xl p-1 flex-shrink-0">
+                <button onClick={() => setViewMode('grid')} className={cn('p-2 rounded-lg transition-all', viewMode === 'grid' ? 'bg-brand text-bg-main' : 'text-text-muted')}>
+                  <Grid className="w-4 h-4" />
+                </button>
+                <button onClick={() => setViewMode('list')} className={cn('p-2 rounded-lg transition-all', viewMode === 'list' ? 'bg-brand text-bg-main' : 'text-text-muted')}>
+                  <ListIcon className="w-4 h-4" />
                 </button>
               </div>
             )}
+          </section>
+        )}
 
-            {activeTab === 'setups' && (
-              <div className="space-y-4 px-2 md:px-0">
-                {setups.map((s) => (
-                  <Card key={s.id} className="p-6 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="space-y-4 flex-1">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center text-brand">
-                            <Layers className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h4 className="text-xl font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">{s.name}</h4>
-                            <p className="text-xs text-text-muted font-medium">Gekoppeld aan {s.catches} vangsten</p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div className="bg-bg-main/50 p-3 rounded-xl border border-border-subtle">
-                            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Hengel</p>
-                            <p className="text-xs font-bold text-text-primary truncate">{s.rod}</p>
-                          </div>
-                          <div className="bg-bg-main/50 p-3 rounded-xl border border-border-subtle">
-                            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Molen</p>
-                            <p className="text-xs font-bold text-text-primary truncate">{s.reel}</p>
-                          </div>
-                          <div className="bg-bg-main/50 p-3 rounded-xl border border-border-subtle">
-                            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">Lijn</p>
-                            <p className="text-xs font-bold text-text-primary truncate">{s.line}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="secondary" size="sm" className="h-10 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest">Wijzig</Button>
-                        <Button variant="ghost" size="sm" className="h-10 w-10 rounded-xl p-0"><Trash2 className="w-4 h-4 text-text-muted hover:text-danger" /></Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-                <Button variant="secondary" className="w-full py-6 rounded-2xl border-dashed border-2 border-border-subtle bg-surface-soft/10 text-text-muted hover:text-brand hover:border-brand hover:bg-brand/5 transition-all">
-                  <Plus className="w-5 h-5 mr-2" />
-                  Nieuwe Setup Samenstellen
-                </Button>
-              </div>
+        {/* ── Tab Content ─────────────────────────────────────────────────── */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+          >
+            {/* ── 1. MIJN GEAR ────────────────────────────────────────────── */}
+            {activeTab === 'my-gear' && (
+              <GearGrid
+                items={filteredGear}
+                loading={gearLoading}
+                viewMode={viewMode}
+                onEdit={openEditGear}
+                onDelete={handleDeleteGear}
+                onToggleFavorite={handleToggleFavorite}
+                onAdd={openAddGear}
+                emptyMessage="Nog geen gear toegevoegd."
+                emptySubMessage="Voeg je eerste hengel, molen of kunstaas toe."
+              />
             )}
 
-            {activeTab === 'discover' && (
-              <div className="space-y-8 px-2 md:px-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-text-primary uppercase tracking-tight">Aanbevolen voor jou</h3>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-surface-soft text-text-muted border-none">Fishinn</Badge>
-                    <Badge variant="secondary" className="bg-surface-soft text-text-muted border-none">Bol.com</Badge>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {discoverProducts.map((p) => (
-                    <Card key={p.id} padding="none" className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col">
-                      <div className="aspect-square relative overflow-hidden bg-surface-soft">
-                        <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                        <div className="absolute top-3 right-3">
-                          <button className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:text-danger transition-colors">
-                            <Heart className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <div className="absolute bottom-3 left-3">
-                          <Badge variant="accent" className="bg-brand text-bg-main border-none font-black">{p.price}</Badge>
-                        </div>
-                      </div>
-                      <div className="p-4 flex-1 flex flex-col justify-between">
-                        <div>
-                          <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">{p.brand}</p>
-                          <h4 className="text-sm font-bold text-text-primary tracking-tight truncate mb-1">{p.name}</h4>
-                          <div className="flex items-center gap-1.5 text-[9px] font-black text-text-dim uppercase tracking-widest">
-                            <ShoppingBag className="w-3 h-3" />
-                            {p.store}
-                          </div>
-                        </div>
-                        <Button className="w-full mt-4 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest">
-                          Bekijk Item
-                          <ExternalLink className="w-3 h-3 ml-2" />
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+            {/* ── 2. FAVORIETEN ───────────────────────────────────────────── */}
+            {activeTab === 'favorites' && (
+              <GearGrid
+                items={filteredFavorites}
+                loading={gearLoading}
+                viewMode={viewMode}
+                onEdit={openEditGear}
+                onDelete={handleDeleteGear}
+                onToggleFavorite={handleToggleFavorite}
+                onAdd={openAddGear}
+                emptyMessage="Geen favorieten gevonden."
+                emptySubMessage="Markeer gear als favoriet via de ster op een item."
+              />
+            )}
 
-                {/* Affiliate Banner */}
-                <Card className="bg-brand/5 border border-brand/20 p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 blur-3xl -mr-32 -mt-32" />
-                  <div className="relative z-10 space-y-2 text-center md:text-left">
-                    <h3 className="text-2xl font-bold text-text-primary tracking-tight">Upgrade je uitrusting</h3>
-                    <p className="text-sm text-text-secondary max-w-md">Ontdek de beste deals bij onze partners en steun CatchRank bij iedere aankoop.</p>
-                  </div>
-                  <Button className="relative z-10 h-12 px-8 rounded-xl font-bold shadow-premium-accent">
-                    Shop bij Fishinn
-                    <ChevronRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </Card>
-              </div>
+            {/* ── 3. SETUPS ───────────────────────────────────────────────── */}
+            {activeTab === 'setups' && (
+              <SetupsTab
+                setups={setups}
+                loading={setupsLoading}
+                myGear={myGear}
+                gearName={gearName}
+                onAdd={openAddSetup}
+                onEdit={openEditSetup}
+                onDelete={handleDeleteSetup}
+              />
+            )}
+
+            {/* ── 4. SUGGESTIES ───────────────────────────────────────────── */}
+            {activeTab === 'suggestions' && (
+              <SuggestiesTab gear={myGear} setups={setups} />
+            )}
+
+            {/* ── 5. ONTDEKKEN ────────────────────────────────────────────── */}
+            {activeTab === 'discover' && (
+              <DiscoverTab
+                products={filteredProducts}
+                loading={productsLoading}
+                searchQuery={searchQuery}
+              />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Modals */}
+      <GearItemModal
+        isOpen={isGearModalOpen}
+        onClose={() => { setIsGearModalOpen(false); setEditingGear(null); }}
+        editItem={editingGear}
+      />
+      <SetupModal
+        isOpen={isSetupModalOpen}
+        onClose={() => { setIsSetupModalOpen(false); setEditingSetup(null); }}
+        editSetup={editingSetup}
+      />
     </PageLayout>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface GearGridProps {
+  items: GearItem[];
+  loading: boolean;
+  viewMode: 'grid' | 'list';
+  onEdit: (item: GearItem) => void;
+  onDelete: (item: GearItem) => void;
+  onToggleFavorite: (item: GearItem) => void;
+  onAdd: () => void;
+  emptyMessage: string;
+  emptySubMessage: string;
+}
+
+function GearGrid({ items, loading, viewMode, onEdit, onDelete, onToggleFavorite, onAdd, emptyMessage, emptySubMessage }: GearGridProps) {
+  if (loading) return <LoadingState />;
+
+  if (items.length === 0) {
+    return (
+      <EmptyState icon={Package} message={emptyMessage} subMessage={emptySubMessage}>
+        <Button icon={<Plus className="w-4 h-4" />} onClick={onAdd} className="mt-4 rounded-xl h-11 px-6 font-bold shadow-premium-accent">
+          Gear Toevoegen
+        </Button>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className={cn(
+      'px-2 md:px-0',
+      viewMode === 'grid'
+        ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
+        : 'space-y-3'
+    )}>
+      {items.map((g) => (
+        <GearItemCard key={g.id} item={g} viewMode={viewMode} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+      ))}
+
+      {/* Add button */}
+      <button
+        onClick={onAdd}
+        className={cn(
+          'rounded-2xl border-2 border-dashed border-border-subtle flex items-center justify-center gap-3 text-text-muted hover:text-brand hover:border-brand transition-all bg-surface-soft/20 group',
+          viewMode === 'grid' ? 'aspect-square flex-col' : 'h-20 w-full flex-row'
+        )}
+      >
+        <div className="w-9 h-9 rounded-full bg-surface-soft flex items-center justify-center group-hover:bg-brand/10 transition-colors">
+          <Plus className="w-4 h-4" />
+        </div>
+        <span className="text-[9px] font-black uppercase tracking-widest">Voeg Gear Toe</span>
+      </button>
+    </div>
+  );
+}
+
+function GearItemCard({ item, viewMode, onEdit, onDelete, onToggleFavorite }: {
+  item: GearItem;
+  viewMode: 'grid' | 'list';
+  onEdit: (item: GearItem) => void;
+  onDelete: (item: GearItem) => void;
+  onToggleFavorite: (item: GearItem) => void;
+}) {
+  const categoryLabel = GEAR_CATEGORY_LABELS[item.category] ?? item.category;
+
+  if (viewMode === 'list') {
+    return (
+      <Card padding="none" className="border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group overflow-hidden">
+        <div className="flex items-center gap-4 p-3">
+          {/* Thumbnail */}
+          <div className="w-14 h-14 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0">
+            {item.photoURL
+              ? <img src={item.photoURL} alt={item.name} className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-6 h-6" /></div>
+            }
+          </div>
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{item.brand}</p>
+            <h4 className="text-sm font-bold text-text-primary truncate">{item.name}</h4>
+            <div className="flex items-center gap-2 mt-0.5">
+              <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5">{categoryLabel}</Badge>
+              {item.usageCount && item.usageCount > 0 && (
+                <span className="text-[8px] text-text-dim font-bold">{item.usageCount}× gebruikt</span>
+              )}
+            </div>
+          </div>
+          {/* Actions */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => onToggleFavorite(item)}
+              className={cn('w-7 h-7 rounded-lg flex items-center justify-center transition-all', item.isFavorite ? 'text-brand' : 'text-text-muted hover:text-brand')}
+            >
+              <Star className={cn('w-3.5 h-3.5', item.isFavorite && 'fill-current')} />
+            </button>
+            <button onClick={() => onEdit(item)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-brand transition-colors">
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => onDelete(item)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-danger transition-colors">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // Grid mode
+  return (
+    <Card padding="none" className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col">
+      {/* Image */}
+      <div className="aspect-square relative overflow-hidden bg-surface-soft">
+        {item.photoURL
+          ? <img src={item.photoURL} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+          : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-10 h-10" /></div>
+        }
+        {/* Favorite badge */}
+        <button
+          onClick={() => onToggleFavorite(item)}
+          className={cn(
+            'absolute top-2 right-2 w-7 h-7 rounded-lg flex items-center justify-center shadow-lg transition-all',
+            item.isFavorite ? 'bg-brand text-bg-main' : 'bg-black/40 backdrop-blur-md text-white hover:bg-brand/80'
+          )}
+        >
+          <Star className={cn('w-3 h-3', item.isFavorite && 'fill-current')} />
+        </button>
+        {/* Usage count */}
+        {item.usageCount && item.usageCount > 0 && (
+          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md rounded-lg px-2 py-0.5">
+            <span className="text-[8px] font-black text-white">{item.usageCount}× gebruikt</span>
+          </div>
+        )}
+      </div>
+      {/* Info */}
+      <div className="p-3 flex-1 flex flex-col justify-between">
+        <div>
+          <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">{item.brand}</p>
+          <h4 className="text-xs font-bold text-text-primary tracking-tight truncate">{item.name}</h4>
+        </div>
+        <div className="flex items-center justify-between mt-2">
+          <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">{categoryLabel}</Badge>
+          <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => onEdit(item)} className="text-text-muted hover:text-brand transition-colors"><Edit2 className="w-3 h-3" /></button>
+            <button onClick={() => onDelete(item)} className="text-text-muted hover:text-danger transition-colors"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Setups Tab ──────────────────────────────────────────────────────────────
+
+function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete }: {
+  setups: GearSetup[];
+  loading: boolean;
+  myGear: GearItem[];
+  gearName: (id?: string) => string;
+  onAdd: () => void;
+  onEdit: (s: GearSetup) => void;
+  onDelete: (s: GearSetup) => void;
+}) {
+  if (loading) return <LoadingState />;
+
+  return (
+    <div className="space-y-4 px-2 md:px-0">
+      {myGear.length === 0 && (
+        <Card className="p-4 bg-brand/5 border border-brand/20 rounded-2xl flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-text-secondary">Voeg eerst gear toe aan Mijn Gear voordat je een setup samenstelt.</p>
+        </Card>
+      )}
+
+      {setups.map((s) => (
+        <Card key={s.id} className="p-5 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
+            <div className="space-y-4 flex-1">
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-brand/10 flex items-center justify-center text-brand flex-shrink-0">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">{s.name}</h4>
+                  <p className="text-[9px] font-bold text-text-muted uppercase tracking-widest">
+                    {s.catchCount || 0} vangsten · {s.sessionCount || 0} sessies
+                  </p>
+                </div>
+              </div>
+
+              {/* Gear breakdown */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { label: 'Hengel', id: s.rodId },
+                  { label: 'Molen', id: s.reelId },
+                  { label: 'Lijn', id: s.lineId },
+                  { label: 'Voorlijn', id: s.leaderId },
+                  { label: 'Kunstaas', id: s.lureId },
+                ].filter((x) => x.id).map(({ label, id }) => (
+                  <div key={label} className="bg-bg-main/50 p-2.5 rounded-xl border border-border-subtle">
+                    <p className="text-[7px] font-black text-text-muted uppercase tracking-widest mb-0.5">{label}</p>
+                    <p className="text-xs font-bold text-text-primary truncate">{gearName(id)}</p>
+                  </div>
+                ))}
+              </div>
+
+              {s.notes && (
+                <p className="text-xs text-text-muted italic">{s.notes}</p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button variant="secondary" size="sm" className="h-9 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest" onClick={() => onEdit(s)}>
+                Wijzig
+              </Button>
+              <Button variant="ghost" size="sm" className="h-9 w-9 rounded-xl p-0" onClick={() => onDelete(s)}>
+                <Trash2 className="w-4 h-4 text-text-muted hover:text-danger" />
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ))}
+
+      {/* Add setup CTA */}
+      <button
+        onClick={onAdd}
+        disabled={myGear.length === 0}
+        className="w-full py-5 rounded-2xl border-2 border-dashed border-border-subtle bg-surface-soft/10 text-text-muted hover:text-brand hover:border-brand hover:bg-brand/5 transition-all flex items-center justify-center gap-2 font-bold text-sm disabled:opacity-40 disabled:pointer-events-none"
+      >
+        <Plus className="w-4 h-4" />
+        Nieuwe Setup Samenstellen
+      </button>
+    </div>
+  );
+}
+
+// ─── Suggesties Tab ──────────────────────────────────────────────────────────
+
+function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[] }) {
+  const mostUsedGear = [...gear].sort((a, b) => (b.usageCount ?? 0) - (a.usageCount ?? 0)).slice(0, 3);
+
+  return (
+    <div className="space-y-6 px-2 md:px-0">
+      {/* Most used gear */}
+      {mostUsedGear.length > 0 && (
+        <section>
+          <h3 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+            <TrendingUp className="w-3.5 h-3.5 text-brand" />
+            Meest gebruikt
+          </h3>
+          <div className="space-y-2">
+            {mostUsedGear.map((g) => (
+              <div key={g.id} className="flex items-center gap-3 p-3 bg-surface-card border border-border-subtle rounded-xl">
+                <div className="w-10 h-10 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0">
+                  {g.photoURL
+                    ? <img src={g.photoURL} alt={g.name} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-5 h-5" /></div>
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{g.brand}</p>
+                  <p className="text-sm font-bold text-text-primary truncate">{g.name}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-brand">{g.usageCount ?? 0}×</p>
+                  <p className="text-[8px] font-black text-text-dim uppercase tracking-widest">gebruikt</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Placeholder — future ML suggestions */}
+      <Card className="p-6 bg-brand/5 border border-brand/20 rounded-2xl text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mx-auto">
+          <Lightbulb className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-text-primary">Slimme Suggesties</h3>
+        <p className="text-sm text-text-muted max-w-xs mx-auto">
+          Op basis van jouw vangsten en vislocaties zullen hier gepersonaliseerde geartips verschijnen.
+          Log meer vangsten om suggesties te activeren.
+        </p>
+        <div className="flex items-center justify-center gap-2 text-[9px] font-black text-brand uppercase tracking-widest">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Komt binnenkort
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Discover Tab ────────────────────────────────────────────────────────────
+
+function DiscoverTab({ products, loading, searchQuery }: {
+  products: ProductCatalogItem[];
+  loading: boolean;
+  searchQuery: string;
+}) {
+  if (loading) return <LoadingState />;
+
+  if (products.length === 0 && !loading) {
+    return (
+      <EmptyState
+        icon={ShoppingBag}
+        message={searchQuery ? 'Geen producten gevonden.' : 'Nog geen producten in de catalogus.'}
+        subMessage={searchQuery ? 'Probeer een andere zoekterm.' : 'Productcatalogus wordt automatisch gevuld vanuit Fishinn en Bol.com feeds.'}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6 px-2 md:px-0">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {products.map((p) => (
+          <ProductCard key={p.id} product={p} />
+        ))}
+      </div>
+
+      {/* Utility disclaimer — no shop feel */}
+      <p className="text-center text-[9px] text-text-dim font-bold uppercase tracking-widest pb-4">
+        Productlinks via Fishinn en Bol.com — affiliate partnerschap
+      </p>
+    </div>
+  );
+}
+
+function ProductCard({ product }: { product: ProductCatalogItem }) {
+  const storeLabel = product.source === 'fishinn' ? 'Fishinn' : 'Bol.com';
+
+  return (
+    <Card padding="none" className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col">
+      <div className="aspect-square relative overflow-hidden bg-surface-soft">
+        {product.imageURL
+          ? <img src={product.imageURL} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+          : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-10 h-10" /></div>
+        }
+        {product.price && (
+          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md rounded-lg px-2 py-0.5">
+            <span className="text-[9px] font-black text-white">€{product.price.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="absolute top-2 right-2">
+          <div className={cn(
+            'text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md',
+            product.source === 'fishinn' ? 'bg-blue-600 text-white' : 'bg-[#0000A4] text-white'
+          )}>
+            {storeLabel}
+          </div>
+        </div>
+      </div>
+
+      <div className="p-3 flex-1 flex flex-col justify-between">
+        <div>
+          {product.brand && (
+            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">{product.brand}</p>
+          )}
+          <h4 className="text-xs font-bold text-text-primary tracking-tight line-clamp-2 mb-2">{product.name}</h4>
+        </div>
+        {product.affiliateURL && (
+          <a
+            href={product.affiliateURL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-1.5 h-8 rounded-xl bg-surface-soft text-text-muted hover:bg-brand/10 hover:text-brand text-[9px] font-black uppercase tracking-widest transition-all border border-border-subtle hover:border-brand/30"
+          >
+            Bekijk
+            <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function LoadingState() {
+  return (
+    <div className="flex justify-center items-center py-16 text-text-muted">
+      <Loader2 className="w-6 h-6 animate-spin" />
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, message, subMessage, children }: {
+  icon: React.ElementType;
+  message: string;
+  subMessage: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+      <div className="w-14 h-14 rounded-2xl bg-surface-soft flex items-center justify-center text-text-dim mb-4">
+        <Icon className="w-7 h-7" />
+      </div>
+      <h3 className="text-base font-bold text-text-primary mb-1">{message}</h3>
+      <p className="text-sm text-text-muted max-w-xs">{subMessage}</p>
+      {children}
+    </div>
   );
 }

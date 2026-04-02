@@ -55,39 +55,69 @@ export interface WeatherData {
 }
 
 /**
+ * In-memory weather cache.
+ * Key: normalized location query string.
+ * Value: { data, timestamp }
+ * TTL: 10 minutes — avoids re-calling the API on tab switches or minor rerenders.
+ */
+const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+interface WeatherCacheEntry {
+  data: WeatherData;
+  timestamp: number;
+}
+
+const weatherCache = new Map<string, WeatherCacheEntry>();
+
+function getCached(key: string): WeatherData | null {
+  const entry = weatherCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > WEATHER_CACHE_TTL_MS) {
+    weatherCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCache(key: string, data: WeatherData): void {
+  weatherCache.set(key, { data, timestamp: Date.now() });
+}
+
+/**
  * Weather Service
  * Orchestrates weather data fetching from WeatherAPI (primary) and OpenWeather (secondary/fallback).
- * Optimized for free tier data richness.
+ * Includes in-memory cache with 10-minute TTL to minimize API calls.
  */
 
 export const weatherService = {
   async fetchWeather(query: string): Promise<WeatherData> {
+    const cacheKey = query.toLowerCase().trim();
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
     const apiKey = getWeatherApiKey();
 
+    let result: WeatherData;
+
     if (apiKey) {
-      // Use direct API call if key is provided
       const response = await fetch(
         `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(query)}&days=3&aqi=no&alerts=no`
       );
-      
       if (!response.ok) {
         const errorData = await response.json();
-        // If WeatherAPI fails, we could try OpenWeather here as a fallback if we had a mapper
-        throw new Error(errorData.error?.message || "Failed to fetch weather data from API");
+        throw new Error(errorData.error?.message || 'Failed to fetch weather data from API');
       }
-      
-      return response.json();
+      result = await response.json();
     } else {
-      // Fallback to proxy
       const response = await fetch(`/api/weather?q=${encodeURIComponent(query)}`);
-      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to fetch weather data from proxy");
+        throw new Error(errorData.error || 'Failed to fetch weather data from proxy');
       }
-      
-      return response.json();
+      result = await response.json();
     }
+
+    setCache(cacheKey, result);
+    return result;
   },
 
   /**
