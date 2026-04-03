@@ -519,8 +519,9 @@ export default function Dashboard() {
             <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl shadow-premium space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { name: 'Sustain FJ', brand: 'Shimano', img: 'https://picsum.photos/seed/reel/200/200' },
-                  { name: 'Zodias 7\'0"', brand: 'Shimano', img: 'https://picsum.photos/seed/rod/200/200' }
+                  { name: 'Sustain FJ', brand: 'Shimano', img:
+'https://www.bol.com/nl/nl/p/shimano-sustain-2500-fj/9300000083678574/?referrer=socialshare_pdp_androidappx' },
+                  { name: 'Zodias 7\'0"', brand: 'Fox', img: 'https://www.bol.com/nl/nl/p/fox-eos-300-opblaasboot-rubberboot/9300000042180558/?referrer=socialshare_pdp_androidapp' }
                 ].map((item, i) => (
                   <div key={i} className="group cursor-pointer" onClick={() => navigate('/gear')}>
                     <div className="aspect-square rounded-xl bg-surface-soft overflow-hidden mb-2 relative border border-border-subtle">
