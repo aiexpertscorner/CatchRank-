@@ -180,7 +180,11 @@ export default function Dashboard() {
         <div className="space-y-2 md:space-y-3">
           <Badge variant="accent" className="px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em]">Dashboard</Badge>
           <h1 className="text-base md:text-xl font-bold text-primary tracking-tight leading-tight">
-            Goedenavond, <span className="text-accent">{profile?.displayName}</span>!
+  <span>Goedenavond,</span>
+  <span className="block text-accent">
+    {profile?.displayName}
+  </span>
+</h1>
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
 De premium logboek app met al je stekken,sessies en vangsten. Stats,Overzichten,Social Hubs,Rankings en veel meer.Join de Dick Beet Catchrank club en ontdek alles om meer uit je vissessies te halen!
