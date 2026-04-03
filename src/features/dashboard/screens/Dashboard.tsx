@@ -187,7 +187,7 @@ export default function Dashboard() {
 </h1>
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
-De premium logboek app met al je stekken,sessies en vangsten. Stats,Overzichten,Social Hubs,Rankings en veel meer.Join de Dick Beet Catchrank club en ontdek alles om meer uit je vissessies te halen!
+Voeg snel een stek,sessie of vangst toe of bekijk het laatste nieuws in je dashboard.
 </p>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
