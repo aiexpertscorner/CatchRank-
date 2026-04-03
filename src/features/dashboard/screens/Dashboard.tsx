@@ -179,11 +179,11 @@ export default function Dashboard() {
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 md:mb-16 px-2 md:px-0">
         <div className="space-y-2 md:space-y-3">
           <Badge variant="accent" className="px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em]">Dashboard</Badge>
-          <h1 className="text-2xl md:text-5xl font-bold text-primary tracking-tight leading-tight">
+          <h1 className="text-2xl md:text-2xl font-bold text-primary tracking-tight leading-tight">
             Goedenavond, <span className="text-accent">{profile?.displayName}</span>!
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
-            Klaar voor een nieuwe sessie aan de waterkant? Je logboek wacht op je.
+            Bouw een premium logboek van je persoonlijke stekken,sessies en vangsten. Verzamel je visvrienden online. Deel foto's,tips of hou alles voor jezelf. Join de Dick Beet Fishing Catchrank club en verdien je eerste XP!
           </p>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
