@@ -554,9 +554,9 @@ Voeg snel een stek,sessie of vangst toe of bekijk het laatste nieuws in je dashb
               <Button variant="ghost" size="sm" className="text-brand font-black text-[10px] uppercase tracking-widest">Alles</Button>
             </div>
             <Card padding="none" variant="premium" className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden">
-              <RankingCard rank={1} name="Sander V." xp={12450} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={2} name="Lisa de B." xp={10200} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={3} name="Marco K." xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={1} name="Luciano21 (Team DickBeetNL)" xp={12450} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={2} name="Pipo85 (Team DickBeetNL)" xp={10200} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={3} name="Mareno030 (Team DicBeetNL" xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
               <RankingCard rank={12} name={profile?.displayName || 'Jij'} xp={profile?.xp || 0} isCurrentUser className="p-4 bg-brand/5" />
             </Card>
           </section>
@@ -570,8 +570,8 @@ Voeg snel een stek,sessie of vangst toe of bekijk het laatste nieuws in je dashb
                   <MapPin className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate tracking-tight">De Kromme Mijdrecht</p>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Kanaal • 12 vangsten</p>
+                  <p className="text-base font-bold text-text-primary truncate tracking-tight">De Kromme Rijn</p>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Rivier • 12 vangsten</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
               </Card>
@@ -580,8 +580,8 @@ Voeg snel een stek,sessie of vangst toe of bekijk het laatste nieuws in je dashb
                   <MapPin className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate tracking-tight">Sloterplas Noord</p>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Plas • 8 vangsten</p>
+                  <p className="text-base font-bold text-text-primary truncate tracking-tight">Lage Vaart, Lelystad</p>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Kanaal • 8 vangsten</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
               </Card>
