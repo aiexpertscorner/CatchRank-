@@ -183,8 +183,8 @@ export default function Dashboard() {
             Goedenavond, <span className="text-accent">{profile?.displayName}</span>!
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
-            Bouw een premium logboek van je persoonlijke stekken,sessies en vangsten. Verzamel je visvrienden online. Deel foto's,tips of hou alles voor jezelf. Join de Dick Beet Fishing Catchrank club en verdien je eerste XP!
-          </p>
+De premium logboek app met al je stekken,sessies en vangsten. Stats,Overzichten,Social Hubs,Rankings en veel meer.Join de Dick Beet Catchrank club en ontdek alles om meer uit je vissessies te halen!
+</p>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
           <Button 
