@@ -4,7 +4,7 @@
  */
 
 export const ENV = {
-  IS_DEV: process.env.NODE_ENV === 'development',
+  IS_DEV: process.env.NODE_ENV === 'production',
   BYPASS_AUTH: false,
 };
 
@@ -14,7 +14,7 @@ export const FEATURE_FLAGS = {
   ENABLE_WEATHER_API: true,
   ENABLE_AI_ASSISTANT: true,
   /** Enable live product feed refresh via server endpoints. Dev-safe: off by default. */
-  ENABLE_PRODUCT_FEED_REFRESH: false,
+  ENABLE_PRODUCT_FEED_REFRESH: true,
 };
 
 /**
