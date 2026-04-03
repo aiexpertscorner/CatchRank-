@@ -520,8 +520,8 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { name: 'Sustain FJ', brand: 'Shimano', img:
-'https://www.bol.com/nl/nl/p/shimano-sustain-2500-fj/9300000083678574/?referrer=socialshare_pdp_androidappx' },
-                  { name: 'Zodias 7\'0"', brand: 'Fox', img: 'https://www.bol.com/nl/nl/p/fox-eos-300-opblaasboot-rubberboot/9300000042180558/?referrer=socialshare_pdp_androidapp' }
+'https://media-tge.ams3.cdn.digitaloceanspaces.com/media/eaeff955f1243a70/600x600.jpg' },
+                  { name: 'Zodias 7\'0"', brand: 'Fox', img: 'https://media-tge.ams3.cdn.digitaloceanspaces.com/media/eaeff955f1243a70/600x600.jpg' }
                 ].map((item, i) => (
                   <div key={i} className="group cursor-pointer" onClick={() => navigate('/gear')}>
                     <div className="aspect-square rounded-xl bg-surface-soft overflow-hidden mb-2 relative border border-border-subtle">
