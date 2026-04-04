@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../App';
-import Logo from '../Logo';
 import { Button, Badge } from '../ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
 import { QuickActionMenu } from './QuickActionMenu';
