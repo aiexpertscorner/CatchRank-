@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Fish, 
-  Ruler, 
-  Scale, 
-  MapPin, 
-  Wind, 
-  Thermometer, 
+import { gearService } from '../features/gear/services/gearService';
+import { GearItem, GearSetup } from '../types';
+import {
+  Fish,
+  Ruler,
+  Scale,
+  MapPin,
+  Wind,
+  Thermometer,
   Waves,
   Zap,
+  Wrench,
   ChevronRight,
   ChevronLeft,
   Check,
@@ -75,6 +78,8 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
   const [speciesList, setSpeciesList] = useState<Species[]>([]);
   const [spotsList, setSpotsList] = useState<Spot[]>([]);
+  const [userGear, setUserGear] = useState<GearItem[]>([]);
+  const [userSetups, setUserSetups] = useState<GearSetup[]>([]);
   const [suggestions, setSuggestions] = useState<{
     species: string[];
     spots: string[];
@@ -94,6 +99,14 @@ export const CatchForm: React.FC<CatchFormProps> = ({
       const spotsQuery = query(collection(db, 'spots'), where('userId', '==', profile.uid));
       const spotsSnap = await getDocs(spotsQuery);
       setSpotsList(spotsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Spot)));
+
+      // Fetch user gear + setups for the gear selector in step 4
+      const [gear, setups] = await Promise.all([
+        gearService.getUserGear(profile.uid),
+        gearService.getUserSetups(profile.uid),
+      ]);
+      setUserGear(gear);
+      setUserSetups(setups);
 
       // Get smart suggestions
       const smartSuggestions = await loggingService.getSmartSuggestions(profile.uid);
@@ -158,6 +171,24 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
       if (activeSessionId && catchId) {
         await loggingService.linkCatchToSession(catchId, activeSessionId, formData.spotId);
+      }
+
+      // Link Mijn Visgear items to this catch (fire-and-forget, non-blocking)
+      if (catchId && finalStatus === 'complete') {
+        const gearIdsToLink = [
+          formData.gear?.rodId,
+          formData.gear?.reelId,
+          formData.gear?.lineId,
+          formData.gear?.lureId,
+        ].filter((id): id is string => Boolean(id) && userGear.some(g => g.id === id));
+
+        if (gearIdsToLink.length > 0) {
+          gearService.linkGearToCatch(
+            gearIdsToLink,
+            catchId,
+            formData.gear?.setupId || undefined
+          ).catch(e => console.warn('gear link failed', e));
+        }
       }
 
       const xp = loggingService.calculateXP(finalData);
@@ -470,28 +501,113 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
               <div className="space-y-4">
                 <Label className="flex items-center gap-2">
-                  <Save className="w-4 h-4 text-brand" /> Gear / Uitrusting
+                  <Wrench className="w-4 h-4 text-brand" /> Visgear (optioneel)
                 </Label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <Input 
-                    placeholder="Hengel"
-                    value={formData.gear?.rodId || ''}
-                    onChange={(e) => setFormData({ ...formData, gear: { ...formData.gear, rodId: e.target.value } })}
-                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
-                  />
-                  <Input 
-                    placeholder="Molen"
-                    value={formData.gear?.reelId || ''}
-                    onChange={(e) => setFormData({ ...formData, gear: { ...formData.gear, reelId: e.target.value } })}
-                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
-                  />
-                  <Input 
-                    placeholder="Kunstaas"
-                    value={formData.gear?.lureId || ''}
-                    onChange={(e) => setFormData({ ...formData, gear: { ...formData.gear, lureId: e.target.value } })}
-                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
-                  />
-                </div>
+
+                {userSetups.length > 0 ? (
+                  // Has setups: show setup selector as primary option
+                  <div className="space-y-2">
+                    <Select
+                      value={formData.gear?.setupId || ''}
+                      onValueChange={(val) => {
+                        if (!val) {
+                          setFormData(prev => ({ ...prev, gear: { ...prev.gear, setupId: '' } }));
+                          return;
+                        }
+                        const setup = userSetups.find(s => s.id === val);
+                        if (setup) {
+                          setFormData(prev => ({
+                            ...prev,
+                            gear: {
+                              setupId: setup.id,
+                              rodId: setup.rodId || '',
+                              reelId: setup.reelId || '',
+                              lineId: setup.lineId || '',
+                              lureId: setup.lureId || '',
+                            }
+                          }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-14 rounded-2xl bg-bg-main border-border-subtle">
+                        <SelectValue placeholder="Kies een setup uit Mijn Visgear..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Geen setup —</SelectItem>
+                        {userSetups.map(s => (
+                          <SelectItem key={s.id} value={s.id!}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formData.gear?.setupId && (() => {
+                      const setup = userSetups.find(s => s.id === formData.gear?.setupId);
+                      const parts = [
+                        setup?.rodId && userGear.find(g => g.id === setup.rodId),
+                        setup?.reelId && userGear.find(g => g.id === setup.reelId),
+                        setup?.lureId && userGear.find(g => g.id === setup.lureId),
+                      ].filter(Boolean).map((g: any) => `${g.brand} ${g.name}`);
+                      return parts.length > 0 ? (
+                        <p className="text-[11px] text-text-muted px-1">{parts.join(' · ')}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                ) : userGear.length > 0 ? (
+                  // Has gear but no setups: show individual pickers
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select
+                      value={formData.gear?.rodId || ''}
+                      onValueChange={(val) => setFormData(prev => ({ ...prev, gear: { ...prev.gear, rodId: val } }))}
+                    >
+                      <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs">
+                        <SelectValue placeholder="Hengel" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Geen —</SelectItem>
+                        {userGear.filter(g => g.category === 'rod').map(g => (
+                          <SelectItem key={g.id} value={g.id!}>{g.brand} {g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={formData.gear?.reelId || ''}
+                      onValueChange={(val) => setFormData(prev => ({ ...prev, gear: { ...prev.gear, reelId: val } }))}
+                    >
+                      <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs">
+                        <SelectValue placeholder="Molen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Geen —</SelectItem>
+                        {userGear.filter(g => g.category === 'reel').map(g => (
+                          <SelectItem key={g.id} value={g.id!}>{g.brand} {g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={formData.gear?.lureId || ''}
+                      onValueChange={(val) => setFormData(prev => ({ ...prev, gear: { ...prev.gear, lureId: val } }))}
+                    >
+                      <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs col-span-2">
+                        <SelectValue placeholder="Kunstaas / Aas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Geen —</SelectItem>
+                        {userGear.filter(g => g.category === 'lure' || g.category === 'bait').map(g => (
+                          <SelectItem key={g.id} value={g.id!}>{g.brand} {g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  // No gear at all: hint to add gear first
+                  <div className="p-4 bg-surface-soft/50 border border-border-subtle rounded-2xl flex items-center gap-3">
+                    <Wrench className="w-4 h-4 text-text-muted flex-shrink-0" />
+                    <p className="text-xs text-text-muted">
+                      Nog geen gear in{' '}
+                      <span className="text-brand font-semibold">Mijn Visgear</span>.
+                      Voeg gear toe om het hier te koppelen.
+                    </p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

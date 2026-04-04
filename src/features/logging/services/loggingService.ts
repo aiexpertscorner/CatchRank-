@@ -79,6 +79,13 @@ export const loggingService = {
       bustStatsCache(userId);
     }
 
+    // Update spot catch counter (fire-and-forget, non-blocking)
+    if (catchData.status === 'complete' && data.spotId) {
+      updateDoc(doc(db, 'spots', data.spotId), {
+        'stats.totalCatches': increment(1),
+      }).catch(e => console.warn('spot stats update failed', e));
+    }
+
     return docRef.id;
   },
 
@@ -330,6 +337,14 @@ export const loggingService = {
         console.error('XP award failed (endSession):', err)
       );
       bustStatsCache(ownerUserId);
+    }
+
+    // Update totalSessions counter on all spots linked to this session — fire-and-forget
+    const linkedSpotIds: string[] = sessionSnap.data()?.linkedSpotIds || [];
+    for (const spotId of linkedSpotIds) {
+      updateDoc(doc(db, 'spots', spotId), {
+        'stats.totalSessions': increment(1),
+      }).catch(e => console.warn('spot session stats update failed', e));
     }
   },
 
