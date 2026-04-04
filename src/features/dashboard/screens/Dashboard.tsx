@@ -183,7 +183,7 @@ export default function Dashboard() {
             Goedenavond, <span className="text-accent">{profile?.displayName}</span>!
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
-            Begin meteen met het loggen van je persoonlijke stekken,sessies en natuurlijk vangsten. Super snel en zo gedetailleerd als jij wilt. Join de Dick Beet Fishing Catchrank club en verdien je eerste XP!
+            Begin meteen met het loggen van je persoonlijke stekken, sessies en natuurlijk vangsten. Super snel en zo gedetailleerd als jij wilt. Join de Dick Beet Fishing CatchRank club en verdien je eerste XP!
           </p>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
@@ -519,8 +519,9 @@ export default function Dashboard() {
             <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl shadow-premium space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { name: 'Sustain FJ', brand: 'Shimano', img: 'https://picsum.photos/seed/reel/200/200' },
-                  { name: 'Zodias 7\'0"', brand: 'Shimano', img: 'https://picsum.photos/seed/rod/200/200' }
+                  { name: 'Sustain FJ', brand: 'Shimano', img:
+'https://media.s-bol.com/mVVNJ4r5vVkr/L9PQv4X/550x676.jpg' },
+                  { name: 'Zodias 7\'0"', brand: 'Fox', img: 'https://media-tge.ams3.cdn.digitaloceanspaces.com/media/eaeff955f1243a70/600x600.jpg' }
                 ].map((item, i) => (
                   <div key={i} className="group cursor-pointer" onClick={() => navigate('/gear')}>
                     <div className="aspect-square rounded-xl bg-surface-soft overflow-hidden mb-2 relative border border-border-subtle">
@@ -549,9 +550,9 @@ export default function Dashboard() {
               <Button variant="ghost" size="sm" className="text-brand font-black text-[10px] uppercase tracking-widest">Alles</Button>
             </div>
             <Card padding="none" variant="premium" className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden">
-              <RankingCard rank={1} name="Sander V." xp={12450} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={2} name="Lisa de B." xp={10200} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={3} name="Marco K." xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={1} name="Luciano21 (Team DickBeetNL)" xp={12450} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={2} name="Pipo85 (Team DickBeetNL)" xp={10200} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={3} name="Mareno030 (Team DicBeetNL" xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
               <RankingCard rank={12} name={profile?.displayName || 'Jij'} xp={profile?.xp || 0} isCurrentUser className="p-4 bg-brand/5" />
             </Card>
           </section>
@@ -565,8 +566,8 @@ export default function Dashboard() {
                   <MapPin className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate tracking-tight">De Kromme Mijdrecht</p>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Kanaal • 12 vangsten</p>
+                  <p className="text-base font-bold text-text-primary truncate tracking-tight">De Kromme Rijn</p>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Rivier • 12 vangsten</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
               </Card>
@@ -575,8 +576,8 @@ export default function Dashboard() {
                   <MapPin className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate tracking-tight">Sloterplas Noord</p>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Plas • 8 vangsten</p>
+                  <p className="text-base font-bold text-text-primary truncate tracking-tight">Lage Vaart, Lelystad</p>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Kanaal • 8 vangsten</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
               </Card>
