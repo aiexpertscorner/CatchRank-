@@ -5,11 +5,11 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 /**
  * Firebase initialization.
- * This file is the single source of truth for the Firebase instance.
+ * Uses the (default) Firestore database for the dbfishing-web project.
  */
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 export default app;
