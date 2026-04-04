@@ -48,7 +48,7 @@ export default function AskDick() {
     {
       id: '1',
       role: 'assistant',
-      content: "Hoi! Ik ben Dick, je persoonlijke vis-assistent. Waar kan ik je vandaag mee helpen? Vraag me gerust om advies over stekken, technieken, materiaal of het weer.",
+      content: "Hoi! Ik ben Dick Beet, je persoonlijke vis-assistent. Waar kan ik je vandaag mee helpen? Vraag me gerust om advies over stekken, technieken, materiaal of het weer.",
       timestamp: new Date()
     }
   ]);
@@ -120,7 +120,7 @@ export default function AskDick() {
   return (
     <PageLayout>
       <PageHeader 
-        title="Ask Dick (AI)" 
+        title="Vraag Dick Beet" 
         subtitle="Je persoonlijke vis-expert"
         actions={
           <Button variant="ghost" size="sm" onClick={clearChat} className="text-text-muted hover:text-danger">

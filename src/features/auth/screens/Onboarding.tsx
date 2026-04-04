@@ -289,7 +289,7 @@ export default function Onboarding() {
                           value={data.location}
                           onChange={(e) => setData({ ...data, location: e.target.value })}
                           className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-4 py-4 text-lg font-bold text-text-primary focus:outline-none focus:border-brand transition-all"
-                          placeholder="Bijv. Amsterdam"
+                          placeholder="Bijv. Amersfoort"
                         />
                       </div>
                     </div>
