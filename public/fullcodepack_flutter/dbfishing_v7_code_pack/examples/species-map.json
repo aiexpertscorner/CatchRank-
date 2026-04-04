@@ -1,0 +1,12 @@
+{
+  "karper": {
+    "keywords": ["karper", "carp", "boilie", "big pit", "baitrunner", "onthaakmat", "rod pod"],
+    "seasons": ["lente", "zomer", "herfst", "winter"],
+    "water_types": ["kanaal", "meer", "plas", "rivier"]
+  },
+  "snoek": {
+    "keywords": ["snoek", "pike", "jerkbait", "shad", "stinger", "baitcaster"],
+    "seasons": ["herfst", "winter", "lente"],
+    "water_types": ["polder", "meer", "rivier", "vaart"]
+  }
+}

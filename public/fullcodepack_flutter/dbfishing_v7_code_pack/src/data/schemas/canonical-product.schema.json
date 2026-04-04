@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Canonical DBFishing Product",
+  "type": "object",
+  "required": [
+    "id",
+    "ean",
+    "slug",
+    "title",
+    "brand",
+    "merchant_offers",
+    "categories",
+    "scores"
+  ],
+  "properties": {
+    "id": {"type": "string"},
+    "ean": {"type": "string", "pattern": "^\\d{13}$"},
+    "slug": {"type": "string"},
+    "title": {"type": "string"},
+    "brand": {"type": "string"},
+    "description": {"type": "string"},
+    "merchant_offers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["merchant", "price", "url"],
+        "properties": {
+          "merchant": {"type": "string"},
+          "price": {"type": "number"},
+          "url": {"type": "string"},
+          "availability_text": {"type": "string"},
+          "seller_name": {"type": "string"},
+          "currency": {"type": "string"}
+        }
+      }
+    },
+    "image": {"type": "object"},
+    "images": {"type": "array"},
+    "categories": {"type": "array"},
+    "specs": {"type": "array"},
+    "rating": {
+      "type": "object",
+      "properties": {
+        "average": {"type": ["number", "null"]},
+        "count_estimate": {"type": ["number", "null"]}
+      }
+    },
+    "variants": {"type": "array"},
+    "recommendation_eans": {"type": "array", "items": {"type": "string"}},
+    "taxonomy": {
+      "type": "object",
+      "properties": {
+        "species": {"type": "array", "items": {"type": "string"}},
+        "technique": {"type": "array", "items": {"type": "string"}},
+        "bait_type": {"type": "array", "items": {"type": "string"}},
+        "water_type": {"type": "array", "items": {"type": "string"}},
+        "season": {"type": "array", "items": {"type": "string"}},
+        "skill_level": {"type": "string"}
+      }
+    },
+    "scores": {
+      "type": "object",
+      "properties": {
+        "relevance": {"type": "number"},
+        "commercial": {"type": "number"},
+        "rating": {"type": "number"},
+        "composite": {"type": "number"}
+      }
+    }
+  }
+}
