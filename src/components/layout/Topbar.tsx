@@ -40,7 +40,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
         >
           {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
-        <Logo size="md" withText={false} />
+        <Logo size="lg" withText={true} />
       </div>
 
       {/* Active Session Header (Mobile/Tablet) */}
