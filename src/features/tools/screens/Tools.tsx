@@ -35,8 +35,8 @@ export default function Tools() {
   const tools = [
     { 
       id: 'ask-dick', 
-      name: 'Ask Dick (AI)', 
-      description: 'Stel je visvragen aan onze slimme assistent.', 
+      name: 'Vraag het Dick Beet', 
+      description: 'Stel je visvragen aan onze digitale Dick Beet', 
       icon: MessageSquare, 
       color: 'text-brand', 
       bg: 'bg-brand/10',
@@ -109,7 +109,7 @@ export default function Tools() {
                 </div>
                 <div className="flex-1 text-center md:text-left space-y-2">
                   <div className="flex items-center justify-center md:justify-start gap-3">
-                    <h3 className="text-2xl font-bold text-text-primary tracking-tight">Ask Dick (AI)</h3>
+                    <h3 className="text-2xl font-bold text-text-primary tracking-tight">Vraag Dick Beet</h3>
                     <Badge variant="accent" className="bg-brand text-bg-main border-none font-black">BETA</Badge>
                   </div>
                   <p className="text-sm text-text-secondary max-w-md">Onze AI-assistent Dick weet alles over vissen. Vraag hem om advies over stekken, technieken of materiaal.</p>

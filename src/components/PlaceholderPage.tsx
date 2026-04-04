@@ -1,5 +1,4 @@
 import React from 'react';
-import { Fish } from 'lucide-react';
 
 export default function PlaceholderPage({ title }: { title: string }) {
   return (
