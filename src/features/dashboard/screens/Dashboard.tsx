@@ -552,7 +552,7 @@ export default function Dashboard() {
             <Card padding="none" variant="premium" className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden">
               <RankingCard rank={1} name="Luciano21 (Team DickBeetNL)" xp={12450} className="p-4 hover:bg-surface-soft transition-colors" />
               <RankingCard rank={2} name="Pipo85 (Team DickBeetNL)" xp={10200} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={3} name="Mareno030 (Team DicBeetNL" xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
+              <RankingCard rank={3} name="Mareno030 (Team DicBeetNL)" xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
               <RankingCard rank={12} name={profile?.displayName || 'Jij'} xp={profile?.xp || 0} isCurrentUser className="p-4 bg-brand/5" />
             </Card>
           </section>

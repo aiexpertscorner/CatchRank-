@@ -5,7 +5,6 @@ interface LogoProps {
   className?: string;
   withText?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  priority?: boolean;
 }
 
 export default function Logo({
@@ -32,7 +31,7 @@ export default function Logo({
   };
 
   const current = config[size];
-  const src = withText ? './public/logo-full.svg' : './public/logo-icon.svg';
+  const src = `${import.meta.env.BASE_URL}${withText ? 'logo-full.svg' : 'logo-icon.svg'}`;
   const alt = withText ? 'CatchRank logo' : 'CatchRank icon';
 
   return (
@@ -47,8 +46,6 @@ export default function Logo({
         src={src}
         alt={alt}
         draggable={false}
-        width={withText ? 120 : 56}
-        height={withText ? 36 : 56}
         className={cn(
           'block shrink-0 object-contain align-middle transition-transform duration-300 group-hover:scale-[1.02]',
           withText ? current.full : current.icon
