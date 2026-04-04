@@ -110,7 +110,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
             </div>
 
             {/* Header */}
-            <div className="px-6 py-4 sm:p-8 border-b border-border-subtle flex items-center justify-between bg-gradient-to-r from-surface-soft/50 to-white sticky top-0 z-10">
+            <div className="px-6 py-4 sm:p-8 border-b border-border-subtle flex items-center justify-between bg-gradient-to-r from-surface-soft/60 to-surface sticky top-0 z-10">
               <div className="flex items-center gap-3 sm:gap-5">
                 <div className="w-10 h-10 sm:w-14 sm:h-14 bg-accent/10 rounded-xl sm:rounded-[1.25rem] flex items-center justify-center shadow-inner">
                   <Zap className="w-5 h-5 sm:w-7 sm:h-7 text-accent" />

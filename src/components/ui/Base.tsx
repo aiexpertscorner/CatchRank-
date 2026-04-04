@@ -51,7 +51,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'xp' | 'success' | 'warning' | 'danger' | 'neutral' | 'accent' | 'primary';
+  variant?: 'xp' | 'success' | 'warning' | 'danger' | 'neutral' | 'accent' | 'primary' | 'secondary';
   icon?: React.ReactNode;
 }
 
@@ -63,7 +63,8 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', ico
     danger: 'bg-danger/10 text-danger border border-danger/10',
     accent: 'bg-accent-soft text-accent border border-accent/10',
     primary: 'bg-primary-soft text-primary border border-primary/10',
-    neutral: 'bg-slate-100 text-slate-600 border border-slate-200',
+    neutral: 'bg-surface-soft text-text-secondary border border-border-subtle',
+    secondary: 'bg-surface-soft text-text-secondary border border-border-subtle',
   };
 
   return (

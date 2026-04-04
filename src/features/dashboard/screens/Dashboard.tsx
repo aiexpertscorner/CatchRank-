@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Trophy, 
-  TrendingUp, 
-  MapPin, 
-  Plus, 
+import {
+  Trophy,
+  TrendingUp,
+  MapPin,
+  Plus,
   ChevronRight,
   Zap,
   Clock,
@@ -14,7 +14,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Star,
-  ShoppingBag
+  ShoppingBag,
+  History,
+  BarChart3,
+  Cloud
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../App';
@@ -174,6 +177,37 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       )}
+
+      {/* Snelle Toegang — Quick Nav Cards */}
+      <section className="mb-6 md:mb-10">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">Snelle Toegang</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
+          {[
+            { label: 'Logboek', sub: 'Vangsten', icon: Fish, path: '/catches', color: 'text-accent', bg: 'bg-accent/10' },
+            { label: 'Sessies', sub: 'Live vissen', icon: History, path: '/sessions', color: 'text-success', bg: 'bg-success/10' },
+            { label: 'Stekken', sub: 'Jouw plekken', icon: MapPin, path: '/spots', color: 'text-water', bg: 'bg-water/10' },
+            { label: 'Visgear', sub: 'Mijn materiaal', icon: ShoppingBag, path: '/gear', color: 'text-warning', bg: 'bg-warning/10' },
+            { label: 'Ranking', sub: 'XP & scores', icon: Trophy, path: '/rankings', color: 'text-primary', bg: 'bg-primary/10' },
+            { label: 'Weer', sub: 'Visomstandig.', icon: Cloud, path: '/weather', color: 'text-blue-400', bg: 'bg-blue-500/10' },
+          ].map((item) => (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className="flex flex-col items-start gap-2 p-3 bg-surface-card rounded-2xl border border-border-subtle/50 hover:border-accent/30 active:scale-95 transition-all text-left group"
+            >
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${item.bg} transition-transform group-active:scale-95`}>
+                <item.icon className={`w-4 h-4 ${item.color}`} />
+              </div>
+              <div className="leading-none">
+                <p className="text-xs font-black text-text-primary tracking-tight">{item.label}</p>
+                <p className="text-[9px] text-text-muted mt-0.5 font-medium">{item.sub}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Welcome Section */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 md:mb-16 px-2 md:px-0">

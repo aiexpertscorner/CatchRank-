@@ -40,7 +40,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
         >
           {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
-        <Logo size="sm" withText={false} />
+        <Logo size="sm" withText={true} />
       </div>
 
       {/* Active Session Header (Mobile/Tablet) */}
@@ -50,14 +50,14 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
 
       {/* Search Bar (Desktop) */}
       <div className={cn(
-        "hidden md:flex items-center gap-3 px-5 py-3 bg-white rounded-2xl border transition-all duration-300 w-full max-w-md shadow-sm",
-        isSearchFocused ? "border-accent ring-4 ring-accent/5" : "border-border-subtle"
+        "hidden md:flex items-center gap-3 px-5 py-3 bg-surface-soft rounded-2xl border transition-all duration-300 w-full max-w-md",
+        isSearchFocused ? "border-accent ring-2 ring-accent/10" : "border-border-subtle"
       )}>
         <Search className={cn("w-5 h-5 transition-colors", isSearchFocused ? "text-accent" : "text-text-muted")} />
-        <input 
-          type="text" 
-          placeholder="Zoek vangsten, sessies of vissers..." 
-          className="bg-transparent border-none outline-none w-full text-sm font-bold placeholder:text-text-muted/60"
+        <input
+          type="text"
+          placeholder="Zoek vangsten, sessies of vissers..."
+          className="bg-transparent border-none outline-none w-full text-sm font-medium text-text-primary placeholder:text-text-muted/60"
           onFocus={() => setIsSearchFocused(true)}
           onBlur={() => setIsSearchFocused(false)}
         />
