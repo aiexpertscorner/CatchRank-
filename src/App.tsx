@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { 
   onAuthStateChanged, 
   User, 
@@ -139,6 +139,7 @@ export default function App() {
       setProfile(prev => prev ? { ...prev, ...data } : null);
     } catch (error) {
       console.error('Update profile error:', error);
+      throw error;
     }
   };
 

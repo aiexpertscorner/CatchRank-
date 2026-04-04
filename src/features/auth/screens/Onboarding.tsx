@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Fish, 
@@ -26,6 +27,7 @@ import { toast } from 'sonner';
 
 export default function Onboarding() {
   const { profile, updateProfile } = useAuth();
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -77,9 +79,10 @@ export default function Onboarding() {
             showStats: true,
           }
         });
-        toast.success('Welkom bij de community!');
+        toast.success('Welkom bij de community! 🎣');
+        navigate('/');
       } catch (error) {
-        toast.error('Fout bij opslaan profiel');
+        toast.error('Fout bij opslaan profiel. Probeer opnieuw.');
       } finally {
         setLoading(false);
       }
