@@ -166,7 +166,7 @@ export default function App() {
     }}>
       <SessionProvider>
         <Toaster position="top-right" richColors closeButton />
-        <Router basename="/CatchRank-/">
+        <Router>
           <Routes>
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
             
