@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../App';
+import Logo from '../Logo';
 import { Button, Badge } from '../ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
 import { QuickActionMenu } from './QuickActionMenu';
@@ -61,7 +62,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
           onBlur={() => setIsSearchFocused(false)}
         />
         <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-surface border border-border-subtle rounded-lg text-[9px] font-black text-text-muted uppercase tracking-widest">
-          <span className="opacity-50">⌘</span>K
+          <span className="opacity-50"></span>K
         </div>
       </div>
 
