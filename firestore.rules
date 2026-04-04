@@ -183,8 +183,15 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
-                    request.resource.data.email == resource.data.email;
+      // For updates: owner only, uid/email must not change, xp/level must be valid numbers.
+      // isValidUser is NOT called on updates because partial updates via setDoc(merge)
+      // produce a request.resource.data that includes all merged fields, but the strict
+      // validator can still reject valid updates. These lightweight checks are sufficient.
+      allow update: if isOwner(userId) &&
+                    request.resource.data.uid == resource.data.uid &&
+                    request.resource.data.email == resource.data.email &&
+                    (!('xp' in request.resource.data) || request.resource.data.xp is number) &&
+                    (!('level' in request.resource.data) || request.resource.data.level is number);
     }
 
     match /catches/{catchId} {

@@ -134,12 +134,19 @@ export default function App() {
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
+    // Optimistic local update — routing/navigation reacts immediately
+    setProfile(prev => prev ? { ...prev, ...data } : null);
     try {
-      await updateDoc(doc(db, 'users', user.uid), data);
-      setProfile(prev => prev ? { ...prev, ...data } : null);
+      // setDoc + merge handles both "doc exists" and "doc missing" cases
+      // uid + email always included so security rules validation passes
+      await setDoc(
+        doc(db, 'users', user.uid),
+        { uid: user.uid, email: user.email || '', ...data },
+        { merge: true }
+      );
     } catch (error) {
-      console.error('Update profile error:', error);
-      throw error;
+      console.error('Profile sync to Firestore failed:', error);
+      throw error; // let caller show a warning, but local state is already updated
     }
   };
 

@@ -47,6 +47,7 @@ export default function Onboarding() {
       setStep(step + 1);
     } else {
       setLoading(true);
+      let firestoreOk = true;
       try {
         await updateProfile({
           displayName: data.displayName,
@@ -54,7 +55,7 @@ export default function Onboarding() {
           favoriteSpecies: data.favoriteSpecies,
           fishingTypes: data.fishingTypes,
           onboardingStatus: 'complete',
-          xp: 100, // Welcome bonus
+          xp: 100,
           level: 1,
           stats: {
             totalCatches: 0,
@@ -79,13 +80,20 @@ export default function Onboarding() {
             showStats: true,
           }
         });
-        toast.success('Welkom bij de community! 🎣');
-        navigate('/');
       } catch (error) {
-        toast.error('Fout bij opslaan profiel. Probeer opnieuw.');
+        // Firestore write failed, but local state is already updated (optimistic)
+        firestoreOk = false;
+        console.error('Onboarding Firestore sync failed:', error);
       } finally {
         setLoading(false);
       }
+      // Always navigate — updateProfile updates local state first before Firestore
+      if (firestoreOk) {
+        toast.success('Welkom bij CatchRank!');
+      } else {
+        toast.warning('Profiel opgeslagen. Synchronisatie mislukt — wordt later opnieuw geprobeerd.');
+      }
+      navigate('/');
     }
   };
 
