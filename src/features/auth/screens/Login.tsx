@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Fish, LogIn, Mail, Lock, AlertCircle, ChevronRight } from 'lucide-react';
+import { LogIn, Mail, Lock, AlertCircle, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { Button, Card } from '../../../components/ui/Base';
 import { toast } from 'sonner';
@@ -17,6 +17,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const src = `${import.meta.env.BASE_URL}${withText ? 'logo-full.svg' : 'logo-icon.svg'}`;
+  const alt = withText ? 'CatchRank logo' : 'CatchRank icon';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
