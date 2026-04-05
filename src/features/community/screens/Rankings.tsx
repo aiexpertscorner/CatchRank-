@@ -75,11 +75,29 @@ export default function Rankings() {
       });
   }, [activeTab]);
 
+  // Sort rankings client-side based on active filter
+  const sortedRankings = [...rankings].sort((a, b) => {
+    if (activeFilter === 'catches') {
+      return (b.stats?.totalCatches ?? 0) - (a.stats?.totalCatches ?? 0);
+    }
+    if (activeFilter === 'species') {
+      return (b.stats?.speciesCount ?? 0) - (a.stats?.speciesCount ?? 0);
+    }
+    return (b.xp ?? 0) - (a.xp ?? 0); // default: XP
+  });
+
   // Derive current user's rank from their position in the sorted list
   const currentUserRankIndex = profile
-    ? rankings.findIndex((u) => u.uid === profile.uid)
+    ? sortedRankings.findIndex((u) => u.uid === profile.uid)
     : -1;
   const currentUserRank = currentUserRankIndex >= 0 ? currentUserRankIndex + 1 : null;
+
+  // Helper: stat value to show per user based on active filter
+  const getUserStatValue = (user: UserProfile) => {
+    if (activeFilter === 'catches') return { value: (user.stats?.totalCatches ?? 0).toLocaleString(), label: 'Vangsten' };
+    if (activeFilter === 'species') return { value: (user.stats?.speciesCount ?? 0).toLocaleString(), label: 'Soorten' };
+    return { value: (user.xp ?? 0).toLocaleString(), label: 'XP' };
+  };
 
   const tabs = [
     { id: 'global', label: 'Globaal', icon: Globe },
@@ -137,16 +155,16 @@ export default function Rankings() {
         </div>
 
         {/* Top 3 Podium */}
-        {!loading && rankings.length >= 3 && (
+        {!loading && sortedRankings.length >= 3 && (
           <section className="grid grid-cols-3 items-end gap-2 md:gap-6 px-2 md:px-0 pt-10">
             {/* Rank 2 */}
-            <PodiumSlot user={rankings[1]} rank={2} medalColor="text-slate-400" podiumHeight="h-24 md:h-32" />
+            <PodiumSlot user={sortedRankings[1]} rank={2} medalColor="text-slate-400" podiumHeight="h-24 md:h-32" statLabel={getUserStatValue(sortedRankings[1]).label} statValue={getUserStatValue(sortedRankings[1]).value} />
 
             {/* Rank 1 */}
-            <PodiumSlot user={rankings[0]} rank={1} medalColor="text-brand" podiumHeight="h-32 md:h-48" isFirst />
+            <PodiumSlot user={sortedRankings[0]} rank={1} medalColor="text-brand" podiumHeight="h-32 md:h-48" isFirst statLabel={getUserStatValue(sortedRankings[0]).label} statValue={getUserStatValue(sortedRankings[0]).value} />
 
             {/* Rank 3 */}
-            <PodiumSlot user={rankings[2]} rank={3} medalColor="text-amber-700" podiumHeight="h-20 md:h-24" />
+            <PodiumSlot user={sortedRankings[2]} rank={3} medalColor="text-amber-700" podiumHeight="h-20 md:h-24" statLabel={getUserStatValue(sortedRankings[2]).label} statValue={getUserStatValue(sortedRankings[2]).value} />
           </section>
         )}
 
@@ -156,12 +174,14 @@ export default function Rankings() {
             <div className="flex justify-center py-10">
               <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : rankings.length > 3 ? (
+          ) : sortedRankings.length > 3 ? (
             <Card
               padding="none"
               className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden"
             >
-              {rankings.slice(3).map((user, index) => (
+              {sortedRankings.slice(3).map((user, index) => {
+                const stat = getUserStatValue(user);
+                return (
                 <div
                   key={user.uid}
                   className={`p-4 flex items-center gap-4 hover:bg-surface-soft transition-colors group cursor-pointer ${
@@ -197,12 +217,13 @@ export default function Rankings() {
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold text-brand">{(user.xp || 0).toLocaleString()}</p>
-                    <p className="text-[8px] font-black text-text-dim uppercase tracking-widest">XP</p>
+                    <p className="text-sm font-bold text-brand">{stat.value}</p>
+                    <p className="text-[8px] font-black text-text-dim uppercase tracking-widest">{stat.label}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-text-muted group-hover:text-brand transition-colors flex-shrink-0" />
                 </div>
-              ))}
+                );
+              })}
             </Card>
           ) : !loading && rankings.length === 0 ? (
             <div className="text-center py-20 space-y-4">
@@ -253,10 +274,10 @@ export default function Rankings() {
                   </div>
                 </div>
 
-                {/* XP total */}
+                {/* Stat total */}
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-brand">{(profile.xp || 0).toLocaleString()}</p>
-                  <p className="text-[8px] font-black text-text-dim uppercase tracking-widest">XP</p>
+                  <p className="text-sm font-bold text-brand">{profile ? getUserStatValue(profile).value : '0'}</p>
+                  <p className="text-[8px] font-black text-text-dim uppercase tracking-widest">{profile ? getUserStatValue(profile).label : 'XP'}</p>
                 </div>
               </div>
 
@@ -278,6 +299,8 @@ interface PodiumSlotProps {
   medalColor: string;
   podiumHeight: string;
   isFirst?: boolean;
+  statValue: string;
+  statLabel: string;
 }
 
 const rankBorderColors: Record<number, string> = {
@@ -298,7 +321,7 @@ const rankPodiumBg: Record<number, string> = {
   3: 'bg-surface-soft/50 border-x border-t border-border-subtle',
 };
 
-function PodiumSlot({ user, rank, medalColor, podiumHeight, isFirst }: PodiumSlotProps) {
+function PodiumSlot({ user, rank, medalColor, podiumHeight, isFirst, statValue, statLabel }: PodiumSlotProps) {
   const avatarSize = isFirst
     ? 'w-20 h-20 md:w-32 md:h-32 rounded-2xl md:rounded-[2.5rem]'
     : 'w-16 h-16 md:w-24 md:h-24 rounded-2xl md:rounded-[2rem]';
@@ -341,7 +364,7 @@ function PodiumSlot({ user, rank, medalColor, podiumHeight, isFirst }: PodiumSlo
           {user.displayName}
         </p>
         <p className="text-[9px] md:text-[10px] font-black text-brand uppercase tracking-widest">
-          {(user.xp || 0).toLocaleString()} XP
+          {statValue} {statLabel}
         </p>
         <LevelBadge level={user.level || 1} size="xs" />
       </div>

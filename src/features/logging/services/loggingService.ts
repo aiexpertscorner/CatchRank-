@@ -11,7 +11,8 @@ import {
   getDocs,
   getDoc,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  increment
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Catch, Session, Spot, UserProfile } from '../../../types';
