@@ -25,7 +25,7 @@ export default function Logo({
   // Use JPEG logos from public/ (rename from WhatsApp exports)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const base = (import.meta as any).env?.BASE_URL ?? '/CatchRank-/';
-  const src = `${base}${withText ? 'logo-text.jpeg' : 'logo-icon.jpeg'}`;
+  const src = `${import.meta.env.BASE_URL}${withText ? 'logo-full.svg' : 'logo-icon.svg'}`;
   const alt = withText ? 'CatchRank logo' : 'CatchRank icon';
 
   if (!imgError) {
