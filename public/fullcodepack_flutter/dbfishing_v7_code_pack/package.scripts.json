@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "bol:feed": "node scripts/bol/01_import_bol_feed.mjs",
+    "bol:discover": "node scripts/bol/02_discover_bol_products.mjs",
+    "bol:enrich": "node scripts/bol/03_enrich_bol_products.mjs",
+    "products:normalize": "node scripts/bol/04_normalize_products.mjs",
+    "products:score": "node scripts/bol/05_score_products.mjs",
+    "products:clusters": "node scripts/bol/06_build_product_clusters.mjs",
+    "pages:best": "node scripts/bol/07_build_best_pages.mjs",
+    "pages:compare": "node scripts/bol/08_build_compare_candidates.mjs",
+    "pages:links": "node scripts/bol/09_build_internal_links.mjs"
+  }
+}
