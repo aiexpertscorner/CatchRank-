@@ -1,0 +1,22 @@
+{
+  "name": "CatchRank",
+  "short_name": "CatchRank",
+  "description": "Slim sportvissen — log, leer, vang meer",
+  "start_url": "/CatchRank-/#/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/CatchRank-/logo-icon.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/CatchRank-/logo-icon.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

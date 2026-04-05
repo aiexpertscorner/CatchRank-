@@ -92,7 +92,7 @@ export default function Profile() {
         <section className="relative">
           <Card className="bg-surface-card border-none overflow-hidden rounded-2xl md:rounded-[2.5rem] shadow-premium">
             {/* Cover Image Placeholder */}
-            <div className="h-32 md:h-48 bg-gradient-to-r from-brand/20 via-brand/10 to-transparent relative">
+            <div className="h-24 md:h-40 bg-gradient-to-r from-brand/20 via-brand/10 to-transparent relative">
               <div className="absolute inset-0 bg-black/20" />
               <div className="absolute bottom-4 right-4 flex gap-2">
                 <Button variant="secondary" size="sm" className="bg-black/40 backdrop-blur-md border-white/10 text-white h-9 px-4 rounded-xl">
@@ -106,7 +106,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div className="px-6 md:px-10 pb-8 md:pb-12 -mt-12 md:-mt-16 relative z-10">
+            <div className="px-6 md:px-10 pb-8 md:pb-12 -mt-10 md:-mt-14 relative z-10">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-8 text-center md:text-left">
                   <div className="relative group">
