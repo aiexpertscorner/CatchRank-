@@ -23,7 +23,9 @@ import Onboarding from './features/auth/screens/Onboarding';
 import Profile from './features/auth/screens/Profile';
 import Settings from './features/auth/screens/Settings';
 import Catches from './features/logging/screens/Catches';
+import CatchDetail from './features/logging/screens/CatchDetail';
 import Sessions from './features/logging/screens/Sessions';
+import SessionDetail from './features/logging/screens/SessionDetail';
 import Spots from './features/spots/screens/Spots';
 import SpotDetail from './features/spots/screens/SpotDetail';
 import Gear from './features/gear/screens/Gear';
@@ -183,7 +185,9 @@ export default function App() {
             <Route element={user ? (showOnboarding ? <Navigate to="/onboarding" /> : <AppShell />) : <Navigate to="/login" />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/catches" element={<Catches />} />
+              <Route path="/catches/:id" element={<CatchDetail />} />
               <Route path="/sessions" element={<Sessions />} />
+              <Route path="/sessions/:id" element={<SessionDetail />} />
               <Route path="/spots" element={<Spots />} />
               <Route path="/spots/:id" element={<SpotDetail />} />
               <Route path="/stats" element={<Stats />} />

@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  ChevronRight, 
-  Fish, 
-  Calendar, 
-  MapPin, 
+import {
+  Plus,
+  Search,
+  Filter,
+  ChevronRight,
+  Fish,
+  Calendar,
+  MapPin,
   TrendingUp,
   Grid,
   List as ListIcon,
   MoreVertical,
   Edit2,
   Trash2,
-  Share2
+  Share2,
+  Camera
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
@@ -25,6 +26,7 @@ import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { CatchForm } from '../../../components/CatchForm';
 
@@ -36,6 +38,7 @@ import { CatchForm } from '../../../components/CatchForm';
 
 export default function Catches() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [catches, setCatches] = useState<Catch[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -92,13 +95,23 @@ export default function Catches() {
         title="Mijn Vangsten" 
         subtitle={`${catches.length} vangsten gelogd`}
         actions={
-          <Button 
-            icon={<Plus className="w-4 h-4" />} 
-            onClick={() => setIsQuickCatchOpen(true)}
-            className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
-          >
-            Nieuwe Vangst
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              icon={<Camera className="w-4 h-4" />}
+              onClick={() => setIsQuickCatchOpen(true)}
+              className="rounded-xl h-11 px-4 font-bold hidden sm:flex"
+            >
+              Quick
+            </Button>
+            <Button
+              icon={<Plus className="w-4 h-4" />}
+              onClick={() => { setEditingCatch(null); setIsCatchFormOpen(true); }}
+              className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+            >
+              Vangst Loggen
+            </Button>
+          </div>
         }
       />
 
@@ -161,7 +174,7 @@ export default function Catches() {
                 animate={{ opacity: 1, scale: 1 }}
               >
                 {viewMode === 'grid' ? (
-                  <Card padding="none" hoverable className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden h-full flex flex-col">
+                  <Card padding="none" hoverable className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden h-full flex flex-col cursor-pointer" onClick={() => c.id && navigate(`/catches/${c.id}`)}>
                     <div className="aspect-square relative overflow-hidden bg-surface-soft">
                       {c.photoURL ? (
                         <img src={c.photoURL} alt={c.species} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
@@ -211,7 +224,7 @@ export default function Catches() {
                     </div>
                   </Card>
                 ) : (
-                  <Card className="p-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl group flex items-center gap-4">
+                  <Card className="p-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl group flex items-center gap-4 cursor-pointer" onClick={() => c.id && navigate(`/catches/${c.id}`)}>
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-soft flex-shrink-0 border border-border-subtle">
                       {c.photoURL ? (
                         <img src={c.photoURL} alt={c.species} className="w-full h-full object-cover" />
@@ -235,14 +248,14 @@ export default function Catches() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => { setEditingCatch(c); setIsCatchFormOpen(true); }}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingCatch(c); setIsCatchFormOpen(true); }}
                         className="p-2 text-text-muted hover:text-brand transition-colors"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button 
-                        onClick={() => c.id && handleDelete(c.id)}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); c.id && handleDelete(c.id); }}
                         className="p-2 text-text-muted hover:text-danger transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -258,7 +271,7 @@ export default function Catches() {
             <Fish className="w-12 h-12 text-brand/20 mx-auto mb-4" />
             <h3 className="text-xl font-bold mb-2 text-text-primary">Geen vangsten gevonden</h3>
             <p className="text-sm text-text-secondary mb-6">Pas je filters aan of log een nieuwe vangst.</p>
-            <Button onClick={() => setIsQuickCatchOpen(true)}>Nieuwe Vangst Loggen</Button>
+            <Button onClick={() => { setEditingCatch(null); setIsCatchFormOpen(true); }}>Vangst Loggen</Button>
           </Card>
         )}
       </div>

@@ -1,6 +1,7 @@
-import { 
-  X, 
-  MapPin, 
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  MapPin,
   Camera,
   Info,
   Save,
