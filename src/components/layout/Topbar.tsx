@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Search,
   Bell,
@@ -27,179 +27,335 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
+  const avatarSrc = useMemo(() => {
+    return (
+      profile?.photoURL ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.displayName || 'User')}&background=111827&color=ffffff`
+    );
+  }, [profile?.photoURL, profile?.displayName]);
+
   return (
-    <header className="relative h-20 bg-surface border-b border-border-subtle px-4 md:px-8 flex items-center justify-between sticky top-0 z-50">
-      {/* Mobile: Left Logo */}
-      <div className="flex items-center md:hidden z-10">
-        <Logo size="lg" withText={false} />
-      </div>
-
-      {/* Desktop: Search Bar */}
-      <div
-        className={cn(
-          'hidden md:flex items-center gap-3 px-5 py-3 bg-surface-soft rounded-2xl border transition-all duration-300 w-full max-w-md',
-          isSearchFocused ? 'border-accent ring-2 ring-accent/10' : 'border-border-subtle'
-        )}
-      >
-        <Search
-          className={cn(
-            'w-5 h-5 transition-colors',
-            isSearchFocused ? 'text-accent' : 'text-text-muted'
-          )}
-        />
-        <input
-          type="text"
-          placeholder="Zoek vangsten, sessies of vissers..."
-          className="bg-transparent border-none outline-none w-full text-sm font-medium text-text-primary placeholder:text-text-muted/60"
-          onFocus={() => setIsSearchFocused(true)}
-          onBlur={() => setIsSearchFocused(false)}
-        />
-        <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-surface border border-border-subtle rounded-lg text-[9px] font-black text-text-muted uppercase tracking-widest">
-          <span className="opacity-50"></span>K
-        </div>
-      </div>
-
-      {/* Desktop: Active Session Header */}
-      <div className="hidden md:flex">
-        <ActiveSessionHeader />
-      </div>
-
-      {/* Mobile: Centered Notification Bell */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center md:hidden z-10">
-        <button className="relative w-10 h-10 flex items-center justify-center hover:bg-surface-soft rounded-xl transition-all group border border-transparent active:scale-95">
-          <Bell className="w-5 h-5 text-text-secondary group-hover:text-brand transition-colors" />
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-danger border-2 border-surface rounded-full shadow-sm"></span>
-        </button>
-      </div>
-
-      {/* Right Side */}
-      <div className="flex items-center gap-2 md:gap-4 z-10">
-        {/* Desktop: Quick Action Button */}
-        <div className="hidden md:block">
-          <QuickActionMenu className="scale-90" />
+    <header className="sticky top-0 z-50 h-20 border-b border-border-subtle bg-surface/95 backdrop-blur-xl supports-[backdrop-filter]:bg-surface/85">
+      {/* MOBILE */}
+      <div className="relative flex h-full items-center px-4 md:hidden">
+        {/* Left: Logo zone with same visual footprint as right controls */}
+        <div className="absolute left-4 top-1/2 z-10 -translate-y-1/2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.04] bg-surface-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.18)]">
+            <Logo size="lg" withText={false} />
+          </div>
         </div>
 
-        {/* Desktop: Notifications */}
-        <button className="hidden md:flex relative w-10 h-10 items-center justify-center hover:bg-surface-soft rounded-xl transition-all group border border-transparent active:scale-95">
-          <Bell className="w-5 h-5 text-text-secondary group-hover:text-brand transition-colors" />
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-danger border-2 border-surface rounded-full shadow-sm"></span>
-        </button>
+        {/* Center: Premium subtle bell */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="pointer-events-auto">
+            <button
+              className="group relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.05] bg-surface-soft/72 shadow-[0_4px_18px_rgba(0,0,0,0.14)] transition-all duration-200 active:scale-95"
+              aria-label="Meldingen"
+              type="button"
+            >
+              <Bell className="h-[18px] w-[18px] text-text-secondary transition-colors duration-200 group-hover:text-text-primary" />
+              <span className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full border border-surface bg-danger shadow-[0_0_0_2px_rgba(17,24,39,0.65)]" />
+            </button>
+          </div>
+        </div>
 
-        {/* Profile Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2 p-0.5 hover:bg-surface-soft rounded-2xl transition-all group border border-transparent active:scale-95"
-          >
-            <div className="relative">
-              <img
-                src={profile?.photoURL || `https://ui-avatars.com/api/?name=${profile?.displayName || 'User'}`}
-                alt="Profile"
-                className="w-9 h-9 rounded-xl border-2 border-brand/10 shadow-sm object-cover"
-              />
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-success border-2 border-surface rounded-full shadow-sm"></div>
-            </div>
-            <ChevronDown
-              className={cn(
-                'hidden lg:block w-4 h-4 text-text-muted transition-transform duration-300',
-                isProfileOpen && 'rotate-180'
+        {/* Right controls */}
+        <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2">
+          {/* Profile */}
+          <div className="relative">
+            <button
+              onClick={() => setIsProfileOpen((v) => !v)}
+              className="group flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.04] bg-surface-soft/80 p-0.5 shadow-[0_4px_20px_rgba(0,0,0,0.18)] transition-all duration-200 active:scale-95"
+              aria-label="Profielmenu"
+              type="button"
+            >
+              <div className="relative">
+                <img
+                  src={avatarSrc}
+                  alt="Profile"
+                  className="h-9 w-9 rounded-xl border border-brand/10 object-cover shadow-sm"
+                />
+                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-success shadow-sm" />
+              </div>
+            </button>
+
+            <AnimatePresence>
+              {isProfileOpen && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsProfileOpen(false)}
+                    className="fixed inset-0 z-40"
+                  />
+
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute right-0 z-50 mt-3 w-64 overflow-hidden rounded-2xl border border-border-subtle bg-surface shadow-2xl"
+                  >
+                    <div className="border-b border-border-subtle bg-surface-soft/50 p-6">
+                      <div className="mb-6 flex items-center gap-4">
+                        <img
+                          src={avatarSrc}
+                          alt="Profile"
+                          className="h-14 w-14 rounded-2xl border-2 border-white shadow-premium object-cover"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate tracking-tight font-black text-text-primary">
+                            {profile?.displayName || 'Gebruiker'}
+                          </p>
+                          <p className="truncate text-xs font-medium text-text-muted">
+                            {profile?.email || 'Geen e-mail'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-accent/10 bg-accent/10 p-3 text-center">
+                          <p className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-accent">
+                            XP
+                          </p>
+                          <p className="text-base font-black text-accent">
+                            {profile?.xp?.toLocaleString?.() ?? 0}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-warning/10 bg-warning/10 p-3 text-center">
+                          <p className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-warning">
+                            Rank
+                          </p>
+                          <p className="text-base font-black text-warning">#12</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2">
+                      <button
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface-soft"
+                        type="button"
+                      >
+                        <User className="h-4 w-4" />
+                        Mijn Profiel
+                      </button>
+
+                      <button
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface-soft"
+                        type="button"
+                      >
+                        <Settings className="h-4 w-4" />
+                        Instellingen
+                      </button>
+
+                      <button
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface-soft"
+                        type="button"
+                      >
+                        <Trophy className="h-4 w-4" />
+                        Prestaties
+                      </button>
+
+                      <div className="mx-2 my-2 h-px bg-border-subtle" />
+
+                      <button
+                        onClick={logout}
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-danger-soft hover:text-danger"
+                        type="button"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Uitloggen
+                      </button>
+                    </div>
+                  </motion.div>
+                </>
               )}
-            />
+            </AnimatePresence>
+          </div>
+
+          {/* Menu */}
+          <button
+            onClick={onMenuClick}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.04] bg-surface-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.18)] transition-all duration-200 active:scale-95"
+            aria-label={isMenuOpen ? 'Sluit menu' : 'Open menu'}
+            type="button"
+          >
+            {isMenuOpen ? (
+              <X className="h-[22px] w-[22px] text-text-primary" />
+            ) : (
+              <Menu className="h-[22px] w-[22px] text-text-primary" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* DESKTOP */}
+      <div className="hidden h-full items-center justify-between gap-6 px-8 md:flex">
+        {/* Search */}
+        <div
+          className={cn(
+            'flex w-full max-w-md items-center gap-3 rounded-2xl border bg-surface-soft px-5 py-3 transition-all duration-300',
+            isSearchFocused ? 'border-accent ring-2 ring-accent/10' : 'border-border-subtle'
+          )}
+        >
+          <Search
+            className={cn(
+              'h-5 w-5 transition-colors',
+              isSearchFocused ? 'text-accent' : 'text-text-muted'
+            )}
+          />
+          <input
+            type="text"
+            placeholder="Zoek vangsten, sessies of vissers..."
+            className="w-full border-none bg-transparent text-sm font-medium text-text-primary outline-none placeholder:text-text-muted/60"
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
+          />
+          <div className="hidden items-center gap-1 rounded-lg border border-border-subtle bg-surface px-2 py-1 text-[9px] font-black uppercase tracking-widest text-text-muted lg:flex">
+            <span className="opacity-50"></span>K
+          </div>
+        </div>
+
+        {/* Active session */}
+        <div className="flex-shrink-0">
+          <ActiveSessionHeader />
+        </div>
+
+        {/* Desktop right */}
+        <div className="flex flex-shrink-0 items-center gap-4">
+          <QuickActionMenu className="scale-90" />
+
+          <button
+            className="group relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.05] bg-surface-soft/75 shadow-[0_4px_18px_rgba(0,0,0,0.12)] transition-all duration-200 active:scale-95"
+            aria-label="Meldingen"
+            type="button"
+          >
+            <Bell className="h-[18px] w-[18px] text-text-secondary transition-colors duration-200 group-hover:text-text-primary" />
+            <span className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full border border-surface bg-danger shadow-[0_0_0_2px_rgba(17,24,39,0.55)]" />
           </button>
 
-          <AnimatePresence>
-            {isProfileOpen && (
-              <>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsProfileOpen(false)}
-                  className="fixed inset-0 z-40"
+          <div className="relative">
+            <button
+              onClick={() => setIsProfileOpen((v) => !v)}
+              className="group flex items-center gap-2 rounded-2xl border border-white/[0.04] bg-surface-soft/80 p-0.5 pr-2 shadow-[0_4px_20px_rgba(0,0,0,0.16)] transition-all duration-200 active:scale-95"
+              aria-label="Profielmenu"
+              type="button"
+            >
+              <div className="relative">
+                <img
+                  src={avatarSrc}
+                  alt="Profile"
+                  className="h-9 w-9 rounded-xl border border-brand/10 object-cover shadow-sm"
                 />
+                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-success shadow-sm" />
+              </div>
 
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                  className="absolute right-0 mt-3 w-64 bg-surface rounded-2xl shadow-2xl border border-border-subtle overflow-hidden z-50"
-                >
-                  <div className="p-6 bg-surface-soft/50 border-b border-border-subtle">
-                    <div className="flex items-center gap-4 mb-6">
-                      <img
-                        src={profile?.photoURL || `https://ui-avatars.com/api/?name=${profile?.displayName || 'User'}`}
-                        alt="Profile"
-                        className="w-14 h-14 rounded-2xl border-2 border-white shadow-premium"
-                      />
-                      <div className="min-w-0">
-                        <p className="font-black text-text-primary tracking-tight truncate">
-                          {profile?.displayName || 'Gebruiker'}
-                        </p>
-                        <p className="text-xs font-medium text-text-muted truncate">
-                          {profile?.email || 'Geen e-mail'}
-                        </p>
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-text-muted transition-transform duration-300',
+                  isProfileOpen && 'rotate-180'
+                )}
+              />
+            </button>
+
+            <AnimatePresence>
+              {isProfileOpen && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsProfileOpen(false)}
+                    className="fixed inset-0 z-40"
+                  />
+
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute right-0 z-50 mt-3 w-64 overflow-hidden rounded-2xl border border-border-subtle bg-surface shadow-2xl"
+                  >
+                    <div className="border-b border-border-subtle bg-surface-soft/50 p-6">
+                      <div className="mb-6 flex items-center gap-4">
+                        <img
+                          src={avatarSrc}
+                          alt="Profile"
+                          className="h-14 w-14 rounded-2xl border-2 border-white shadow-premium object-cover"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate tracking-tight font-black text-text-primary">
+                            {profile?.displayName || 'Gebruiker'}
+                          </p>
+                          <p className="truncate text-xs font-medium text-text-muted">
+                            {profile?.email || 'Geen e-mail'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-accent/10 bg-accent/10 p-3 text-center">
+                          <p className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-accent">
+                            XP
+                          </p>
+                          <p className="text-base font-black text-accent">
+                            {profile?.xp?.toLocaleString?.() ?? 0}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-warning/10 bg-warning/10 p-3 text-center">
+                          <p className="mb-1 text-[9px] font-black uppercase tracking-[0.2em] text-warning">
+                            Rank
+                          </p>
+                          <p className="text-base font-black text-warning">#12</p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-accent/10 p-3 rounded-2xl text-center border border-accent/10">
-                        <p className="text-[9px] font-black text-accent uppercase tracking-[0.2em] mb-1">
-                          XP
-                        </p>
-                        <p className="text-base font-black text-accent">
-                          {profile?.xp?.toLocaleString?.() ?? 0}
-                        </p>
-                      </div>
+                    <div className="p-2">
+                      <button
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface-soft"
+                        type="button"
+                      >
+                        <User className="h-4 w-4" />
+                        Mijn Profiel
+                      </button>
 
-                      <div className="bg-warning/10 p-3 rounded-2xl text-center border border-warning/10">
-                        <p className="text-[9px] font-black text-warning uppercase tracking-[0.2em] mb-1">
-                          Rank
-                        </p>
-                        <p className="text-base font-black text-warning">#12</p>
-                      </div>
+                      <button
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface-soft"
+                        type="button"
+                      >
+                        <Settings className="h-4 w-4" />
+                        Instellingen
+                      </button>
+
+                      <button
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface-soft"
+                        type="button"
+                      >
+                        <Trophy className="h-4 w-4" />
+                        Prestaties
+                      </button>
+
+                      <div className="mx-2 my-2 h-px bg-border-subtle" />
+
+                      <button
+                        onClick={logout}
+                        className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-danger-soft hover:text-danger"
+                        type="button"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Uitloggen
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="p-2">
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-soft transition-all text-sm font-semibold text-text-secondary">
-                      <User className="w-4 h-4" />
-                      Mijn Profiel
-                    </button>
-
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-soft transition-all text-sm font-semibold text-text-secondary">
-                      <Settings className="w-4 h-4" />
-                      Instellingen
-                    </button>
-
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-soft transition-all text-sm font-semibold text-text-secondary">
-                      <Trophy className="w-4 h-4" />
-                      Prestaties
-                    </button>
-
-                    <div className="h-px bg-border-subtle my-2 mx-2" />
-
-                    <button
-                      onClick={logout}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-danger-soft hover:text-danger transition-all text-sm font-semibold text-text-secondary"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Uitloggen
-                    </button>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-
-        {/* Mobile: Menu Button Right */}
-        <button
-          onClick={onMenuClick}
-          className="p-2 hover:bg-surface-soft rounded-xl transition-colors md:hidden"
-          aria-label={isMenuOpen ? 'Sluit menu' : 'Open menu'}
-        >
-          {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
       </div>
     </header>
   );
