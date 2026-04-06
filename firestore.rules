@@ -149,15 +149,16 @@ service cloud.firestore {
     }
 
     function isValidCatch(data) {
+      // userId must match authenticated user, status must be valid enum.
+      // species is optional (quickCatch starts without species — draft).
+      // photoURL can be base64 (data:image/...) or https:// — validated at app level only.
       return data.userId == request.auth.uid &&
-             data.species is string && data.species.size() > 0 &&
-             data.status in ['draft', 'complete', 'pending'] &&
-             (!('photoURL' in data) || isValidUrl(data.photoURL));
+             data.status in ['draft', 'complete', 'pending'];
     }
 
     function isValidSession(data) {
       return data.ownerUserId == request.auth.uid &&
-             data.status in ['active', 'completed', 'draft', 'live', 'paused'];
+             data.status in ['active', 'completed', 'draft', 'live', 'paused', 'ended', 'planned', 'pending_acceptance', 'archived'];
     }
 
     function isValidSpot(data) {

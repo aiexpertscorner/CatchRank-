@@ -47,14 +47,14 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
   };
 
   const handleQuickSave = async () => {
-    if (!profile || !photo) return;
+    if (!profile) return;
     setLoading(true);
     try {
       // In a real app, you'd upload the photo to Storage first.
       // For this demo, we'll use the base64 string.
       // Inherit spotId from active session if available
       const sessionSpotId = activeSessionId ? (await loggingService.getSession(activeSessionId))?.activeSpotId : undefined;
-      const catchId = await loggingService.quickCatch(profile.uid, photo, sessionSpotId);
+      const catchId = await loggingService.quickCatch(profile.uid, photo ?? '', sessionSpotId);
       
       if (activeSessionId) {
         await loggingService.linkCatchToSession(catchId, activeSessionId, sessionSpotId);
@@ -200,7 +200,16 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                     className="space-y-8 sm:space-y-10"
                   >
                     <div className="aspect-square w-full rounded-[2.5rem] sm:rounded-[3rem] overflow-hidden border border-border-subtle shadow-premium bg-surface-soft relative group">
-                      {photo && <img src={photo} alt="Preview" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />}
+                      {photo ? (
+                        <img src={photo} alt="Preview" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-surface-card">
+                          <div className="w-20 h-20 rounded-2xl bg-accent/10 flex items-center justify-center">
+                            <Fish className="w-10 h-10 text-accent" />
+                          </div>
+                          <p className="text-sm font-bold text-text-muted">Geen foto — concept opgeslagen</p>
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                       <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 right-6 sm:left-8 text-white opacity-0 group-hover:opacity-100 transition-all duration-500 translate-y-4 group-hover:translate-y-0">
                         <p className="text-xs sm:text-sm font-bold flex items-center gap-2">
@@ -254,25 +263,45 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-6 sm:p-8 bg-surface-soft/30 border-t border-border-subtle flex gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-8">
-              {step === 'confirm' && (
-                <Button 
-                  variant="ghost" 
-                  className="flex-1 h-14 sm:h-16 text-text-muted hover:text-primary font-black rounded-2xl text-sm sm:text-base"
-                  onClick={() => setStep('upload')}
-                  disabled={loading}
-                >
-                  Opnieuw
-                </Button>
+            <div className="p-6 sm:p-8 bg-surface-soft/30 border-t border-border-subtle flex gap-3 sm:gap-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-8">
+              {step === 'upload' ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="flex-1 h-12 sm:h-14 text-text-muted hover:text-primary font-bold rounded-2xl text-xs sm:text-sm"
+                    onClick={() => setStep('confirm')}
+                    disabled={loading}
+                  >
+                    Overslaan
+                  </Button>
+                  <Button
+                    className="flex-[2] h-12 sm:h-14 text-base sm:text-lg rounded-2xl shadow-premium-accent font-black transition-all active:scale-95"
+                    onClick={() => fileInputRef.current?.click()}
+                    icon={<Camera className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  >
+                    Foto Kiezen
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="flex-1 h-12 sm:h-14 text-text-muted hover:text-primary font-bold rounded-2xl text-xs sm:text-sm"
+                    onClick={() => setStep('upload')}
+                    disabled={loading}
+                  >
+                    Opnieuw
+                  </Button>
+                  <Button
+                    className="flex-[2] h-12 sm:h-14 text-base sm:text-lg rounded-2xl shadow-premium-accent font-black transition-all active:scale-95"
+                    onClick={handleQuickSave}
+                    isLoading={loading}
+                    icon={<Check className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  >
+                    Snel Opslaan
+                  </Button>
+                </>
               )}
-              <Button 
-                className="flex-[2] h-14 sm:h-16 text-lg sm:text-xl rounded-2xl shadow-premium-accent font-black transition-all active:scale-95"
-                onClick={step === 'upload' ? () => fileInputRef.current?.click() : handleQuickSave}
-                loading={loading}
-                icon={step === 'upload' ? <Camera className="w-6 h-6 sm:w-7 sm:h-7" /> : <Check className="w-6 h-6 sm:w-7 sm:h-7" />}
-              >
-                {step === 'upload' ? 'Foto Maken' : 'Snel Opslaan'}
-              </Button>
             </div>
           </motion.div>
         </div>

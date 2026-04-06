@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Plus, 
-  Clock, 
-  Calendar, 
-  MapPin, 
-  Fish, 
-  Zap, 
-  ChevronRight, 
+import {
+  Plus,
+  Clock,
+  Calendar,
+  MapPin,
+  Fish,
+  Zap,
+  ChevronRight,
   MoreVertical,
   Play,
   Square,
@@ -16,6 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { useAuth } from '../../../App';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Session } from '../../../types';
@@ -41,6 +42,7 @@ import { SessionInvitationCard } from '../../../components/SessionInvitationCard
 
 export default function Sessions() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const { activeSession, endActiveSession, pauseActiveSession, resumeActiveSession } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<Session[]>([]);
@@ -186,7 +188,7 @@ export default function Sessions() {
                     ))
                   ) : sessions.length > 0 ? (
                     sessions.filter(s => s.status !== 'live' && s.status !== 'paused').map((s) => (
-                      <Card key={s.id} className="p-4 md:p-6 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl md:rounded-2xl group cursor-pointer overflow-hidden relative">
+                      <Card key={s.id} className="p-4 md:p-6 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl md:rounded-2xl group cursor-pointer overflow-hidden relative" onClick={() => s.id && navigate(`/sessions/${s.id}`)}>
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
                           <div className="flex items-center gap-3 md:gap-4">
                             <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg md:rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-105 transition-transform duration-500">
