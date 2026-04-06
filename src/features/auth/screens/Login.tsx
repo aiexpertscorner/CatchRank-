@@ -1,15 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Lock, Fish } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { Button, Card } from '../../../components/ui/Base';
 import { toast } from 'sonner';
-
-/**
- * Login Screen
- * Part of the 'auth' feature module.
- * Handles user authentication via Google or Email.
- */
 
 export default function Login() {
   const { loginWithGoogle, loginWithEmail, registerWithEmail } = useAuth();
@@ -18,6 +12,10 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  const logoSrc = `${import.meta.env.BASE_URL}logo-full.png`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,10 +23,10 @@ export default function Login() {
 
     try {
       if (isRegister) {
-        await registerWithEmail(email, password);
+        await registerWithEmail(email, password, rememberMe);
         toast.success('Account aangemaakt!');
       } else {
-        await loginWithEmail(email, password);
+        await loginWithEmail(email, password, rememberMe);
         toast.success('Welkom terug!');
       }
     } catch (error: any) {
@@ -42,7 +40,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await loginWithGoogle();
+      await loginWithGoogle(rememberMe);
       toast.success('Welkom bij CatchRank!');
     } catch (error: any) {
       toast.error(error?.message || 'Fout bij inloggen met Google');
@@ -64,9 +62,13 @@ export default function Login() {
         className="w-full max-w-md relative z-10"
       >
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-surface-card rounded-[2rem] border border-border-subtle shadow-2xl mb-6 relative group">
-            <div className="absolute inset-0 bg-brand/10 blur-xl group-hover:bg-brand/20 transition-all rounded-full" />
-            <Fish className="w-10 h-10 text-brand relative z-10" />
+          <div className="inline-flex items-center justify-center px-6 py-5 bg-surface-card rounded-[2rem] border border-border-subtle shadow-2xl mb-6 relative group overflow-hidden">
+            <div className="absolute inset-0 bg-brand/10 blur-xl group-hover:bg-brand/20 transition-all" />
+            <img
+              src={logoSrc}
+              alt="CatchRank logo"
+              className="relative z-10 h-14 md:h-16 w-auto object-contain"
+            />
           </div>
 
           <h1 className="text-4xl font-krub font-bold text-text-primary tracking-tight uppercase mb-2">
@@ -92,6 +94,7 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-4 py-3.5 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
                     placeholder="naam@voorbeeld.nl"
+                    autoComplete="email"
                     required
                   />
                 </div>
@@ -104,15 +107,63 @@ export default function Login() {
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-4 py-3.5 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
+                    className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-12 py-3.5 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
                     placeholder="••••••••"
+                    autoComplete={isRegister ? 'new-password' : 'current-password'}
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                    aria-label={showPassword ? 'Verberg wachtwoord' : 'Toon wachtwoord'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="sr-only"
+                />
+                <span
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                    rememberMe
+                      ? 'bg-brand border-brand'
+                      : 'bg-bg-main border-border-subtle'
+                  }`}
+                >
+                  {rememberMe && <span className="w-2 h-2 rounded-sm bg-bg-main" />}
+                </span>
+                <span className="text-xs font-bold text-text-muted">
+                  Onthoud mij
+                </span>
+              </label>
+
+              {!isRegister && (
+                <button
+                  type="button"
+                  className="text-xs font-bold text-text-muted hover:text-brand transition-colors"
+                  onClick={() =>
+                    toast.info('Wachtwoord reset komt via Instellingen of aparte forgot-password flow.')
+                  }
+                >
+                  Wachtwoord vergeten?
+                </button>
+              )}
             </div>
 
             <Button
@@ -133,7 +184,9 @@ export default function Login() {
               <div className="w-full border-t border-border-subtle"></div>
             </div>
             <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest">
-              <span className="bg-surface-card px-4 text-text-dim">Of ga verder met</span>
+              <span className="bg-surface-card px-4 text-text-dim">
+                Of ga verder met
+              </span>
             </div>
           </div>
 
@@ -165,11 +218,17 @@ export default function Login() {
         </Card>
 
         <div className="mt-12 flex items-center justify-center gap-6 text-[10px] font-black text-text-dim uppercase tracking-widest">
-          <a href="#" className="hover:text-text-muted transition-colors">Privacy</a>
+          <a href="#" className="hover:text-text-muted transition-colors">
+            Privacy
+          </a>
           <div className="w-1 h-1 bg-border-subtle rounded-full" />
-          <a href="#" className="hover:text-text-muted transition-colors">Voorwaarden</a>
+          <a href="#" className="hover:text-text-muted transition-colors">
+            Voorwaarden
+          </a>
           <div className="w-1 h-1 bg-border-subtle rounded-full" />
-          <a href="#" className="hover:text-text-muted transition-colors">Support</a>
+          <a href="#" className="hover:text-text-muted transition-colors">
+            Support
+          </a>
         </div>
       </motion.div>
     </div>
