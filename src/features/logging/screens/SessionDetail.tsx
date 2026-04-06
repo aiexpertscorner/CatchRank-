@@ -6,7 +6,6 @@ import {
   Fish,
   MapPin,
   Zap,
-  Users,
   Calendar,
   Play,
   CheckCircle2,
@@ -17,7 +16,7 @@ import {
   Thermometer,
   Wind,
   User,
-  Trophy
+  Trophy,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { doc, getDoc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
@@ -26,26 +25,118 @@ import { Session, Catch, Spot, UserProfile } from '../../../types';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Badge } from '../../../components/ui/Base';
 import { motion } from 'motion/react';
-import { format, formatDuration, intervalToDuration } from 'date-fns';
+import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 
-const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warning' | 'neutral' | 'accent' | 'secondary'; icon: React.ReactNode }> = {
-  live:    { label: 'Live',      variant: 'success',  icon: <Play className="w-3 h-3" /> },
-  paused:  { label: 'Gepauzeerd', variant: 'warning', icon: <Pause className="w-3 h-3" /> },
-  ended:   { label: 'Beëindigd', variant: 'secondary', icon: <CheckCircle2 className="w-3 h-3" /> },
-  completed: { label: 'Voltooid', variant: 'accent',  icon: <Trophy className="w-3 h-3" /> },
-  draft:   { label: 'Concept',   variant: 'neutral',  icon: <Archive className="w-3 h-3" /> },
-  archived: { label: 'Archief',  variant: 'neutral',  icon: <Archive className="w-3 h-3" /> },
+const COLLECTIONS = {
+  SESSIONS: 'sessions_v2',
+  CATCHES: 'catches_v2',
+  SPOTS: 'spots_v2',
+  USERS: 'users',
+} as const;
+
+const STATUS_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: 'success' | 'warning' | 'neutral' | 'accent' | 'secondary';
+    icon: React.ReactNode;
+  }
+> = {
+  live: {
+    label: 'Live',
+    variant: 'success',
+    icon: <Play className="w-3 h-3" />,
+  },
+  paused: {
+    label: 'Gepauzeerd',
+    variant: 'warning',
+    icon: <Pause className="w-3 h-3" />,
+  },
+  ended: {
+    label: 'Beëindigd',
+    variant: 'secondary',
+    icon: <CheckCircle2 className="w-3 h-3" />,
+  },
+  completed: {
+    label: 'Voltooid',
+    variant: 'accent',
+    icon: <Trophy className="w-3 h-3" />,
+  },
+  draft: {
+    label: 'Concept',
+    variant: 'neutral',
+    icon: <Archive className="w-3 h-3" />,
+  },
+  archived: {
+    label: 'Archief',
+    variant: 'neutral',
+    icon: <Archive className="w-3 h-3" />,
+  },
 };
 
-function formatDurationFromMinutes(minutes?: number): string {
-  if (!minutes || minutes <= 0) return '—';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}u`;
-  return `${h}u ${m}m`;
-}
+const getSessionStatus = (session: Partial<Session>) => {
+  if ((session as any).status) return (session as any).status;
+  if ((session as any).isActive === true) return 'live';
+  return 'completed';
+};
+
+const getSessionName = (session: Partial<Session>) =>
+  (session as any).name || (session as any).title || 'Vissessie';
+
+const getSessionDescription = (session: Partial<Session>) =>
+  (session as any).description || '';
+
+const getSessionOwnerId = (session: Partial<Session>) =>
+  (session as any).createdBy || (session as any).userId || (session as any).ownerUserId;
+
+const getSessionParticipantIds = (session: Partial<Session>) => {
+  const ownerId = getSessionOwnerId(session);
+  return Array.from(
+    new Set([
+      ...(ownerId ? [ownerId] : []),
+      ...(((session as any).participantIds || (session as any).participantUserIds || []) as string[]),
+    ])
+  );
+};
+
+const getSessionStart = (session: Partial<Session>) =>
+  (session as any).startTime || (session as any).startedAt || null;
+
+const getSessionEnd = (session: Partial<Session>) =>
+  (session as any).endTime || (session as any).endedAt || null;
+
+const getSessionSpotTimeline = (session: Partial<Session>) =>
+  ((session as any).spotTimeline || []) as Array<{
+    spotId: string;
+    name?: string;
+    arrivedAt?: any;
+    leftAt?: any;
+  }>;
+
+const getSessionWeatherStart = (session: Partial<Session>) =>
+  (session as any).weatherStart || (session as any).weatherSnapshotStart || null;
+
+const getSessionWeatherEnd = (session: Partial<Session>) =>
+  (session as any).weatherEnd || (session as any).weatherSnapshotEnd || null;
+
+const getSessionStats = (session: Partial<Session>) =>
+  (session as any).stats || (session as any).statsSummary || {};
+
+const getCatchImage = (c: Partial<Catch>) =>
+  (c as any).mainImage || (c as any).photoURL || '';
+
+const getCatchSpecies = (c: Partial<Catch>) =>
+  (c as any).speciesSpecific || (c as any).speciesGeneral || (c as any).species || 'Onbekend';
+
+const getSpotDisplayName = (spot?: Partial<Spot> | null) =>
+  (spot as any)?.title || (spot as any)?.name || 'Stek';
+
+const formatWeight = (weight?: number) => {
+  if (weight == null) return '--';
+  if (weight >= 1000) return `${(weight / 1000).toFixed(1)} kg`;
+  return `${weight} g`;
+};
 
 export default function SessionDetail() {
   const { id } = useParams<{ id: string }>();
@@ -63,48 +154,63 @@ export default function SessionDetail() {
 
     const fetchData = async () => {
       try {
-        // Load session
-        const sessionDoc = await getDoc(doc(db, 'sessions', id));
+        const sessionDoc = await getDoc(doc(db, COLLECTIONS.SESSIONS, id));
+
         if (!sessionDoc.exists()) {
           navigate('/sessions');
           return;
         }
+
         const sessionData = { id: sessionDoc.id, ...sessionDoc.data() } as Session;
         setSession(sessionData);
 
-        // Load catches in this session
         const catchQuery = query(
-          collection(db, 'catches'),
+          collection(db, COLLECTIONS.CATCHES),
           where('sessionId', '==', id),
           orderBy('timestamp', 'asc')
         );
         const catchSnap = await getDocs(catchQuery);
-        const catchList = catchSnap.docs.map(d => ({ id: d.id, ...d.data() } as Catch));
+        const catchList = catchSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Catch));
         setCatches(catchList);
 
-        // Load spots
-        const spotIds = Array.from(new Set([
-          ...(sessionData.linkedSpotIds ?? []),
-          ...(sessionData.spotTimeline ?? []).map(s => s.spotId),
-        ]));
+        const spotTimeline = getSessionSpotTimeline(sessionData);
+        const spotIds = Array.from(
+          new Set([
+            ...((((sessionData as any).linkedSpotIds || []) as string[])),
+            ...spotTimeline.map((s) => s.spotId),
+            ...(((sessionData as any).spotId ? [(sessionData as any).spotId] : []) as string[]),
+          ])
+        );
+
         if (spotIds.length > 0) {
-          const spotDocs = await Promise.all(spotIds.map(sid => getDoc(doc(db, 'spots', sid))));
+          const spotDocs = await Promise.all(
+            spotIds.map((sid) => getDoc(doc(db, COLLECTIONS.SPOTS, sid)))
+          );
+
           const spotMap: Record<string, Spot> = {};
-          spotDocs.forEach(d => {
-            if (d.exists()) spotMap[d.id] = { id: d.id, ...d.data() } as Spot;
+          spotDocs.forEach((d) => {
+            if (d.exists()) {
+              spotMap[d.id] = { id: d.id, ...d.data() } as Spot;
+            }
           });
           setSpots(spotMap);
+        } else {
+          setSpots({});
         }
 
-        // Load participant profiles
-        const participantIds = Array.from(new Set([
-          sessionData.ownerUserId,
-          ...(sessionData.participantUserIds ?? []),
-        ]));
-        const profileDocs = await Promise.all(participantIds.map(uid => getDoc(doc(db, 'users', uid))));
-        setParticipants(
-          profileDocs.filter(d => d.exists()).map(d => ({ uid: d.id, ...d.data() } as UserProfile))
-        );
+        const participantIds = getSessionParticipantIds(sessionData);
+        if (participantIds.length > 0) {
+          const profileDocs = await Promise.all(
+            participantIds.map((uid) => getDoc(doc(db, COLLECTIONS.USERS, uid)))
+          );
+          setParticipants(
+            profileDocs
+              .filter((d) => d.exists())
+              .map((d) => ({ uid: d.id, ...d.data() } as UserProfile))
+          );
+        } else {
+          setParticipants([]);
+        }
       } catch (err) {
         console.error('SessionDetail fetch error:', err);
       } finally {
@@ -127,18 +233,31 @@ export default function SessionDetail() {
 
   if (!session) return null;
 
-  const startedAt = session.startedAt?.toDate?.() ?? (session.startedAt ? new Date(session.startedAt) : null);
-  const endedAt = session.endedAt?.toDate?.() ?? (session.endedAt ? new Date(session.endedAt) : null);
-  const statusCfg = STATUS_CONFIG[session.status] ?? STATUS_CONFIG['ended'];
-  const totalXp = catches.reduce((sum, c) => sum + (c.xpEarned ?? 0), 0) + (session.statsSummary?.totalXp ?? 0);
-  const completeCatches = catches.filter(c => c.status === 'complete');
-  const speciesSet = new Set(catches.map(c => c.species).filter(Boolean));
-  const isOwner = session.ownerUserId === profile?.uid;
+  const startedAtRaw = getSessionStart(session);
+  const endedAtRaw = getSessionEnd(session);
+
+  const startedAt =
+    startedAtRaw?.toDate?.() ?? (startedAtRaw ? new Date(startedAtRaw) : null);
+  const endedAt =
+    endedAtRaw?.toDate?.() ?? (endedAtRaw ? new Date(endedAtRaw) : null);
+
+  const sessionStatus = getSessionStatus(session);
+  const statusCfg = STATUS_CONFIG[sessionStatus] ?? STATUS_CONFIG.completed;
+
+  const sessionStats = getSessionStats(session);
+  const totalXp =
+    catches.reduce((sum, c: any) => sum + (c.xpEarned ?? 0), 0) +
+    (sessionStats.totalXp ?? 0);
+
+  const speciesSet = new Set(catches.map((c) => getCatchSpecies(c)).filter(Boolean));
+  const isOwner = getSessionOwnerId(session) === profile?.uid;
+
+  const weatherStart = getSessionWeatherStart(session);
+  const weatherEnd = getSessionWeatherEnd(session);
 
   return (
     <PageLayout>
       <div className="max-w-2xl mx-auto pb-32 space-y-3">
-
         {/* Back Nav */}
         <div className="flex items-center justify-between mb-2 px-1">
           <button
@@ -155,13 +274,18 @@ export default function SessionDetail() {
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-black text-text-primary tracking-tight leading-tight truncate">
-                {session.title ?? (startedAt ? format(startedAt, "EEEE d MMMM", { locale: nl }) : 'Vissessie')}
+                {getSessionName(session)}
               </h1>
-              {session.description && (
-                <p className="text-sm text-text-muted mt-1 line-clamp-2">{session.description}</p>
+              {getSessionDescription(session) && (
+                <p className="text-sm text-text-muted mt-1 line-clamp-2">
+                  {getSessionDescription(session)}
+                </p>
               )}
             </div>
-            <Badge variant={statusCfg.variant} className="shrink-0 flex items-center gap-1">
+            <Badge
+              variant={statusCfg.variant}
+              className="shrink-0 flex items-center gap-1"
+            >
               {statusCfg.icon}
               {statusCfg.label}
             </Badge>
@@ -175,15 +299,19 @@ export default function SessionDetail() {
                 {format(startedAt, 'd MMMM yyyy HH:mm', { locale: nl })}
               </span>
             )}
-            {(session.durationMinutes ?? 0) > 0 && (
+
+            {(session as any).durationMinutes > 0 && (
               <span className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
-                {formatDurationFromMinutes(session.durationMinutes)}
+                {(session as any).durationMinutes} min
               </span>
             )}
+
             <span className="flex items-center gap-1.5">
               <Trophy className="w-3.5 h-3.5 text-accent" />
-              <span className="font-bold text-accent">{session.mode === 'live' ? 'Live' : 'Retro'}</span>
+              <span className="font-bold text-accent">
+                {(session as any).type || (session as any).mode || 'Sessie'}
+              </span>
             </span>
           </div>
         </Card>
@@ -191,15 +319,40 @@ export default function SessionDetail() {
         {/* Stats Strip */}
         <div className="grid grid-cols-4 gap-2">
           {[
-            { label: 'Vangsten', value: catches.length, icon: <Fish className="w-4 h-4 text-accent" />, accent: 'text-accent' },
-            { label: 'Soorten', value: speciesSet.size, icon: <Trophy className="w-4 h-4 text-warning" />, accent: 'text-warning' },
-            { label: 'Stekken', value: Object.keys(spots).length, icon: <MapPin className="w-4 h-4 text-blue-400" />, accent: 'text-blue-400' },
-            { label: 'XP', value: totalXp, icon: <Zap className="w-4 h-4 text-success" />, accent: 'text-success' },
+            {
+              label: 'Vangsten',
+              value: catches.length,
+              icon: <Fish className="w-4 h-4 text-accent" />,
+              accent: 'text-accent',
+            },
+            {
+              label: 'Soorten',
+              value: speciesSet.size,
+              icon: <Trophy className="w-4 h-4 text-warning" />,
+              accent: 'text-warning',
+            },
+            {
+              label: 'Stekken',
+              value: Object.keys(spots).length,
+              icon: <MapPin className="w-4 h-4 text-blue-400" />,
+              accent: 'text-blue-400',
+            },
+            {
+              label: 'XP',
+              value: totalXp,
+              icon: <Zap className="w-4 h-4 text-success" />,
+              accent: 'text-success',
+            },
           ].map((s) => (
-            <Card key={s.label} className="bg-surface-card border border-border-subtle rounded-xl p-3 text-center">
+            <Card
+              key={s.label}
+              className="bg-surface-card border border-border-subtle rounded-xl p-3 text-center"
+            >
               <div className="flex justify-center mb-1">{s.icon}</div>
               <p className={`text-lg font-black ${s.accent}`}>{s.value}</p>
-              <p className="text-[9px] font-bold text-text-muted uppercase tracking-wider">{s.label}</p>
+              <p className="text-[9px] font-bold text-text-muted uppercase tracking-wider">
+                {s.label}
+              </p>
             </Card>
           ))}
         </div>
@@ -207,16 +360,26 @@ export default function SessionDetail() {
         {/* Participants */}
         {participants.length > 0 && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
-            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">Deelnemers</h3>
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">
+              Deelnemers
+            </h3>
             <div className="space-y-2">
               {participants.map((p) => {
-                const userCatches = catches.filter(c => c.userId === p.uid);
-                const userXp = userCatches.reduce((sum, c) => sum + (c.xpEarned ?? 0), 0);
+                const userCatches = catches.filter((c) => c.userId === p.uid);
+                const userXp = userCatches.reduce((sum, c: any) => sum + (c.xpEarned ?? 0), 0);
+
                 return (
-                  <div key={p.uid} className="flex items-center gap-3 p-2.5 bg-surface-soft rounded-xl">
+                  <div
+                    key={p.uid}
+                    className="flex items-center gap-3 p-2.5 bg-surface-soft rounded-xl"
+                  >
                     <div className="w-9 h-9 rounded-xl overflow-hidden bg-surface border border-border-subtle shrink-0">
                       {p.photoURL ? (
-                        <img src={p.photoURL} alt={p.displayName} className="w-full h-full object-cover" />
+                        <img
+                          src={p.photoURL}
+                          alt={p.displayName}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <User className="w-4 h-4 text-text-muted" />
@@ -225,9 +388,16 @@ export default function SessionDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-text-primary truncate">
-                        {p.displayName} {p.uid === session.ownerUserId && <span className="text-[10px] text-accent font-black ml-1">• Eigenaar</span>}
+                        {p.displayName}
+                        {p.uid === getSessionOwnerId(session) && (
+                          <span className="text-[10px] text-accent font-black ml-1">
+                            • Eigenaar
+                          </span>
+                        )}
                       </p>
-                      <p className="text-[10px] text-text-muted">{userCatches.length} vangst{userCatches.length !== 1 ? 'en' : ''}</p>
+                      <p className="text-[10px] text-text-muted">
+                        {userCatches.length} vangst{userCatches.length !== 1 ? 'en' : ''}
+                      </p>
                     </div>
                     {userXp > 0 && (
                       <div className="flex items-center gap-1 shrink-0">
@@ -246,12 +416,18 @@ export default function SessionDetail() {
         {catches.length > 0 && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-black text-text-muted uppercase tracking-widest">Vangsten ({catches.length})</h3>
+              <h3 className="text-xs font-black text-text-muted uppercase tracking-widest">
+                Vangsten ({catches.length})
+              </h3>
             </div>
             <div className="space-y-2">
               {catches.map((c) => {
-                const catchTs = c.timestamp?.toDate?.() ?? (c.timestamp ? new Date(c.timestamp) : null);
-                const catcher = participants.find(p => p.uid === c.userId);
+                const catchTs =
+                  (c as any).timestamp?.toDate?.() ??
+                  ((c as any).timestamp ? new Date((c as any).timestamp) : null);
+
+                const catcher = participants.find((p) => p.uid === c.userId);
+
                 return (
                   <motion.div
                     key={c.id}
@@ -260,27 +436,53 @@ export default function SessionDetail() {
                     className="flex items-center gap-3 p-2.5 bg-surface-soft rounded-xl cursor-pointer hover:bg-surface-card transition-colors"
                   >
                     <div className="w-12 h-12 rounded-xl overflow-hidden bg-surface border border-border-subtle shrink-0">
-                      {c.photoURL ? (
-                        <img src={c.photoURL} alt={c.species} className="w-full h-full object-cover" />
+                      {getCatchImage(c) ? (
+                        <img
+                          src={getCatchImage(c)}
+                          alt={getCatchSpecies(c)}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <Fish className="w-5 h-5 text-accent/40" />
                         </div>
                       )}
                     </div>
+
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-text-primary truncate">{c.species || 'Onbekend'}</p>
+                      <p className="text-sm font-bold text-text-primary truncate">
+                        {getCatchSpecies(c)}
+                      </p>
                       <div className="flex items-center gap-2 text-[10px] text-text-muted">
-                        {c.weight && <span className="flex items-center gap-0.5"><Scale className="w-3 h-3" />{(c.weight/1000).toFixed(1)}kg</span>}
-                        {c.length && <span className="flex items-center gap-0.5"><Ruler className="w-3 h-3" />{c.length}cm</span>}
-                        {catcher && participants.length > 1 && <span className="text-accent/80 font-semibold">{catcher.displayName}</span>}
-                        {catchTs && <span>{format(catchTs, 'HH:mm', { locale: nl })}</span>}
+                        {(c as any).weight != null && (
+                          <span className="flex items-center gap-0.5">
+                            <Scale className="w-3 h-3" />
+                            {formatWeight((c as any).weight)}
+                          </span>
+                        )}
+                        {(c as any).length != null && (
+                          <span className="flex items-center gap-0.5">
+                            <Ruler className="w-3 h-3" />
+                            {(c as any).length}cm
+                          </span>
+                        )}
+                        {catcher && participants.length > 1 && (
+                          <span className="text-accent/80 font-semibold">
+                            {catcher.displayName}
+                          </span>
+                        )}
+                        {catchTs && (
+                          <span>{format(catchTs, 'HH:mm', { locale: nl })}</span>
+                        )}
                       </div>
                     </div>
-                    {(c.xpEarned ?? 0) > 0 && (
+
+                    {((c as any).xpEarned ?? 0) > 0 && (
                       <div className="flex items-center gap-0.5 shrink-0">
                         <Zap className="w-3 h-3 text-accent" />
-                        <span className="text-xs font-black text-accent">+{c.xpEarned}</span>
+                        <span className="text-xs font-black text-accent">
+                          +{(c as any).xpEarned}
+                        </span>
                       </div>
                     )}
                   </motion.div>
@@ -291,16 +493,26 @@ export default function SessionDetail() {
         )}
 
         {/* Spot Timeline */}
-        {(session.spotTimeline?.length ?? 0) > 0 && (
+        {getSessionSpotTimeline(session).length > 0 && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
-            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">Stek Tijdlijn</h3>
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">
+              Stek Tijdlijn
+            </h3>
             <div className="space-y-2">
-              {session.spotTimeline!.map((entry, i) => {
-                const arrAt = entry.arrivedAt?.toDate?.() ?? (entry.arrivedAt ? new Date(entry.arrivedAt) : null);
-                const leftAt = entry.leftAt?.toDate?.() ?? (entry.leftAt ? new Date(entry.leftAt) : null);
-                const spotCatches = catches.filter(c => c.spotId === entry.spotId);
+              {getSessionSpotTimeline(session).map((entry, i) => {
+                const arrAt =
+                  entry.arrivedAt?.toDate?.() ??
+                  (entry.arrivedAt ? new Date(entry.arrivedAt) : null);
+                const leftAt =
+                  entry.leftAt?.toDate?.() ??
+                  (entry.leftAt ? new Date(entry.leftAt) : null);
+                const spotCatches = catches.filter((c) => c.spotId === entry.spotId);
+
                 return (
-                  <div key={i} className="flex items-start gap-3 p-2.5 bg-surface-soft rounded-xl">
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 p-2.5 bg-surface-soft rounded-xl"
+                  >
                     <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
                       <MapPin className="w-4 h-4 text-blue-400" />
                     </div>
@@ -309,13 +521,21 @@ export default function SessionDetail() {
                         onClick={() => navigate(`/spots/${entry.spotId}`)}
                         className="text-sm font-bold text-text-primary hover:text-accent transition-colors truncate block"
                       >
-                        {entry.name ?? spots[entry.spotId]?.name ?? 'Stek'}
+                        {entry.name || getSpotDisplayName(spots[entry.spotId])}
                       </button>
                       <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
                         {arrAt && <span>{format(arrAt, 'HH:mm', { locale: nl })}</span>}
-                        {leftAt && <><span>→</span><span>{format(leftAt, 'HH:mm', { locale: nl })}</span></>}
+                        {leftAt && (
+                          <>
+                            <span>→</span>
+                            <span>{format(leftAt, 'HH:mm', { locale: nl })}</span>
+                          </>
+                        )}
                         {spotCatches.length > 0 && (
-                          <span className="text-accent font-semibold">{spotCatches.length} vangst{spotCatches.length !== 1 ? 'en' : ''}</span>
+                          <span className="text-accent font-semibold">
+                            {spotCatches.length} vangst
+                            {spotCatches.length !== 1 ? 'en' : ''}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -327,50 +547,61 @@ export default function SessionDetail() {
         )}
 
         {/* Weather snapshots */}
-        {(session.weatherSnapshotStart ?? session.weatherSnapshotEnd) && (
+        {(weatherStart || weatherEnd) && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
-            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">Weersomstandigheden</h3>
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">
+              Weersomstandigheden
+            </h3>
             <div className="grid grid-cols-2 gap-2">
-              {session.weatherSnapshotStart && (
+              {weatherStart && (
                 <div className="p-3 bg-surface-soft rounded-xl">
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-wider mb-2">Start</p>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-wider mb-2">
+                    Start
+                  </p>
                   <div className="space-y-1.5">
-                    {session.weatherSnapshotStart.temp != null && (
+                    {weatherStart.temp != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                         <Thermometer className="w-3.5 h-3.5 text-accent" />
-                        {session.weatherSnapshotStart.temp}°C
+                        {weatherStart.temp}°C
                       </div>
                     )}
-                    {session.weatherSnapshotStart.windSpeed != null && (
+                    {weatherStart.windSpeed != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                         <Wind className="w-3.5 h-3.5 text-blue-400" />
-                        {session.weatherSnapshotStart.windSpeed} km/u
+                        {weatherStart.windSpeed} km/u
                       </div>
                     )}
-                    {session.weatherSnapshotStart.description && (
-                      <p className="text-xs text-text-muted capitalize">{session.weatherSnapshotStart.description}</p>
+                    {weatherStart.description && (
+                      <p className="text-xs text-text-muted capitalize">
+                        {weatherStart.description}
+                      </p>
                     )}
                   </div>
                 </div>
               )}
-              {session.weatherSnapshotEnd && (
+
+              {weatherEnd && (
                 <div className="p-3 bg-surface-soft rounded-xl">
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-wider mb-2">Einde</p>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-wider mb-2">
+                    Einde
+                  </p>
                   <div className="space-y-1.5">
-                    {session.weatherSnapshotEnd.temp != null && (
+                    {weatherEnd.temp != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                         <Thermometer className="w-3.5 h-3.5 text-accent" />
-                        {session.weatherSnapshotEnd.temp}°C
+                        {weatherEnd.temp}°C
                       </div>
                     )}
-                    {session.weatherSnapshotEnd.windSpeed != null && (
+                    {weatherEnd.windSpeed != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                         <Wind className="w-3.5 h-3.5 text-blue-400" />
-                        {session.weatherSnapshotEnd.windSpeed} km/u
+                        {weatherEnd.windSpeed} km/u
                       </div>
                     )}
-                    {session.weatherSnapshotEnd.description && (
-                      <p className="text-xs text-text-muted capitalize">{session.weatherSnapshotEnd.description}</p>
+                    {weatherEnd.description && (
+                      <p className="text-xs text-text-muted capitalize">
+                        {weatherEnd.description}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -380,10 +611,14 @@ export default function SessionDetail() {
         )}
 
         {/* Notes */}
-        {session.notes && (
+        {(session as any).notes && typeof (session as any).notes === 'string' && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
-            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-2">Notities</h3>
-            <p className="text-sm text-text-secondary leading-relaxed">{session.notes}</p>
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-2">
+              Notities
+            </h3>
+            <p className="text-sm text-text-secondary leading-relaxed">
+              {(session as any).notes}
+            </p>
           </Card>
         )}
 
@@ -391,7 +626,9 @@ export default function SessionDetail() {
         {catches.length === 0 && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-8 text-center">
             <Fish className="w-10 h-10 text-accent/20 mx-auto mb-3" />
-            <p className="text-sm font-bold text-text-muted">Geen vangsten in deze sessie</p>
+            <p className="text-sm font-bold text-text-muted">
+              Geen vangsten in deze sessie
+            </p>
           </Card>
         )}
       </div>
