@@ -1,20 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { 
-  onAuthStateChanged, 
-  User, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
+import {
+  onAuthStateChanged,
+  User,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import { UserProfile } from './types';
 import { AppShell } from './components/layout/AppShell';
 import { Toaster } from 'sonner';
-import { ENV } from './config/env';
 
 // Feature-based Screens
 import Dashboard from './features/dashboard/screens/Dashboard';
@@ -37,6 +36,8 @@ import Tools from './features/tools/screens/Tools';
 import AskDick from './features/tools/screens/AskDick';
 import WeatherForecast from './features/weather/screens/WeatherForecast';
 
+import { SessionProvider } from './contexts/SessionContext';
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -56,8 +57,6 @@ export const useAuth = () => {
   return context;
 };
 
-import { SessionProvider } from './contexts/SessionContext';
-
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -65,34 +64,53 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
       setUser(firebaseUser);
-      if (firebaseUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            setProfile(userDoc.data() as UserProfile);
-          } else {
-            // Create initial profile
-            const newProfile: UserProfile = {
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || 'Visser',
-              email: firebaseUser.email || '',
-              photoURL: firebaseUser.photoURL || undefined,
-              xp: 0,
-              level: 1,
-              onboardingStatus: 'welcome',
-              createdAt: serverTimestamp(),
-            };
-            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
-            setProfile(newProfile);
-          }
-        } catch (error) {
-          console.error("Error fetching profile:", error);
-        }
-      } else {
+
+      if (!firebaseUser) {
         setProfile(null);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      try {
+        const ref = doc(db, 'users', firebaseUser.uid);
+        const userDoc = await getDoc(ref);
+
+        if (userDoc.exists()) {
+          setProfile(userDoc.data() as UserProfile);
+        } else {
+          const newProfile: UserProfile = {
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName || 'Visser',
+            email: firebaseUser.email || '',
+            photoURL: firebaseUser.photoURL || undefined,
+            xp: 0,
+            level: 1,
+            onboardingStatus: 'welcome',
+            createdAt: serverTimestamp(),
+          };
+
+          await setDoc(ref, newProfile);
+          setProfile(newProfile);
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+
+        // Safe fallback so routing/auth flow does not get stuck
+        setProfile({
+          uid: firebaseUser.uid,
+          displayName: firebaseUser.displayName || 'Visser',
+          email: firebaseUser.email || '',
+          photoURL: firebaseUser.photoURL || undefined,
+          xp: 0,
+          level: 1,
+          onboardingStatus: 'welcome',
+          createdAt: null as any,
+        });
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
@@ -129,26 +147,32 @@ export default function App() {
   const logout = async () => {
     try {
       await signOut(auth);
+      setProfile(null);
+      setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
+      throw error;
     }
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    // Optimistic local update — routing/navigation reacts immediately
-    setProfile(prev => prev ? { ...prev, ...data } : null);
+
+    setProfile((prev) => (prev ? { ...prev, ...data } : null));
+
     try {
-      // setDoc + merge handles both "doc exists" and "doc missing" cases
-      // uid + email always included so security rules validation passes
       await setDoc(
         doc(db, 'users', user.uid),
-        { uid: user.uid, email: user.email || '', ...data },
+        {
+          uid: user.uid,
+          email: user.email || '',
+          ...data,
+        },
         { merge: true }
       );
     } catch (error) {
       console.error('Profile sync to Firestore failed:', error);
-      throw error; // let caller show a warning, but local state is already updated
+      throw error;
     }
   };
 
@@ -160,29 +184,51 @@ export default function App() {
     );
   }
 
-  const showOnboarding = user && profile && profile.onboardingStatus !== 'complete';
+  const showOnboarding = Boolean(user && profile && profile.onboardingStatus !== 'complete');
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      profile, 
-      loading, 
-      loginWithGoogle, 
-      loginWithEmail, 
-      registerWithEmail, 
-      logout, 
-      updateProfile 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        loginWithGoogle,
+        loginWithEmail,
+        registerWithEmail,
+        logout,
+        updateProfile,
+      }}
+    >
       <SessionProvider>
         <Toaster position="top-right" richColors closeButton />
         <Router>
           <Routes>
-            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-            
-            {/* Onboarding Route */}
-            <Route path="/onboarding" element={user ? (profile?.onboardingStatus === 'complete' ? <Navigate to="/" /> : <Onboarding />) : <Navigate to="/login" />} />
+            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
 
-            <Route element={user ? (showOnboarding ? <Navigate to="/onboarding" /> : <AppShell />) : <Navigate to="/login" />}>
+            <Route
+              path="/onboarding"
+              element={
+                user ? (
+                  profile?.onboardingStatus === 'complete' ? (
+                    <Navigate to="/" replace />
+                  ) : (
+                    <Onboarding />
+                  )
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+
+            <Route
+              element={
+                user ? (
+                  showOnboarding ? <Navigate to="/onboarding" replace /> : <AppShell />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            >
               <Route path="/" element={<Dashboard />} />
               <Route path="/catches" element={<Catches />} />
               <Route path="/catches/:id" element={<CatchDetail />} />
@@ -200,8 +246,7 @@ export default function App() {
               <Route path="/tools/ask-dick" element={<AskDick />} />
               <Route path="/tools/weather" element={<WeatherForecast />} />
               <Route path="/knowledge" element={<Knowledge />} />
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/" />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
         </Router>
@@ -209,4 +254,3 @@ export default function App() {
     </AuthContext.Provider>
   );
 }
-
