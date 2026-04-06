@@ -1,21 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  Users, 
-  Check, 
-  X, 
-  Calendar, 
-  MapPin, 
-  Clock,
-  Zap,
-  Fish
+import {
+  Users,
+  Check,
+  Calendar,
 } from 'lucide-react';
 import { Card, Button, Badge } from './ui/Base';
-import { Session, UserProfile } from '../types';
+import { Session } from '../types';
 import { loggingService } from '../features/logging/services/loggingService';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { motion } from 'motion/react';
 
 interface SessionInvitationCardProps {
   session: Session;
@@ -23,10 +17,21 @@ interface SessionInvitationCardProps {
   onActionComplete?: () => void;
 }
 
-export const SessionInvitationCard: React.FC<SessionInvitationCardProps> = ({ 
-  session, 
+const getSessionName = (session: Partial<Session>) =>
+  (session as any).name || (session as any).title || 'Sessie aan het water';
+
+const getSessionStart = (session: Partial<Session>) =>
+  (session as any).startTime || (session as any).startedAt || null;
+
+const getParticipantIds = (session: Partial<Session>): string[] =>
+  (session as any).participantIds ||
+  (session as any).participantUserIds ||
+  [];
+
+export const SessionInvitationCard: React.FC<SessionInvitationCardProps> = ({
+  session,
   userId,
-  onActionComplete 
+  onActionComplete,
 }) => {
   const [loading, setLoading] = useState<'accept' | 'decline' | null>(null);
 
@@ -58,6 +63,12 @@ export const SessionInvitationCard: React.FC<SessionInvitationCardProps> = ({
     }
   };
 
+  const startRaw = getSessionStart(session);
+  const startDate =
+    (startRaw as any)?.toDate?.() ?? (startRaw ? new Date(startRaw as any) : null);
+
+  const participantCount = getParticipantIds(session).length || 1;
+
   return (
     <Card className="p-6 border-2 border-water/30 bg-water/5 rounded-[2rem] overflow-hidden relative group">
       <div className="absolute top-0 right-0 p-8 opacity-5">
@@ -70,13 +81,15 @@ export const SessionInvitationCard: React.FC<SessionInvitationCardProps> = ({
             Nieuwe Uitnodiging
           </Badge>
           <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">
-            {session.createdAt ? format(session.createdAt.toDate(), 'd MMM HH:mm', { locale: nl }) : ''}
+            {session.createdAt?.toDate
+              ? format(session.createdAt.toDate(), 'd MMM HH:mm', { locale: nl })
+              : ''}
           </span>
         </div>
 
         <div className="space-y-2">
           <h4 className="text-2xl font-black text-primary tracking-tight leading-tight">
-            {session.title || 'Sessie aan het water'}
+            {getSessionName(session)}
           </h4>
           <p className="text-sm text-text-secondary font-medium">
             Je bent uitgenodigd om deel te nemen aan deze vissessie.
@@ -89,26 +102,35 @@ export const SessionInvitationCard: React.FC<SessionInvitationCardProps> = ({
               <Calendar className="w-5 h-5 text-water" />
             </div>
             <div>
-              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Datum</p>
+              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">
+                Datum
+              </p>
               <p className="text-xs font-bold text-primary">
-                {session.startedAt ? format(session.startedAt.toDate(), 'd MMM yyyy', { locale: nl }) : 'Vandaag'}
+                {startDate
+                  ? format(startDate, 'd MMM yyyy', { locale: nl })
+                  : 'Vandaag'}
               </p>
             </div>
           </div>
+
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-water/10 rounded-xl flex items-center justify-center">
               <Users className="w-5 h-5 text-water" />
             </div>
             <div>
-              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Deelnemers</p>
-              <p className="text-xs font-bold text-primary">{session.participantUserIds?.length || 1} Vissers</p>
+              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">
+                Deelnemers
+              </p>
+              <p className="text-xs font-bold text-primary">
+                {participantCount} Vissers
+              </p>
             </div>
           </div>
         </div>
 
         <div className="flex gap-3 pt-2">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="flex-1 h-14 rounded-2xl border border-border-subtle text-text-muted hover:text-danger hover:bg-danger/5 font-black uppercase tracking-widest text-xs"
             onClick={handleDecline}
             loading={loading === 'decline'}
@@ -116,7 +138,8 @@ export const SessionInvitationCard: React.FC<SessionInvitationCardProps> = ({
           >
             Afwijzen
           </Button>
-          <Button 
+
+          <Button
             className="flex-[2] h-14 rounded-2xl bg-water text-white shadow-lg shadow-water/20 font-black uppercase tracking-widest text-xs"
             onClick={handleAccept}
             loading={loading === 'accept'}
