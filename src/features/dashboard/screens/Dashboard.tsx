@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Trophy,
   TrendingUp,
@@ -12,91 +12,221 @@ import {
   Wind,
   Thermometer,
   AlertCircle,
-  CheckCircle2,
   Star,
   ShoppingBag,
   History,
-  BarChart3,
-  Cloud
+  Cloud,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../App';
-import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  getDocs,
+} from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { Catch, Session } from '../../../types';
+import { Catch, Session, Spot, GearItem } from '../../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { Button, Card, Badge } from '../../../components/ui/Base';
-import { StatCard, RankingCard, ProgressBar } from '../../../components/ui/Data';
+import { StatCard, RankingCard } from '../../../components/ui/Data';
 import { DashboardSkeleton } from '../../../components/ui/Skeleton';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { weatherService } from '../../weather/services/weatherService';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { CatchForm } from '../../../components/CatchForm';
 import { SessionModal } from '../../../components/SessionModal';
-import { toast } from 'sonner';
 import { statsService, UserStats } from '../../../services/statsService';
-import { loggingService } from '../../logging/services/loggingService';
 import { useSession } from '../../../contexts/SessionContext';
 import { LevelBadge } from '../../../components/xp/LevelBadge';
 import { XpProgressBar } from '../../../components/xp/XpProgressBar';
+import { gearService } from '../../gear/services/gearService';
 
 /**
- * Dashboard Screen
- * Part of the 'dashboard' feature module.
- * Provides a high-level overview of user activity, stats, and active sessions.
+ * Dashboard Screen — v2
+ * Uses catches_v2 / sessions_v2 / spots_v2 friendly rendering.
  */
+
+const COLLECTIONS = {
+  CATCHES: 'catches_v2',
+  SPOTS: 'spots_v2',
+} as const;
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const getCatchSpecies = (c: Partial<Catch>) =>
+  (c as any).speciesSpecific ||
+  (c as any).speciesGeneral ||
+  c.species ||
+  'Onbekend';
+
+const getCatchImage = (c: Partial<Catch>) =>
+  (c as any).mainImage ||
+  c.photoURL ||
+  '';
+
+const getCatchTimestamp = (c: Partial<Catch>) =>
+  (c as any).timestamp || (c as any).catchTime || null;
+
+const getSessionName = (s: Partial<Session> | null | undefined) =>
+  (s as any)?.name || (s as any)?.title || 'Sessie Bezig';
+
+const getSessionStart = (s: Partial<Session> | null | undefined) =>
+  (s as any)?.startTime || (s as any)?.startedAt || null;
+
+const getSessionCatchCount = (s: Partial<Session> | null | undefined) =>
+  (s as any)?.stats?.totalCatches ||
+  (s as any)?.statsSummary?.totalCatches ||
+  (s as any)?.linkedCatchIds?.length ||
+  0;
+
+const getSpotName = (s: Partial<Spot>) =>
+  (s as any)?.title || s.name || 'Onbekende stek';
+
+const getSpotWaterType = (s: Partial<Spot>) =>
+  (s as any)?.waterType || (s as any)?.water_type || 'Water';
+
+const getSpotCatchCount = (s: Partial<Spot>) =>
+  (s as any)?.statsSummary?.totalCatches ||
+  s.stats?.totalCatches ||
+  0;
+
+const getGearImage = (g: Partial<GearItem>) =>
+  (g as any)?.photoURL || '';
+
+const getProgressText = (xp: number) => {
+  const levelThresholds = [
+    0, 150, 400, 800, 1400, 2200, 3200, 4500, 6000, 8000, 10500, 13500, 17000,
+    21500, 27000, 34000, 43000, 54000, 68000, 85000,
+  ];
+  const currentLevel = Math.min(
+    levelThresholds.findIndex((v, i) => xp >= v && xp < (levelThresholds[i + 1] ?? Infinity)) + 1 ||
+      levelThresholds.length,
+    levelThresholds.length
+  );
+  const nextXp = levelThresholds[currentLevel] ?? xp;
+  const xpToNext = Math.max(0, nextXp - xp);
+
+  return currentLevel >= levelThresholds.length
+    ? 'Max level bereikt'
+    : `Nog ${xpToNext.toLocaleString()} XP tot Level ${currentLevel + 1}`;
+};
 
 export default function Dashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const { activeSession, endActiveSession } = useSession();
+
   const [recentCatches, setRecentCatches] = useState<Catch[]>([]);
   const [incompleteCatches, setIncompleteCatches] = useState<Catch[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [gearItems, setGearItems] = useState<GearItem[]>([]);
+  const [favoriteSpots, setFavoriteSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal States
+  // Modal states
   const [isQuickCatchOpen, setIsQuickCatchOpen] = useState(false);
   const [isCatchFormOpen, setIsCatchFormOpen] = useState(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [editingCatch, setEditingCatch] = useState<Catch | null>(null);
 
+  const [weather, setWeather] = useState<any>(null);
+  const [weatherLocation, setWeatherLocation] = useState(
+    localStorage.getItem('weatherLocation') || 'Amsterdam'
+  );
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [newLocation, setNewLocation] = useState(weatherLocation);
+
   useEffect(() => {
-    if (!profile) return;
+    if (!profile?.uid) return;
+
+    setLoading(true);
 
     const catchesQuery = query(
-      collection(db, 'catches'),
+      collection(db, COLLECTIONS.CATCHES),
       where('userId', '==', profile.uid),
       orderBy('timestamp', 'desc'),
-      limit(10)
+      limit(12)
     );
 
-    const unsubscribeCatches = onSnapshot(catchesQuery, (snapshot) => {
-      const allCatches = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Catch));
-      setRecentCatches(allCatches.filter(c => c.status === 'complete').slice(0, 5));
-      setIncompleteCatches(allCatches.filter(c => c.status === 'draft'));
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching catches:", error);
-      setLoading(false);
-    });
+    const unsubscribeCatches = onSnapshot(
+      catchesQuery,
+      (snapshot) => {
+        const allCatches = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as Catch)
+        );
 
-    const loadStats = async () => {
+        setRecentCatches(allCatches.filter((c) => c.status === 'complete').slice(0, 5));
+        setIncompleteCatches(allCatches.filter((c) => c.status === 'draft'));
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching catches:', error);
+        setLoading(false);
+      }
+    );
+
+    const loadSecondaryData = async () => {
       try {
-        const userStats = await statsService.calculateUserStats(profile.uid);
+        const [userStats, gear] = await Promise.all([
+          statsService.calculateUserStats(profile.uid),
+          gearService.getUserGear(profile.uid),
+        ]);
+
         setStats(userStats);
+
+        const sortedGear = [...gear].sort((a, b) => {
+          const aScore = (a.isFavorite ? 1000 : 0) + (a.usageCount || 0);
+          const bScore = (b.isFavorite ? 1000 : 0) + (b.usageCount || 0);
+          return bScore - aScore;
+        });
+        setGearItems(sortedGear.slice(0, 2));
+
+        const spotsQuery = query(
+          collection(db, COLLECTIONS.SPOTS),
+          where('userId', '==', profile.uid),
+          limit(8)
+        );
+        const spotsSnap = await getDocs(spotsQuery);
+        const spots = spotsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Spot));
+
+        const sortedSpots = [...spots].sort((a, b) => {
+          const aScore = ((a as any).isFavorite ? 1000 : 0) + getSpotCatchCount(a);
+          const bScore = ((b as any).isFavorite ? 1000 : 0) + getSpotCatchCount(b);
+          return bScore - aScore;
+        });
+
+        setFavoriteSpots(sortedSpots.slice(0, 2));
       } catch (error) {
-        console.error("Error calculating stats:", error);
+        console.error('Error loading dashboard secondary data:', error);
       }
     };
-    loadStats();
+
+    loadSecondaryData();
 
     return () => {
       unsubscribeCatches();
     };
-  }, [profile]);
+  }, [profile?.uid]);
+
+  useEffect(() => {
+    const loadWeather = async () => {
+      try {
+        const data = await weatherService.fetchWeather(weatherLocation);
+        setWeather(data);
+      } catch (error) {
+        console.error('Weather fetch error:', error);
+      }
+    };
+    loadWeather();
+  }, [weatherLocation]);
 
   const handleEndSession = async () => {
     if (!activeSession?.id) return;
@@ -112,23 +242,6 @@ export default function Dashboard() {
     setIsCatchFormOpen(true);
   };
 
-  const [weather, setWeather] = useState<any>(null);
-  const [weatherLocation, setWeatherLocation] = useState(localStorage.getItem('weatherLocation') || 'Amsterdam');
-  const [isEditingLocation, setIsEditingLocation] = useState(false);
-  const [newLocation, setNewLocation] = useState(weatherLocation);
-
-  useEffect(() => {
-    const loadWeather = async () => {
-      try {
-        const data = await weatherService.fetchWeather(weatherLocation);
-        setWeather(data);
-      } catch (error) {
-        console.error('Weather fetch error:', error);
-      }
-    };
-    loadWeather();
-  }, [weatherLocation]);
-
   const handleLocationSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setWeatherLocation(newLocation);
@@ -136,37 +249,42 @@ export default function Dashboard() {
     setIsEditingLocation(false);
   };
 
+  const progressSubtitle = useMemo(
+    () => getProgressText(profile?.xp || 0),
+    [profile?.xp]
+  );
+
   if (loading) return <DashboardSkeleton />;
 
   return (
     <PageLayout>
       {/* Welcome Banner for New Users */}
       {recentCatches.length === 0 && !activeSession && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <Card className="bg-brand/10 border border-brand/20 p-6 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
             <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 blur-3xl -mr-32 -mt-32" />
             <div className="relative z-10 space-y-2 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
                 <Trophy className="w-5 h-5 text-brand" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-brand">Activatie Doel</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-brand">
+                  Activatie Doel
+                </span>
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold text-text-primary tracking-tight">Log je eerste vangst!</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-text-primary tracking-tight">
+                Log je eerste vangst!
+              </h2>
               <p className="text-sm md:text-base text-text-secondary max-w-md">
                 Je bent er bijna! Log je eerste vangst om je statistieken te starten en je eerste badges te verdienen.
               </p>
             </div>
             <div className="relative z-10 flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              <Button 
+              <Button
                 onClick={() => setIsQuickCatchOpen(true)}
                 className="h-12 md:h-14 px-8 rounded-xl md:rounded-2xl font-bold shadow-premium-accent"
               >
                 Quick Catch Loggen
               </Button>
-              <Button 
+              <Button
                 variant="secondary"
                 onClick={() => setIsSessionModalOpen(true)}
                 className="h-12 md:h-14 px-8 rounded-xl md:rounded-2xl font-bold"
@@ -178,10 +296,12 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* Snelle Toegang — Quick Nav Cards */}
+      {/* Snelle Toegang */}
       <section className="mb-6 md:mb-10">
         <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">Snelle Toegang</span>
+          <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">
+            Snelle Toegang
+          </span>
         </div>
         <div className="grid grid-cols-3 gap-2 md:gap-3">
           {[
@@ -212,24 +332,29 @@ export default function Dashboard() {
       {/* Welcome Section */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 md:mb-16 px-2 md:px-0">
         <div className="space-y-2 md:space-y-3">
-          <Badge variant="accent" className="px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em]">Dashboard</Badge>
+          <Badge
+            variant="accent"
+            className="px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em]"
+          >
+            Dashboard
+          </Badge>
           <h1 className="text-2xl md:text-2xl font-bold text-primary tracking-tight leading-tight">
             Goedenavond, <span className="text-accent">{profile?.displayName}</span>!
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
-            Sluit je aan bij de Dick Beet Fishing CatchRank community en verdien je eerste XP!
+            Bekijk je voortgang, sessies en laatste activiteit in één overzicht.
           </p>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
-          <Button 
-            variant="secondary" 
+          <Button
+            variant="secondary"
             icon={<Plus className="w-4 h-4 md:w-5 md:h-5 text-accent" />}
             onClick={() => setIsSessionModalOpen(true)}
             className="flex-1 md:flex-none rounded-xl md:rounded-2xl h-12 md:h-14 px-4 md:px-8 font-bold shadow-sm hover:shadow-md transition-all text-xs md:text-sm"
           >
             Nieuwe Sessie
           </Button>
-          <Button 
+          <Button
             icon={<Plus className="w-4 h-4 md:w-5 md:h-5" />}
             onClick={() => setIsQuickCatchOpen(true)}
             className="flex-1 md:flex-none rounded-xl md:rounded-2xl h-12 md:h-14 px-4 md:px-8 font-bold shadow-premium-accent text-xs md:text-sm"
@@ -241,7 +366,6 @@ export default function Dashboard() {
 
       {/* Stats Overview */}
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 mb-10 md:mb-16 px-2 md:px-0">
-        {/* XP + Level progress card — replaces static "Huidig Level" StatCard */}
         <div className="col-span-2 md:col-span-1 premium-card rounded-2xl md:rounded-[2rem] p-4 md:p-5 shadow-premium border-none bg-surface-card space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -279,41 +403,49 @@ export default function Dashboard() {
         <div className="lg:col-span-8 space-y-10 md:space-y-16">
           {/* Active Session Card */}
           {activeSession && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-            >
-              <Card variant="premium" className="bg-surface-card border border-brand/20 p-6 md:p-10 relative overflow-hidden shadow-premium-accent/10 rounded-2xl md:rounded-[2.5rem]">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+              <Card
+                variant="premium"
+                className="bg-surface-card border border-brand/20 p-6 md:p-10 relative overflow-hidden shadow-premium-accent/10 rounded-2xl md:rounded-[2.5rem]"
+              >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 blur-3xl -mr-16 -mt-16" />
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-brand rounded-full animate-pulse shadow-[0_0_10px_rgba(244,194,13,1)]"></div>
-                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">Live Sessie Actief</span>
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+                        Live Sessie Actief
+                      </span>
                     </div>
-                    <h3 className="text-2xl md:text-4xl text-text-primary font-bold tracking-tight">{activeSession.title || 'Sessie Bezig'}</h3>
+                    <h3 className="text-2xl md:text-4xl text-text-primary font-bold tracking-tight">
+                      {getSessionName(activeSession)}
+                    </h3>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-text-secondary">
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-brand" />
                         <span className="font-bold">
-                          {activeSession.startedAt ? format(activeSession.startedAt.toDate(), 'HH:mm', { locale: nl }) : '--:--'}
+                          {(() => {
+                            const start = getSessionStart(activeSession);
+                            const date = start?.toDate?.() ?? (start ? new Date(start) : null);
+                            return date ? format(date, 'HH:mm', { locale: nl }) : '--:--';
+                          })()}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Fish className="w-4 h-4 text-brand" />
-                        <span className="font-bold">{activeSession.linkedCatchIds?.length || 0} vangsten</span>
+                        <span className="font-bold">{getSessionCatchCount(activeSession)} vangsten</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <Button 
+                    <Button
                       className="flex-1 md:flex-none h-12 px-6 rounded-xl font-bold"
                       onClick={() => setIsQuickCatchOpen(true)}
                     >
                       Vangst Loggen
                     </Button>
-                    <Button 
-                      variant="secondary" 
+                    <Button
+                      variant="secondary"
                       className="flex-1 md:flex-none h-12 px-6 rounded-xl font-bold"
                       onClick={handleEndSession}
                     >
@@ -335,60 +467,81 @@ export default function Dashboard() {
                     Takenlijst <span className="text-warning">({incompleteCatches.length})</span>
                   </h3>
                 </div>
-                <Button variant="ghost" size="sm" className="text-warning font-black text-[10px] uppercase tracking-widest">Afronden</Button>
+                <Button variant="ghost" size="sm" className="text-warning font-black text-[10px] uppercase tracking-widest">
+                  Afronden
+                </Button>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {incompleteCatches.map((c) => (
-                  <Card 
-                    key={c.id} 
-                    padding="none" 
-                    hoverable 
-                    variant="premium"
-                    className="border border-border-subtle bg-surface-card hover:border-warning/30 transition-all duration-500 rounded-2xl relative overflow-hidden group"
-                    onClick={() => openEditCatch(c)}
-                  >
-                    <div className="flex items-center gap-4 p-4">
-                      <div className="w-16 h-16 bg-surface-soft rounded-xl overflow-hidden flex-shrink-0 border border-border-subtle relative">
-                        {c.photoURL ? (
-                          <img src={c.photoURL} alt="Draft" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Fish className="text-warning/30 w-8 h-8" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-warning/10" />
+                {incompleteCatches.map((c) => {
+                  const tsRaw = getCatchTimestamp(c);
+                  const ts = tsRaw?.toDate?.() ?? (tsRaw ? new Date(tsRaw) : null);
+
+                  return (
+                    <Card
+                      key={c.id}
+                      padding="none"
+                      hoverable
+                      variant="premium"
+                      className="border border-border-subtle bg-surface-card hover:border-warning/30 transition-all duration-500 rounded-2xl relative overflow-hidden group"
+                      onClick={() => openEditCatch(c)}
+                    >
+                      <div className="flex items-center gap-4 p-4">
+                        <div className="w-16 h-16 bg-surface-soft rounded-xl overflow-hidden flex-shrink-0 border border-border-subtle relative">
+                          {getCatchImage(c) ? (
+                            <img src={getCatchImage(c)} alt="Draft" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Fish className="text-warning/30 w-8 h-8" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-warning/10" />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-black text-warning uppercase tracking-widest mb-1">
+                            Concept Vangst
+                          </p>
+                          <p className="text-base font-bold text-text-primary truncate mb-1">
+                            {ts ? format(ts, 'd MMM HH:mm', { locale: nl }) : 'Zojuist'}
+                          </p>
+                          <Badge variant="warning" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
+                            {c.incompleteFields?.length || 0} velden missen
+                          </Badge>
+                        </div>
+
+                        <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-warning transition-colors" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[9px] font-black text-warning uppercase tracking-widest mb-1">Concept Vangst</p>
-                        <p className="text-base font-bold text-text-primary truncate mb-1">
-                          {c.timestamp ? format(c.timestamp.toDate(), 'd MMM HH:mm', { locale: nl }) : 'Zojuist'}
-                        </p>
-                        <Badge variant="warning" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
-                          {c.incompleteFields?.length} velden missen
-                        </Badge>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-warning transition-colors" />
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             </section>
           )}
 
           {/* XP Progress Section */}
-          <Card variant="premium" className="p-6 md:p-8 rounded-2xl md:rounded-[2rem] border border-border-subtle bg-surface-card shadow-premium">
+          <Card
+            variant="premium"
+            className="p-6 md:p-8 rounded-2xl md:rounded-[2rem] border border-border-subtle bg-surface-card shadow-premium"
+          >
             <div className="flex items-center justify-between mb-6">
               <div className="space-y-1">
-                <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">XP Voortgang</h3>
-                <p className="text-xs text-text-secondary">Nog 350 XP tot Level 12</p>
+                <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">
+                  XP Voortgang
+                </h3>
+                <p className="text-xs text-text-secondary">{progressSubtitle}</p>
               </div>
-              <Badge variant="accent" className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest">Level {profile?.level}</Badge>
+              <Badge
+                variant="accent"
+                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest"
+              >
+                Level {profile?.level || 1}
+              </Badge>
             </div>
-            <ProgressBar 
-              value={65} 
-              className="mb-8 h-2.5 rounded-full bg-surface-soft"
-            />
-            <div className="grid grid-cols-4 gap-4 pt-6 border-t border-border-subtle">
+
+            <XpProgressBar xp={profile?.xp || 0} />
+
+            <div className="grid grid-cols-4 gap-4 pt-6 border-t border-border-subtle mt-6">
               <div className="text-center space-y-1">
                 <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">Vangsten</p>
                 <p className="text-lg font-bold text-text-primary">{stats?.totalCatches || 0}</p>
@@ -402,8 +555,8 @@ export default function Dashboard() {
                 <p className="text-lg font-bold text-text-primary">{stats?.speciesCount || 0}</p>
               </div>
               <div className="text-center space-y-1">
-                <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">PR's</p>
-                <p className="text-lg font-bold text-text-primary">{profile?.stats?.totalPrs || 0}</p>
+                <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">XP</p>
+                <p className="text-lg font-bold text-text-primary">{(profile?.xp || 0).toLocaleString()}</p>
               </div>
             </div>
           </Card>
@@ -411,50 +564,81 @@ export default function Dashboard() {
           {/* Recent Catches */}
           <section className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl md:text-2xl font-bold text-text-primary tracking-tight">Laatste Vangsten</h2>
-              <Button variant="ghost" size="sm" className="text-brand font-black text-[10px] uppercase tracking-widest">Alles</Button>
+              <h2 className="text-xl md:text-2xl font-bold text-text-primary tracking-tight">
+                Laatste Vangsten
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-brand font-black text-[10px] uppercase tracking-widest"
+                onClick={() => navigate('/catches')}
+              >
+                Alles
+              </Button>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {recentCatches.length > 0 ? (
-                recentCatches.map((c) => (
-                  <Card 
-                    key={c.id} 
-                    padding="none" 
-                    hoverable 
-                    variant="premium" 
-                    className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all duration-500 rounded-2xl overflow-hidden" 
-                    onClick={() => openEditCatch(c)}
-                  >
-                    <div className="relative h-40 overflow-hidden">
-                      {c.photoURL ? (
-                        <img src={c.photoURL} alt={c.species} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-surface-soft">
-                          <Fish className="text-text-muted/20 w-12 h-12" />
+                recentCatches.map((c) => {
+                  const tsRaw = getCatchTimestamp(c);
+                  const ts = tsRaw?.toDate?.() ?? (tsRaw ? new Date(tsRaw) : null);
+
+                  return (
+                    <Card
+                      key={c.id}
+                      padding="none"
+                      hoverable
+                      variant="premium"
+                      className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all duration-500 rounded-2xl overflow-hidden"
+                      onClick={() => openEditCatch(c)}
+                    >
+                      <div className="relative h-40 overflow-hidden">
+                        {getCatchImage(c) ? (
+                          <img
+                            src={getCatchImage(c)}
+                            alt={getCatchSpecies(c)}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-surface-soft">
+                            <Fish className="text-text-muted/20 w-12 h-12" />
+                          </div>
+                        )}
+                        <div className="absolute top-3 left-3">
+                          <Badge variant="accent" className="bg-brand text-bg-main border-none font-black">
+                            +{c.xpEarned || 0} XP
+                          </Badge>
                         </div>
-                      )}
-                      <div className="absolute top-3 left-3">
-                        <Badge variant="accent" className="bg-brand text-bg-main border-none font-black">+25 XP</Badge>
+                        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-bg-main to-transparent">
+                          <h4 className="text-lg font-bold text-text-primary tracking-tight">
+                            {getCatchSpecies(c)}
+                          </h4>
+                        </div>
                       </div>
-                      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-bg-main to-transparent">
-                        <h4 className="text-lg font-bold text-text-primary tracking-tight">{c.species}</h4>
+
+                      <div className="p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3 text-[10px] font-bold text-text-secondary uppercase tracking-widest">
+                          {c.weight && <span>{c.weight}g</span>}
+                          {c.length && <span>{c.length}cm</span>}
+                          <span className="text-text-muted">
+                            {ts ? format(ts, 'd MMM', { locale: nl }) : 'Zojuist'}
+                          </span>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
                       </div>
-                    </div>
-                    <div className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-[10px] font-bold text-text-secondary uppercase tracking-widest">
-                        {c.weight && <span>{c.weight}g</span>}
-                        {c.length && <span>{c.length}cm</span>}
-                        <span className="text-text-muted">{c.timestamp ? format(c.timestamp.toDate(), 'd MMM', { locale: nl }) : 'Zojuist'}</span>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
-                    </div>
-                  </Card>
-                ))
+                    </Card>
+                  );
+                })
               ) : (
-                <Card variant="premium" className="col-span-full p-12 text-center border-dashed border border-border-subtle bg-surface-soft/20 rounded-2xl">
+                <Card
+                  variant="premium"
+                  className="col-span-full p-12 text-center border-dashed border border-border-subtle bg-surface-soft/20 rounded-2xl"
+                >
                   <Fish className="w-12 h-12 text-brand/20 mx-auto mb-4" />
                   <h3 className="text-xl font-bold mb-2 text-text-primary">Geen vangsten</h3>
-                  <Button className="mt-4" onClick={() => setIsQuickCatchOpen(true)}>Eerste Vangst Loggen</Button>
+                  <Button className="mt-4" onClick={() => setIsQuickCatchOpen(true)}>
+                    Eerste Vangst Loggen
+                  </Button>
                 </Card>
               )}
             </div>
@@ -466,36 +650,44 @@ export default function Dashboard() {
           {/* Weather & Conditions */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">Omstandigheden</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">
+                Omstandigheden
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
                 className="text-brand text-[10px] font-black uppercase tracking-widest"
                 onClick={() => setIsEditingLocation(!isEditingLocation)}
               >
                 {isEditingLocation ? 'Sluiten' : 'Wijzig'}
               </Button>
             </div>
-            
+
             {isEditingLocation && (
               <form onSubmit={handleLocationSubmit} className="flex gap-2">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newLocation}
                   onChange={(e) => setNewLocation(e.target.value)}
                   className="flex-1 bg-surface-soft border border-border-subtle rounded-xl px-4 py-2 text-xs font-bold text-text-primary focus:border-brand focus:outline-none"
                   placeholder="Stad..."
                   autoFocus
                 />
-                <Button type="submit" size="sm" className="rounded-xl">OK</Button>
+                <Button type="submit" size="sm" className="rounded-xl">
+                  OK
+                </Button>
               </form>
             )}
 
             <Card className="bg-surface-card border border-border-subtle p-6 space-y-6 shadow-premium rounded-2xl md:rounded-[2rem] relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-brand">Huidige Locatie</p>
-                  <p className="text-xl font-bold tracking-tight text-text-primary">{weather?.location?.name || weatherLocation}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-brand">
+                    Huidige Locatie
+                  </p>
+                  <p className="text-xl font-bold tracking-tight text-text-primary">
+                    {weather?.location?.name || weatherLocation}
+                  </p>
                 </div>
                 <div className="w-12 h-12 bg-surface-soft rounded-xl flex items-center justify-center border border-border-subtle">
                   {weather?.current?.condition?.icon ? (
@@ -505,21 +697,25 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-text-muted">
                     <Thermometer className="w-3.5 h-3.5 text-brand" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Temp</span>
                   </div>
-                  <p className="text-xl font-bold tracking-tight text-text-primary">{weather?.current?.temp_c ? `${Math.round(weather.current.temp_c)}°C` : '--°C'}</p>
+                  <p className="text-xl font-bold tracking-tight text-text-primary">
+                    {weather?.current?.temp_c != null ? `${Math.round(weather.current.temp_c)}°C` : '--°C'}
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-text-muted">
                     <Wind className="w-3.5 h-3.5 text-brand" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Wind</span>
                   </div>
-                  <p className="text-xl font-bold tracking-tight text-text-primary">{weather?.current?.wind_kph ? `${Math.round(weather.current.wind_kph)} km/u` : '--'}</p>
+                  <p className="text-xl font-bold tracking-tight text-text-primary">
+                    {weather?.current?.wind_kph != null ? `${Math.round(weather.current.wind_kph)} km/u` : '--'}
+                  </p>
                 </div>
               </div>
 
@@ -527,9 +723,14 @@ export default function Dashboard() {
                 <div className="pt-6 border-t border-border-subtle space-y-4">
                   {weather.forecast.forecastday.map((day: any, i: number) => (
                     <div key={i} className="flex items-center justify-between text-xs font-bold">
-                      <span className="w-16 text-text-secondary">{i === 0 ? 'Vandaag' : format(new Date(day.date), 'EEE', { locale: nl })}</span>
+                      <span className="w-16 text-text-secondary">
+                        {i === 0 ? 'Vandaag' : format(new Date(day.date), 'EEE', { locale: nl })}
+                      </span>
                       <img src={day.day.condition.icon} alt="icon" className="w-6 h-6" />
-                      <span className="w-16 text-right font-black text-brand">{Math.round(day.day.maxtemp_c)}° <span className="text-text-dim">/ {Math.round(day.day.mintemp_c)}°</span></span>
+                      <span className="w-16 text-right font-black text-brand">
+                        {Math.round(day.day.maxtemp_c)}°
+                        <span className="text-text-dim"> / {Math.round(day.day.mintemp_c)}°</span>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -540,81 +741,151 @@ export default function Dashboard() {
           {/* Mijn Gear Mini */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">Mijn Gear</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">
+                Mijn Gear
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
                 className="text-brand text-[10px] font-black uppercase tracking-widest"
                 onClick={() => navigate('/gear')}
               >
                 Beheer
               </Button>
             </div>
+
             <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl shadow-premium space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { name: 'Sustain FJ', brand: 'Shimano', img:
-'https://media.s-bol.com/mVVNJ4r5vVkr/L9PQv4X/550x676.jpg' },
-                  { name: 'Zodias 7\'0"', brand: 'Fox', img: 'https://media-tge.ams3.cdn.digitaloceanspaces.com/media/eaeff955f1243a70/600x600.jpg' }
-                ].map((item, i) => (
-                  <div key={i} className="group cursor-pointer" onClick={() => navigate('/gear')}>
-                    <div className="aspect-square rounded-xl bg-surface-soft overflow-hidden mb-2 relative border border-border-subtle">
-                      <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <div className="absolute top-1.5 right-1.5">
-                        <div className="w-5 h-5 rounded-lg bg-brand text-bg-main flex items-center justify-center shadow-lg">
-                          <Star className="w-2.5 h-2.5 fill-current" />
+              {gearItems.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    {gearItems.map((item, i) => (
+                      <div key={item.id || i} className="group cursor-pointer" onClick={() => navigate('/gear')}>
+                        <div className="aspect-square rounded-xl bg-surface-soft overflow-hidden mb-2 relative border border-border-subtle">
+                          {getGearImage(item) ? (
+                            <img
+                              src={getGearImage(item)}
+                              alt={item.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-surface-soft">
+                              <ShoppingBag className="w-8 h-8 text-text-muted/30" />
+                            </div>
+                          )}
+
+                          {item.isFavorite && (
+                            <div className="absolute top-1.5 right-1.5">
+                              <div className="w-5 h-5 rounded-lg bg-brand text-bg-main flex items-center justify-center shadow-lg">
+                                <Star className="w-2.5 h-2.5 fill-current" />
+                              </div>
+                            </div>
+                          )}
                         </div>
+
+                        <p className="text-[8px] font-black text-text-muted uppercase tracking-widest truncate">
+                          {item.brand || 'Gear'}
+                        </p>
+                        <p className="text-xs font-bold text-text-primary truncate tracking-tight">
+                          {item.name}
+                        </p>
                       </div>
-                    </div>
-                    <p className="text-[8px] font-black text-text-muted uppercase tracking-widest truncate">{item.brand}</p>
-                    <p className="text-xs font-bold text-text-primary truncate tracking-tight">{item.name}</p>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <Button variant="secondary" className="w-full h-10 font-bold text-[10px] uppercase tracking-widest" onClick={() => navigate('/gear')}>
-                Alle Gear
-              </Button>
+
+                  <Button
+                    variant="secondary"
+                    className="w-full h-10 font-bold text-[10px] uppercase tracking-widest"
+                    onClick={() => navigate('/gear')}
+                  >
+                    Alle Gear
+                  </Button>
+                </>
+              ) : (
+                <div className="text-center py-6 space-y-3">
+                  <ShoppingBag className="w-10 h-10 text-brand/20 mx-auto" />
+                  <p className="text-sm font-bold text-text-primary">Nog geen gear</p>
+                  <p className="text-xs text-text-muted">Voeg je eerste gear item toe.</p>
+                  <Button variant="secondary" onClick={() => navigate('/gear')}>
+                    Naar Mijn Gear
+                  </Button>
+                </div>
+              )}
             </Card>
           </section>
 
           {/* Top Rankings Mini */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">Top Vissers</h3>
-              <Button variant="ghost" size="sm" className="text-brand font-black text-[10px] uppercase tracking-widest">Alles</Button>
+              <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">
+                Ranking Snapshot
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-brand font-black text-[10px] uppercase tracking-widest"
+                onClick={() => navigate('/rankings')}
+              >
+                Alles
+              </Button>
             </div>
-            <Card padding="none" variant="premium" className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden">
-              <RankingCard rank={1} name="Luciano21 (Team DickBeetNL)" xp={12450} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={2} name="Pipo85 (Team DickBeetNL)" xp={10200} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={3} name="Mareno030 (Team DicBeetNL)" xp={9850} className="p-4 hover:bg-surface-soft transition-colors" />
-              <RankingCard rank={12} name={profile?.displayName || 'Jij'} xp={profile?.xp || 0} isCurrentUser className="p-4 bg-brand/5" />
+
+            <Card
+              padding="none"
+              variant="premium"
+              className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden"
+            >
+              <RankingCard
+                rank={profile?.rank || 0}
+                name={profile?.displayName || 'Jij'}
+                xp={profile?.xp || 0}
+                isCurrentUser
+                className="p-4 bg-brand/5"
+              />
             </Card>
           </section>
 
           {/* Favorite Spots */}
           <section className="space-y-4">
-            <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">Favoriete Stekken</h3>
+            <h3 className="text-lg md:text-xl font-bold text-text-primary tracking-tight">
+              Favoriete Stekken
+            </h3>
+
             <div className="space-y-3">
-              <Card padding="none" hoverable variant="premium" className="p-4 flex items-center gap-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group overflow-hidden">
-                <div className="w-12 h-12 bg-surface-soft text-brand rounded-xl flex items-center justify-center border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm">
-                  <MapPin className="w-6 h-6" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate tracking-tight">De Kromme Rijn</p>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Rivier • 12 vangsten</p>
-                </div>
-                <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
-              </Card>
-              <Card padding="none" hoverable variant="premium" className="p-4 flex items-center gap-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group overflow-hidden">
-                <div className="w-12 h-12 bg-surface-soft text-brand rounded-xl flex items-center justify-center border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm">
-                  <MapPin className="w-6 h-6" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate tracking-tight">Lage Vaart, Lelystad</p>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Kanaal • 8 vangsten</p>
-                </div>
-                <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
-              </Card>
+              {favoriteSpots.length > 0 ? (
+                favoriteSpots.map((spot) => (
+                  <Card
+                    key={spot.id}
+                    padding="none"
+                    hoverable
+                    variant="premium"
+                    className="p-4 flex items-center gap-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group overflow-hidden"
+                    onClick={() => navigate('/spots')}
+                  >
+                    <div className="w-12 h-12 bg-surface-soft text-brand rounded-xl flex items-center justify-center border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm">
+                      <MapPin className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-base font-bold text-text-primary truncate tracking-tight">
+                        {getSpotName(spot)}
+                      </p>
+                      <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">
+                        {getSpotWaterType(spot)} • {getSpotCatchCount(spot)} vangsten
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
+                  </Card>
+                ))
+              ) : (
+                <Card className="p-5 border border-border-subtle bg-surface-card rounded-2xl shadow-premium">
+                  <div className="text-center py-4">
+                    <MapPin className="w-10 h-10 text-brand/20 mx-auto mb-3" />
+                    <p className="text-sm font-bold text-text-primary">Nog geen stekken</p>
+                    <p className="text-xs text-text-muted mt-1">
+                      Voeg stekken toe tijdens het loggen.
+                    </p>
+                  </div>
+                </Card>
+              )}
             </div>
           </section>
         </div>
@@ -623,15 +894,16 @@ export default function Dashboard() {
       {/* Logging Modals */}
       <AnimatePresence>
         {isQuickCatchOpen && (
-          <QuickCatchModal 
-            isOpen={isQuickCatchOpen} 
-            onClose={() => setIsQuickCatchOpen(false)} 
+          <QuickCatchModal
+            isOpen={isQuickCatchOpen}
+            onClose={() => setIsQuickCatchOpen(false)}
             activeSessionId={activeSession?.id}
           />
         )}
+
         {isCatchFormOpen && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -644,8 +916,8 @@ export default function Dashboard() {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative w-full max-w-2xl"
             >
-              <CatchForm 
-                initialData={editingCatch || {}} 
+              <CatchForm
+                initialData={editingCatch || {}}
                 activeSessionId={activeSession?.id}
                 onComplete={() => {
                   setIsCatchFormOpen(false);
@@ -659,10 +931,11 @@ export default function Dashboard() {
             </motion.div>
           </div>
         )}
+
         {isSessionModalOpen && (
-          <SessionModal 
-            isOpen={isSessionModalOpen} 
-            onClose={() => setIsSessionModalOpen(false)} 
+          <SessionModal
+            isOpen={isSessionModalOpen}
+            onClose={() => setIsSessionModalOpen(false)}
           />
         )}
       </AnimatePresence>
