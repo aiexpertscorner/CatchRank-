@@ -217,7 +217,7 @@ export default function Dashboard() {
             Goedenavond, <span className="text-accent">{profile?.displayName}</span>!
           </h1>
           <p className="text-text-secondary text-base md:text-xl font-medium max-w-lg">
-            Begin meteen met het loggen van je persoonlijke stekken, sessies en natuurlijk vangsten. Super snel en zo gedetailleerd als jij wilt. Join de Dick Beet Fishing CatchRank club en verdien je eerste XP!
+            Sluit je aan bij de Dick Beet Fishing CatchRank community en verdien je eerste XP!
           </p>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
