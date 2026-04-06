@@ -12,25 +12,11 @@ import {
   getDoc,
   arrayUnion,
   arrayRemove,
-  increment,
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Catch, Session, Spot, UserProfile } from '../../../types';
 import { xpService, getSpeciesXpBonus } from '../../../services/xpService';
 import { bustStatsCache } from '../../../services/statsService';
-
-/**
- * Logging Service v2
- * Aligned to:
- * - catches_v2
- * - sessions_v2
- * - spots_v2
- *
- * Notes:
- * - Uses v2 collection names
- * - Maps legacy frontend fields to observed v2 Firestore fields
- * - Keeps a few compatibility fields where useful during migration
- */
 
 const COLLECTIONS = {
   CATCHES: 'catches_v2',
@@ -61,12 +47,12 @@ const mapCatchLocation = (data: Partial<Catch>): { latitude?: number; longitude?
   const latitude = firstDefined(
     (data as any).latitude,
     (data as any).lat,
-    (data as any).location?.lat
+    data.location?.lat
   );
   const longitude = firstDefined(
     (data as any).longitude,
     (data as any).lng,
-    (data as any).location?.lng
+    data.location?.lng
   );
 
   return { latitude, longitude };
@@ -75,7 +61,7 @@ const mapCatchLocation = (data: Partial<Catch>): { latitude?: number; longitude?
 const mapCatchImage = (data: Partial<Catch>) =>
   firstDefined(
     (data as any).mainImage,
-    (data as any).photoURL,
+    data.photoURL,
     (data as any).image,
     (data as any).imageUrl
   );
@@ -90,8 +76,8 @@ const mapCatchExtraImages = (data: Partial<Catch>) =>
 const mapCatchSpeciesGeneral = (data: Partial<Catch>) =>
   normalizeString(
     firstDefined(
-      (data as any).speciesGeneral,
-      (data as any).species,
+      data.speciesGeneral,
+      data.species,
       (data as any).speciesType
     )
   );
@@ -99,42 +85,33 @@ const mapCatchSpeciesGeneral = (data: Partial<Catch>) =>
 const mapCatchSpeciesSpecific = (data: Partial<Catch>) =>
   normalizeString(
     firstDefined(
-      (data as any).speciesSpecific,
+      data.speciesSpecific,
       (data as any).speciesSubType,
       (data as any).speciesDetail
     )
   );
 
 const mapCatchBaitGeneral = (data: Partial<Catch>) =>
-  normalizeString(firstDefined((data as any).baitGeneral, (data as any).baitType));
+  normalizeString(firstDefined(data.baitGeneral, (data as any).baitType, data.bait));
 
 const mapCatchBaitSpecific = (data: Partial<Catch>) =>
-  normalizeString(firstDefined((data as any).baitSpecific, (data as any).baitName));
+  normalizeString(firstDefined(data.baitSpecific, (data as any).baitName, data.bait));
 
 const mapSpotLatLng = (data: Partial<Spot>) => {
   const lat = firstDefined(
-    (data as any).lat,
-    (data as any).latitude,
-    (data as any).coordinates?.lat
+    data.lat,
+    data.latitude,
+    data.coordinates?.lat
   );
   const lng = firstDefined(
-    (data as any).lng,
-    (data as any).longitude,
-    (data as any).coordinates?.lng
+    data.lng,
+    data.longitude,
+    data.coordinates?.lng
   );
   return { lat, lng };
 };
 
-const toSessionStats = (stats?: any) => {
-  if (!stats) return {};
-  return stats;
-};
-
 export const loggingService = {
-  /**
-   * Quick Catch: Minimal entry point, saves as draft in catches_v2.
-   * Awards 10 base XP immediately for logging effort.
-   */
   async quickCatch(
     userId: string,
     photoURL: string,
@@ -145,11 +122,12 @@ export const loggingService = {
 
     const catchData = {
       userId,
-      id: undefined,
       mainImage: photoURL,
+      photoURL,
       extraImages: [],
       latitude: location?.lat,
       longitude: location?.lng,
+      location: location ? { lat: location.lat, lng: location.lng } : undefined,
       spotId: spotId || null,
       timestamp: serverTimestamp(),
       catchTime: serverTimestamp(),
@@ -161,10 +139,7 @@ export const loggingService = {
     };
 
     const docRef = await addDoc(collection(db, COLLECTIONS.CATCHES), catchData);
-
-    await updateDoc(doc(db, COLLECTIONS.CATCHES, docRef.id), {
-      id: docRef.id,
-    });
+    await updateDoc(doc(db, COLLECTIONS.CATCHES, docRef.id), { id: docRef.id });
 
     xpService.addXpToUser(userId, xpEarned).catch((err) =>
       console.error('XP award failed (quickCatch):', err)
@@ -173,9 +148,6 @@ export const loggingService = {
     return docRef.id;
   },
 
-  /**
-   * Create a new catch (full or draft) in catches_v2.
-   */
   async createCatch(userId: string, data: Partial<Catch>): Promise<string> {
     const incompleteFields = this.calculateIncompleteFields(data);
     const xpEarned = this.calculateXP(data);
@@ -190,11 +162,10 @@ export const loggingService = {
 
     const timestampValue = (data as any).timestamp || serverTimestamp();
     const status =
-      (data as any).status || (incompleteFields.length === 0 ? 'complete' : 'draft');
+      data.status || (incompleteFields.length === 0 ? 'complete' : 'draft');
 
     const catchData: Record<string, any> = {
       userId,
-      id: undefined,
       timestamp: timestampValue,
       catchTime: firstDefined((data as any).catchTime, timestampValue),
       status,
@@ -202,28 +173,61 @@ export const loggingService = {
       xpEarned,
 
       mainImage,
+      photoURL: mainImage,
       extraImages,
+
       latitude,
       longitude,
+      location:
+        latitude !== undefined && longitude !== undefined
+          ? { lat: latitude, lng: longitude }
+          : undefined,
 
       city: normalizeString((data as any).city),
-      notes: normalizeString((data as any).notes),
+      notes: normalizeString(data.notes),
       moonPhase: normalizeString((data as any).moonPhase),
-      weather: firstDefined((data as any).weather, (data as any).weatherSnapshot),
 
-      weight: firstDefined((data as any).weight, undefined),
-      length: firstDefined((data as any).length, undefined),
+      weatherSnapshot: firstDefined(data.weatherSnapshot, data.weather),
+      weather: firstDefined(data.weather, data.weatherSnapshot),
 
-      spotId: normalizeString((data as any).spotId),
-      spotName: normalizeString((data as any).spotName),
+      water: data.water,
+
+      weight: data.weight,
+      length: data.length,
+
+      spotId: normalizeString(data.spotId),
+      spotName: normalizeString(data.spotName),
+      sessionId: normalizeString(data.sessionId),
 
       speciesGeneral,
       speciesSpecific,
+      species: speciesGeneral || '',
+      speciesId: data.speciesId,
 
       baitGeneral,
       baitSpecific,
+      bait: baitSpecific || baitGeneral,
+      baitId: data.baitId,
 
-      video: normalizeString((data as any).video),
+      technique: normalizeString(data.technique),
+      techniqueId: normalizeString(data.techniqueId),
+
+      gearSetupId: normalizeString((data.gear as any)?.setupId || data.gearSetupId),
+      gearIds: dedupeStrings([
+        data.gearSetupId,
+        ...(data.gearIds || []),
+        data.gear?.rodId,
+        data.gear?.reelId,
+        data.gear?.lineId,
+        data.gear?.leaderId,
+        data.gear?.lureId,
+      ]),
+      gear: data.gear,
+
+      isPrivate: data.isPrivate ?? false,
+
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       schemaVersion: 2,
     };
 
@@ -232,10 +236,7 @@ export const loggingService = {
     });
 
     const docRef = await addDoc(collection(db, COLLECTIONS.CATCHES), catchData);
-
-    await updateDoc(doc(db, COLLECTIONS.CATCHES, docRef.id), {
-      id: docRef.id,
-    });
+    await updateDoc(doc(db, COLLECTIONS.CATCHES, docRef.id), { id: docRef.id });
 
     if (status === 'complete' && xpEarned > 0) {
       xpService.addXpToUser(userId, xpEarned).catch((err) =>
@@ -244,25 +245,15 @@ export const loggingService = {
       bustStatsCache(userId);
     }
 
-    if (status === 'complete' && catchData.spotId) {
-      updateDoc(doc(db, COLLECTIONS.SPOTS, catchData.spotId), {
-        updatedAt: serverTimestamp(),
-      }).catch((e) => console.warn('spot v2 update failed after createCatch', e));
-    }
-
     return docRef.id;
   },
 
-  /**
-   * Update an existing catch in catches_v2.
-   * Awards XP when transitioning draft -> complete.
-   */
   async updateCatch(catchId: string, data: Partial<Catch>, userId?: string): Promise<void> {
     const docRef = doc(db, COLLECTIONS.CATCHES, catchId);
     const incompleteFields = this.calculateIncompleteFields(data);
     const xpEarned = this.calculateXP(data);
     const newStatus =
-      (data as any).status || (incompleteFields.length === 0 ? 'complete' : 'draft');
+      data.status || (incompleteFields.length === 0 ? 'complete' : 'draft');
 
     let wasAlreadyComplete = false;
     if (userId && newStatus === 'complete') {
@@ -282,43 +273,59 @@ export const loggingService = {
       status: newStatus,
       incompleteFields,
       xpEarned,
+      updatedAt: serverTimestamp(),
 
-      ...(mainImage !== undefined ? { mainImage } : {}),
-      ...(extraImages.length ? { extraImages } : {}),
+      ...(mainImage !== undefined ? { mainImage, photoURL: mainImage } : {}),
+      ...(extraImages !== undefined ? { extraImages } : {}),
+
       ...(latitude !== undefined ? { latitude } : {}),
       ...(longitude !== undefined ? { longitude } : {}),
+      ...(latitude !== undefined && longitude !== undefined
+        ? { location: { lat: latitude, lng: longitude } }
+        : {}),
 
       ...(normalizeString((data as any).city) !== undefined
         ? { city: normalizeString((data as any).city) }
         : {}),
-      ...(normalizeString((data as any).notes) !== undefined
-        ? { notes: normalizeString((data as any).notes) }
+      ...(normalizeString(data.notes) !== undefined
+        ? { notes: normalizeString(data.notes) }
         : {}),
       ...(normalizeString((data as any).moonPhase) !== undefined
         ? { moonPhase: normalizeString((data as any).moonPhase) }
         : {}),
-      ...((data as any).weather !== undefined || (data as any).weatherSnapshot !== undefined
-        ? { weather: firstDefined((data as any).weather, (data as any).weatherSnapshot) }
+
+      ...(data.weather !== undefined || data.weatherSnapshot !== undefined
+        ? {
+            weather: firstDefined(data.weather, data.weatherSnapshot),
+            weatherSnapshot: firstDefined(data.weatherSnapshot, data.weather),
+          }
         : {}),
 
-      ...((data as any).weight !== undefined ? { weight: (data as any).weight } : {}),
-      ...((data as any).length !== undefined ? { length: (data as any).length } : {}),
-      ...(normalizeString((data as any).spotId) !== undefined
-        ? { spotId: normalizeString((data as any).spotId) }
-        : {}),
-      ...(normalizeString((data as any).spotName) !== undefined
-        ? { spotName: normalizeString((data as any).spotName) }
-        : {}),
+      ...(data.water !== undefined ? { water: data.water } : {}),
 
-      ...(speciesGeneral !== undefined ? { speciesGeneral } : {}),
+      ...(data.weight !== undefined ? { weight: data.weight } : {}),
+      ...(data.length !== undefined ? { length: data.length } : {}),
+
+      ...(normalizeString(data.spotId) !== undefined ? { spotId: normalizeString(data.spotId) } : {}),
+      ...(normalizeString(data.spotName) !== undefined ? { spotName: normalizeString(data.spotName) } : {}),
+      ...(normalizeString(data.sessionId) !== undefined ? { sessionId: normalizeString(data.sessionId) } : {}),
+
+      ...(speciesGeneral !== undefined ? { speciesGeneral, species: speciesGeneral } : {}),
       ...(speciesSpecific !== undefined ? { speciesSpecific } : {}),
+      ...(data.speciesId !== undefined ? { speciesId: data.speciesId } : {}),
 
       ...(baitGeneral !== undefined ? { baitGeneral } : {}),
-      ...(baitSpecific !== undefined ? { baitSpecific } : {}),
+      ...(baitSpecific !== undefined ? { baitSpecific, bait: baitSpecific } : {}),
+      ...(normalizeString(data.baitId) !== undefined ? { baitId: normalizeString(data.baitId) } : {}),
 
-      ...(normalizeString((data as any).video) !== undefined
-        ? { video: normalizeString((data as any).video) }
-        : {}),
+      ...(normalizeString(data.technique) !== undefined ? { technique: normalizeString(data.technique) } : {}),
+      ...(normalizeString(data.techniqueId) !== undefined ? { techniqueId: normalizeString(data.techniqueId) } : {}),
+
+      ...(data.gear !== undefined ? { gear: data.gear } : {}),
+      ...(data.gearIds !== undefined ? { gearIds: data.gearIds } : {}),
+      ...(data.gearSetupId !== undefined ? { gearSetupId: data.gearSetupId } : {}),
+
+      ...(data.isPrivate !== undefined ? { isPrivate: data.isPrivate } : {}),
     };
 
     await updateDoc(docRef, updateData);
@@ -331,43 +338,36 @@ export const loggingService = {
     }
   },
 
-  /**
-   * Create a new spot in spots_v2.
-   */
   async createSpot(userId: string, data: Partial<Spot>): Promise<string> {
     const { lat, lng } = mapSpotLatLng(data);
-
-    const title = normalizeString(
-      firstDefined((data as any).title, (data as any).name)
-    );
+    const title = normalizeString(firstDefined(data.title, data.name));
 
     const spotData: Record<string, any> = {
       title,
-      description: normalizeString((data as any).description),
+      name: title,
+      description: normalizeString(data.description),
 
       lat,
       lng,
+      latitude: lat,
+      longitude: lng,
+      coordinates: lat !== undefined && lng !== undefined ? { lat, lng } : undefined,
 
       city: normalizeString((data as any).city),
       province: normalizeString((data as any).province),
 
-      privacy: normalizeString(
-        firstDefined((data as any).privacy, (data as any).visibility, 'private')
-      ),
+      privacy: normalizeString(firstDefined(data.privacy, data.visibility, 'private')),
+      visibility: normalizeString(firstDefined(data.visibility, data.privacy, 'private')),
 
-      species: firstDefined((data as any).species, (data as any).targetSpecies, []),
-      bottomType: normalizeString(
-        firstDefined((data as any).bottomType, (data as any).bottom_type)
-      ),
-      waterType: normalizeString(
-        firstDefined((data as any).waterType, (data as any).water_type)
-      ),
-      waterSize: normalizeString(
-        firstDefined((data as any).waterSize, (data as any).water_size)
-      ),
-      spotSize: normalizeString(
-        firstDefined((data as any).spotSize, (data as any).spot_size)
-      ),
+      targetSpecies: (data as any).targetSpecies || [],
+      species: (data as any).species || (data as any).targetSpecies || [],
+      techniques: data.techniques || [],
+      amenities: data.amenities || [],
+
+      bottomType: normalizeString(firstDefined((data as any).bottomType, (data as any).bottom_type)),
+      waterType: normalizeString(firstDefined(data.waterType, (data as any).water_type)),
+      waterSize: normalizeString(firstDefined((data as any).waterSize, (data as any).water_size)),
+      spotSize: normalizeString(firstDefined((data as any).spotSize, (data as any).spot_size)),
       radius: firstDefined((data as any).radius, undefined),
 
       nightFishingAllowed: firstDefined(
@@ -376,9 +376,10 @@ export const loggingService = {
         false
       ),
 
-      mainImage: firstDefined((data as any).mainImage, (data as any).main_image),
-      extraImages:
-        firstDefined((data as any).extraImages, (data as any).extra_images, []) || [],
+      mainImage: firstDefined((data as any).mainImage, data.mainPhotoURL),
+      mainPhotoURL: firstDefined(data.mainPhotoURL, (data as any).mainImage),
+      extraImages: firstDefined((data as any).extraImages, []) || [],
+      photoURLs: firstDefined(data.photoURLs, (data as any).extraImages, []) || [],
 
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -395,189 +396,152 @@ export const loggingService = {
     return docRef.id;
   },
 
-  /**
-   * Update an existing spot in spots_v2.
-   */
   async updateSpot(spotId: string, data: Partial<Spot>): Promise<void> {
     const { lat, lng } = mapSpotLatLng(data);
 
     const updateData: Record<string, any> = {
-      ...(normalizeString(firstDefined((data as any).title, (data as any).name)) !== undefined
-        ? { title: normalizeString(firstDefined((data as any).title, (data as any).name)) }
-        : {}),
-      ...(normalizeString((data as any).description) !== undefined
-        ? { description: normalizeString((data as any).description) }
-        : {}),
-
-      ...(lat !== undefined ? { lat } : {}),
-      ...(lng !== undefined ? { lng } : {}),
-
-      ...(normalizeString((data as any).city) !== undefined
-        ? { city: normalizeString((data as any).city) }
-        : {}),
-      ...(normalizeString((data as any).province) !== undefined
-        ? { province: normalizeString((data as any).province) }
-        : {}),
-
-      ...(normalizeString(firstDefined((data as any).privacy, (data as any).visibility)) !==
-      undefined
+      ...(normalizeString(firstDefined(data.title, data.name)) !== undefined
         ? {
-            privacy: normalizeString(
-              firstDefined((data as any).privacy, (data as any).visibility)
-            ),
+            title: normalizeString(firstDefined(data.title, data.name)),
+            name: normalizeString(firstDefined(data.title, data.name)),
+          }
+        : {}),
+      ...(normalizeString(data.description) !== undefined
+        ? { description: normalizeString(data.description) }
+        : {}),
+
+      ...(lat !== undefined ? { lat, latitude: lat } : {}),
+      ...(lng !== undefined ? { lng, longitude: lng } : {}),
+      ...(lat !== undefined && lng !== undefined ? { coordinates: { lat, lng } } : {}),
+
+      ...(normalizeString((data as any).city) !== undefined ? { city: normalizeString((data as any).city) } : {}),
+      ...(normalizeString((data as any).province) !== undefined ? { province: normalizeString((data as any).province) } : {}),
+
+      ...(normalizeString(firstDefined(data.privacy, data.visibility)) !== undefined
+        ? {
+            privacy: normalizeString(firstDefined(data.privacy, data.visibility)),
+            visibility: normalizeString(firstDefined(data.visibility, data.privacy)),
           }
         : {}),
 
-      ...((data as any).species !== undefined ? { species: (data as any).species } : {}),
-      ...(normalizeString(firstDefined((data as any).bottomType, (data as any).bottom_type)) !==
-      undefined
-        ? {
-            bottomType: normalizeString(
-              firstDefined((data as any).bottomType, (data as any).bottom_type)
-            ),
-          }
+      ...(data.targetSpecies !== undefined ? { targetSpecies: data.targetSpecies } : {}),
+      ...(data.techniques !== undefined ? { techniques: data.techniques } : {}),
+      ...(data.amenities !== undefined ? { amenities: data.amenities } : {}),
+
+      ...(normalizeString(firstDefined((data as any).bottomType, (data as any).bottom_type)) !== undefined
+        ? { bottomType: normalizeString(firstDefined((data as any).bottomType, (data as any).bottom_type)) }
         : {}),
-      ...(normalizeString(firstDefined((data as any).waterType, (data as any).water_type)) !==
-      undefined
-        ? {
-            waterType: normalizeString(
-              firstDefined((data as any).waterType, (data as any).water_type)
-            ),
-          }
-        : {}),
-      ...(normalizeString(firstDefined((data as any).waterSize, (data as any).water_size)) !==
-      undefined
-        ? {
-            waterSize: normalizeString(
-              firstDefined((data as any).waterSize, (data as any).water_size)
-            ),
-          }
-        : {}),
-      ...(normalizeString(firstDefined((data as any).spotSize, (data as any).spot_size)) !==
-      undefined
-        ? {
-            spotSize: normalizeString(
-              firstDefined((data as any).spotSize, (data as any).spot_size)
-            ),
-          }
-        : {}),
-      ...((data as any).radius !== undefined ? { radius: (data as any).radius } : {}),
-      ...((data as any).nightFishingAllowed !== undefined
-        ? { nightFishingAllowed: (data as any).nightFishingAllowed }
+      ...(normalizeString(firstDefined(data.waterType, (data as any).water_type)) !== undefined
+        ? { waterType: normalizeString(firstDefined(data.waterType, (data as any).water_type)) }
         : {}),
 
-      ...(firstDefined((data as any).mainImage, (data as any).main_image) !== undefined
-        ? { mainImage: firstDefined((data as any).mainImage, (data as any).main_image) }
+      ...(firstDefined((data as any).mainImage, data.mainPhotoURL) !== undefined
+        ? {
+            mainImage: firstDefined((data as any).mainImage, data.mainPhotoURL),
+            mainPhotoURL: firstDefined(data.mainPhotoURL, (data as any).mainImage),
+          }
         : {}),
-      ...((data as any).extraImages !== undefined
-        ? { extraImages: (data as any).extraImages }
-        : {}),
+
       updatedAt: serverTimestamp(),
     };
 
     await updateDoc(doc(db, COLLECTIONS.SPOTS, spotId), updateData);
   },
 
-  /**
-   * Calculate XP based on catch data.
-   */
   calculateXP(data: Partial<Catch>): number {
     let xp = 25;
 
     const speciesGeneral = mapCatchSpeciesGeneral(data);
-    if (speciesGeneral) {
-      xp += getSpeciesXpBonus(speciesGeneral);
-    }
+    if (speciesGeneral) xp += getSpeciesXpBonus(speciesGeneral);
 
-    if ((data as any).length && (data as any).length > 50) xp += 15;
-    if ((data as any).weight && (data as any).weight > 2000) xp += 20;
-
+    if (data.length && data.length > 50) xp += 15;
+    if (data.weight && data.weight > 2000) xp += 20;
     if (mapCatchImage(data)) xp += 10;
-    if ((data as any).weather || (data as any).weatherSnapshot) xp += 5;
-    if ((data as any).notes && String((data as any).notes).length > 20) xp += 5;
+    if (data.weather || data.weatherSnapshot) xp += 5;
+    if (data.notes && String(data.notes).length > 20) xp += 5;
 
     return xp;
   },
 
-  /**
-   * Calculate which required fields are missing for v2 catch structure.
-   */
   calculateIncompleteFields(data: Partial<Catch>): string[] {
     const requiredChecks = [
       { key: 'speciesGeneral', value: mapCatchSpeciesGeneral(data) },
-      { key: 'weight', value: (data as any).weight },
-      { key: 'length', value: (data as any).length },
-      { key: 'spotId', value: (data as any).spotId },
+      { key: 'weight', value: data.weight },
+      { key: 'length', value: data.length },
+      { key: 'spotId', value: data.spotId },
       { key: 'mainImage', value: mapCatchImage(data) },
     ];
 
-    return requiredChecks
-      .filter((item) => !item.value)
-      .map((item) => item.key);
+    return requiredChecks.filter((item) => !item.value).map((item) => item.key);
   },
 
-  /**
-   * Create a new session in sessions_v2.
-   */
   async createSession(userId: string, data: Partial<Session>): Promise<string> {
     const participantIds = dedupeStrings([
       userId,
-      ...(((data as any).participantIds || (data as any).participantUserIds || []) as string[]),
+      ...(data.participantIds || data.participantUserIds || []),
     ]);
 
-    const startTime =
-      (data as any).startTime ||
-      (data as any).startedAt ||
-      serverTimestamp();
-
-    const endTime =
-      (data as any).endTime ||
-      (data as any).endedAt ||
-      undefined;
+    const startTime = data.startTime || data.startedAt || serverTimestamp();
+    const endTime = data.endTime || data.endedAt || undefined;
 
     const isActive =
-      firstDefined((data as any).isActive, (data as any).status === 'live', (data as any).mode === 'live', false) ===
-      true;
+      firstDefined(data.isActive, data.status === 'live', data.mode === 'live', false) === true;
+
+    const type = normalizeString(firstDefined(data.type, data.mode, 'retro')) as 'live' | 'retro' | undefined;
+    const name = normalizeString(firstDefined(data.name, data.title));
 
     const sessionData: Record<string, any> = {
       userId,
       createdBy: userId,
+      ownerUserId: userId,
 
       participantIds,
-      spotId: normalizeString(
-        firstDefined((data as any).spotId, (data as any).activeSpotId)
-      ),
+      participantUserIds: participantIds,
+      invitedUserIds: data.invitedUserIds || [],
+      acceptedUserIds: data.acceptedUserIds || [],
+      pendingUserIds: data.pendingUserIds || [],
+
+      spotId: normalizeString(firstDefined(data.spotId, data.activeSpotId)),
+      activeSpotId: normalizeString(firstDefined(data.activeSpotId, data.spotId)),
       spotName: normalizeString((data as any).spotName),
 
-      name: normalizeString((data as any).name),
-      notes: normalizeString((data as any).notes),
-      type: normalizeString(firstDefined((data as any).type, (data as any).mode, 'retro')),
+      name,
+      title: name,
+      description: normalizeString(data.description),
+      notes: data.notes,
+      sessionType: normalizeString(data.sessionType),
+
+      type,
+      mode: (type === 'live' ? 'live' : 'retro'),
+      status: data.status || (isActive ? 'live' : 'completed'),
 
       startTime,
+      startedAt: startTime,
       endTime,
+      endedAt: endTime,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
 
       isActive,
+      visibility: data.visibility || 'private',
+
+      linkedSpotIds: data.linkedSpotIds || [],
+      spotTimeline: data.spotTimeline || [],
+      linkedCatchIds: data.linkedCatchIds || [],
+      linkedSetupIds: data.linkedSetupIds || [],
+      linkedGearIds: data.linkedGearIds || [],
+      linkedProductIds: data.linkedProductIds || [],
+
+      stats: data.stats || data.statsSummary || {},
+      statsSummary: data.statsSummary || data.stats || {},
+      weatherStart: firstDefined((data as any).weatherStart, data.weatherSnapshotStart),
+      weatherSnapshotStart: firstDefined(data.weatherSnapshotStart, (data as any).weatherStart),
+
+      acceptanceStateByUser: data.acceptanceStateByUser || {},
+
       canonical: firstDefined((data as any).canonical, true),
-      stats: toSessionStats((data as any).stats || (data as any).statsSummary),
-      weatherStart: firstDefined((data as any).weatherStart, (data as any).weather),
-
-      mainImage: firstDefined((data as any).mainImage, (data as any).main_image),
-      extraImages:
-        firstDefined((data as any).extraImages, (data as any).extra_images, []) || [],
-      video: normalizeString((data as any).video),
-
-      // Compatibility / relation helpers
-      linkedCatchIds: (data as any).linkedCatchIds || [],
-      linkedSetupIds: (data as any).linkedSetupIds || [],
-      linkedGearIds: (data as any).linkedGearIds || [],
-      linkedProductIds: (data as any).linkedProductIds || [],
-
-      dedupeKey: normalizeString((data as any).dedupeKey),
-      isDuplicate: firstDefined((data as any).isDuplicate, false),
-      duplicateOf: normalizeString((data as any).duplicateOf),
+      schemaVersion: 2,
     };
 
     Object.keys(sessionData).forEach((key) => {
@@ -588,9 +552,6 @@ export const loggingService = {
     return docRef.id;
   },
 
-  /**
-   * Search users by display name.
-   */
   async searchUsers(searchTerm: string): Promise<UserProfile[]> {
     if (!searchTerm || searchTerm.length < 2) return [];
 
@@ -602,57 +563,46 @@ export const loggingService = {
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as UserProfile));
+    return snapshot.docs.map((d) => ({ ...d.data() } as UserProfile));
   },
 
-  /**
-   * Invite participant to session_v2.
-   */
   async inviteParticipant(sessionId: string, userId: string): Promise<void> {
     const sessionRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     await updateDoc(sessionRef, {
       invitedUserIds: arrayUnion(userId),
       pendingUserIds: arrayUnion(userId),
-      [`acceptanceStateByUser.${userId}`]: 'pending',
+      acceptanceStateByUser: {
+        [userId]: 'pending',
+      },
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
     });
   },
 
-  /**
-   * Accept session invitation.
-   */
   async acceptInvitation(sessionId: string, userId: string): Promise<void> {
     const sessionRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     await updateDoc(sessionRef, {
       participantIds: arrayUnion(userId),
+      participantUserIds: arrayUnion(userId),
       acceptedUserIds: arrayUnion(userId),
       pendingUserIds: arrayRemove(userId),
-      [`acceptanceStateByUser.${userId}`]: 'accepted',
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
     });
   },
 
-  /**
-   * Decline session invitation.
-   */
   async declineInvitation(sessionId: string, userId: string): Promise<void> {
     const sessionRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     await updateDoc(sessionRef, {
       pendingUserIds: arrayRemove(userId),
-      [`acceptanceStateByUser.${userId}`]: 'declined',
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
     });
   },
 
-  /**
-   * Get session details from sessions_v2.
-   */
   async getSession(sessionId: string): Promise<Session | null> {
     const docRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
     const docSnap = await getDoc(docRef);
@@ -664,35 +614,33 @@ export const loggingService = {
     return null;
   },
 
-  /**
-   * Start a new live session.
-   */
   async startSession(userId: string, data: Partial<Session>): Promise<string> {
     return this.createSession(userId, {
       ...data,
       type: 'live',
+      mode: 'live',
+      status: 'live',
       isActive: true,
-      startTime: (data as any).startTime || serverTimestamp(),
-    } as any);
+      startTime: data.startTime || serverTimestamp(),
+    });
   },
 
-  /**
-   * End an active session in sessions_v2.
-   */
   async endSession(sessionId: string, notes?: string, stats?: any): Promise<void> {
     const docRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     const sessionSnap = await getDoc(docRef);
     const sessionData = sessionSnap.data() || {};
-    const ownerUserId: string | undefined = sessionData.userId || sessionData.createdBy;
+    const ownerUserId: string | undefined = sessionData.userId || sessionData.createdBy || sessionData.ownerUserId;
 
     await updateDoc(docRef, {
       endTime: serverTimestamp(),
-      notes: notes ?? sessionData.notes ?? null,
-      stats: toSessionStats(stats ?? sessionData.stats ?? {}),
+      endedAt: serverTimestamp(),
+      ...(notes !== undefined ? { notes } : {}),
+      ...(stats !== undefined ? { stats, statsSummary: stats } : {}),
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
       isActive: false,
+      status: 'completed',
     });
 
     if (ownerUserId) {
@@ -702,43 +650,27 @@ export const loggingService = {
       );
       bustStatsCache(ownerUserId);
     }
-
-    const spotId: string | undefined = sessionData.spotId;
-    if (spotId) {
-      updateDoc(doc(db, COLLECTIONS.SPOTS, spotId), {
-        updatedAt: serverTimestamp(),
-      }).catch((e) => console.warn('spot session update failed', e));
-    }
   },
 
-  /**
-   * Switch spot within a session.
-   */
-  async switchSessionSpot(
-    sessionId: string,
-    newSpotId: string,
-    newSpotName: string
-  ): Promise<void> {
+  async switchSessionSpot(sessionId: string, newSpotId: string, newSpotName: string): Promise<void> {
     const sessionRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     await updateDoc(sessionRef, {
       spotId: newSpotId,
+      activeSpotId: newSpotId,
       spotName: newSpotName,
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
-      notes: arrayUnion(`Verplaatst naar ${newSpotName}`),
     });
   },
 
-  /**
-   * Link a catch to a session.
-   */
   async linkCatchToSession(catchId: string, sessionId: string, spotId?: string): Promise<void> {
     const catchRef = doc(db, COLLECTIONS.CATCHES, catchId);
 
     await updateDoc(catchRef, {
       sessionId,
       ...(spotId ? { spotId } : {}),
+      updatedAt: serverTimestamp(),
     });
 
     const sessionRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
@@ -750,14 +682,12 @@ export const loggingService = {
 
     if (spotId) {
       updateData.spotId = spotId;
+      updateData.activeSpotId = spotId;
     }
 
     await updateDoc(sessionRef, updateData);
   },
 
-  /**
-   * Add a note to session.
-   */
   async addSessionNote(sessionId: string, note: string): Promise<void> {
     const sessionRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
@@ -768,35 +698,28 @@ export const loggingService = {
     });
   },
 
-  /**
-   * Pause active session.
-   */
   async pauseSession(sessionId: string): Promise<void> {
     const docRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     await updateDoc(docRef, {
       isActive: false,
+      status: 'paused',
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
     });
   },
 
-  /**
-   * Resume paused session.
-   */
   async resumeSession(sessionId: string): Promise<void> {
     const docRef = doc(db, COLLECTIONS.SESSIONS, sessionId);
 
     await updateDoc(docRef, {
       isActive: true,
+      status: 'live',
       updatedAt: serverTimestamp(),
       lastActivityAt: serverTimestamp(),
     });
   },
 
-  /**
-   * Smart suggestions based on recent catches_v2.
-   */
   async getSmartSuggestions(userId: string) {
     const q = query(
       collection(db, COLLECTIONS.CATCHES),
@@ -818,30 +741,22 @@ export const loggingService = {
     }
 
     const species = this.getTopN(
-      history
-        .map((h: any) => h.speciesGeneral || h.species)
-        .filter(Boolean),
+      history.map((h: any) => h.speciesGeneral || h.species).filter(Boolean),
       3
     );
 
     const spots = this.getTopN(
-      history
-        .map((h: any) => h.spotId || h.spotName)
-        .filter(Boolean),
+      history.map((h: any) => h.spotName || h.spotId).filter(Boolean),
       3
     );
 
     const baits = this.getTopN(
-      history
-        .map((h: any) => h.baitSpecific || h.baitGeneral)
-        .filter(Boolean),
+      history.map((h: any) => h.baitSpecific || h.baitGeneral || h.bait).filter(Boolean),
       3
     );
 
     const techniques = this.getTopN(
-      history
-        .map((h: any) => h.techniqueId || h.technique || h.method)
-        .filter(Boolean),
+      history.map((h: any) => h.technique || h.techniqueId || h.method).filter(Boolean),
       3
     );
 
