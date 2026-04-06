@@ -1,7 +1,9 @@
 /**
  * Global types and interfaces for CatchRank.
- * This file centralizes all data models to ensure consistency.
+ * v2-first, legacy-compatible model layer.
  */
+
+export type AnyTimestamp = any;
 
 export interface UserSettings {
   units: {
@@ -32,11 +34,13 @@ export interface UserProfile {
   xp: number;
   level: number;
   bio?: string;
+
   onboardingStatus?: 'welcome' | 'profile' | 'preferences' | 'location' | 'complete';
   experienceLevel?: 'beginner' | 'intermediate' | 'advanced';
   favoriteSpecies?: string[];
   fishingTypes?: string[];
   locationPreference?: { lat: number; lng: number; name: string };
+
   stats?: {
     totalCatches: number;
     totalSessions: number;
@@ -44,15 +48,18 @@ export interface UserProfile {
     speciesCount: number;
     personalRecords?: Record<string, { length?: number; weight?: number }>;
   };
+
   settings?: UserSettings;
   privacy?: UserPrivacy;
   rank?: number;
+
   badges?: {
     id: string;
     name: string;
     icon: string;
-    earnedAt: any;
+    earnedAt: AnyTimestamp;
   }[];
+
   milestones?: {
     id: string;
     name: string;
@@ -60,150 +67,325 @@ export interface UserProfile {
     target: number;
     isCompleted: boolean;
   }[];
+
   streak?: {
     current: number;
-    lastActive: any;
+    lastActive: AnyTimestamp;
   };
-  lastActive?: any;
-  createdAt: any;
+
+  lastActive?: AnyTimestamp;
+  createdAt: AnyTimestamp;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Shared subtypes                                                            */
+/* -------------------------------------------------------------------------- */
+
+export interface WeatherSnapshot {
+  temp?: number;
+  feelsLike?: number;
+  description?: string;
+  icon?: string;
+
+  windSpeed?: number;
+  windDirection?: number;
+  windDir?: string;
+
+  pressure?: number;
+  humidity?: number;
+  visibility?: number;
+  cloudCover?: number;
+  uvIndex?: number;
+  uv?: number;
+  precipitation?: number;
+  moonPhase?: number;
+}
+
+export interface WaterSnapshot {
+  temp?: number;
+  clarity?: 'clear' | 'murky' | 'stained' | 'very_murky';
+  depth?: number;
+  flow?: 'none' | 'slow' | 'medium' | 'fast';
+}
+
+export interface CatchGearSelection {
+  setupId?: string;
+  rodId?: string;
+  reelId?: string;
+  lineId?: string;
+  leaderId?: string;
+  lureId?: string;
+  lureColor?: string;
+  hookSize?: string;
+}
+
+export interface SessionTimelineNote {
+  text: string;
+  timestamp: AnyTimestamp;
+  type?: 'note' | 'event' | 'spot_change';
+}
+
+export interface SessionSpotTimelineEntry {
+  spotId: string;
+  name?: string;
+  arrivedAt: AnyTimestamp;
+  leftAt?: AnyTimestamp;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Catch                                                                      */
+/* -------------------------------------------------------------------------- */
 
 export interface Catch {
   id?: string;
+
   userId: string;
   authorName?: string;
   authorPhoto?: string;
+
+  /**
+   * v2-first naming
+   */
+  speciesGeneral?: string;
+  speciesSpecific?: string;
+  baitGeneral?: string;
+  baitSpecific?: string;
+  mainImage?: string;
+  extraImages?: string[];
+  latitude?: number;
+  longitude?: number;
+  weatherSnapshot?: WeatherSnapshot;
+  gearIds?: string[];
+  gearSetupId?: string;
+
+  /**
+   * legacy-compatible fields
+   */
   species: string;
   speciesId?: string;
-  weight?: number; // in grams
-  length?: number; // in cm
-  photoURL?: string;
-  spotId?: string;
-  spotName?: string;
-  sessionId?: string;
-  timestamp: any;
-  status: 'draft' | 'complete' | 'pending';
-  incompleteFields?: string[];
   bait?: string;
   baitId?: string;
   technique?: string;
   techniqueId?: string;
+  photoURL?: string;
   location?: { lat: number; lng: number };
-  weather?: {
-    temp?: number;
-    description?: string;
-    icon?: string;
-    windSpeed?: number;
-    windDirection?: number;
-    pressure?: number;
-    humidity?: number;
-    visibility?: number;
-    cloudCover?: number;
-    uvIndex?: number;
-    precipitation?: number;
-    moonPhase?: number;
-  };
-  water?: {
-    temp?: number;
-    clarity?: 'clear' | 'murky' | 'stained' | 'very_murky';
-    depth?: number;
-    flow?: 'none' | 'slow' | 'medium' | 'fast';
-  };
-  gear?: {
-    rodId?: string;
-    reelId?: string;
-    lineId?: string;
-    leaderId?: string;
-    lureId?: string;
-    lureColor?: string;
-    hookSize?: string;
-  };
+
+  weight?: number; // grams
+  length?: number; // cm
+
+  spotId?: string;
+  spotName?: string;
+  sessionId?: string;
+
+  timestamp: AnyTimestamp;
+  catchTime?: AnyTimestamp;
+
+  status: 'draft' | 'complete' | 'pending';
+  incompleteFields?: string[];
+
+  weather?: WeatherSnapshot;
+  water?: WaterSnapshot;
+  gear?: CatchGearSelection;
+
   xpEarned?: number;
   isPrivate?: boolean;
   notes?: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Session                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface SessionStatsSummary {
+  totalCatches?: number;
+  totalXp?: number;
+  speciesCount?: number;
+}
+
+export interface SessionMetadata {
+  method?: string;
+  waterType?: string;
+  targetSpecies?: string[];
+}
+
 export interface Session {
   id?: string;
-  ownerUserId: string;
+
+  /**
+   * v2-first fields
+   */
+  userId?: string;
+  createdBy?: string;
+  participantIds?: string[];
+
+  name?: string;
+  type?: 'live' | 'retro' | string;
+
+  startTime?: AnyTimestamp;
+  endTime?: AnyTimestamp;
+
+  isActive?: boolean;
+  lastActivityAt?: AnyTimestamp;
+
+  spotId?: string;
+  spotName?: string;
+
+  weatherStart?: WeatherSnapshot;
+  weatherEnd?: WeatherSnapshot;
+
+  stats?: SessionStatsSummary;
+
+  /**
+   * legacy-compatible fields
+   */
+  ownerUserId?: string;
   participantUserIds: string[];
   invitedUserIds: string[];
   acceptedUserIds: string[];
   pendingUserIds: string[];
+
   title?: string;
   description?: string;
   sessionType?: string;
   mode: 'live' | 'retro';
-  status: 'draft' | 'planned' | 'live' | 'paused' | 'ended' | 'completed' | 'pending_acceptance' | 'archived';
-  startedAt?: any;
-  endedAt?: any;
-  createdAt: any;
-  updatedAt: any;
+  status:
+    | 'draft'
+    | 'planned'
+    | 'live'
+    | 'paused'
+    | 'ended'
+    | 'completed'
+    | 'pending_acceptance'
+    | 'archived';
+
+  startedAt?: AnyTimestamp;
+  endedAt?: AnyTimestamp;
+
+  createdAt: AnyTimestamp;
+  updatedAt: AnyTimestamp;
+
   durationMinutes?: number;
+
   activeSpotId?: string;
   linkedSpotIds: string[];
-  spotTimeline: {
-    spotId: string;
-    name: string;
-    arrivedAt: any;
-    leftAt?: any;
-  }[];
+  spotTimeline: SessionSpotTimelineEntry[];
+
   linkedCatchIds: string[];
   linkedSetupIds: string[];
   linkedGearIds: string[];
   linkedProductIds: string[];
-  gearIds?: string[]; // Alias for linkedGearIds
-  participantIds?: string[]; // Alias for participantUserIds
-  weatherSnapshotStart?: any;
-  weatherSnapshotEnd?: any;
+
+  gearIds?: string[];
+
+  weatherSnapshotStart?: WeatherSnapshot;
+  weatherSnapshotEnd?: WeatherSnapshot;
   forecastSummary?: string;
+
   visibility: 'public' | 'friends' | 'private';
-  notes?: string | { text: string; timestamp: any; type?: 'note' | 'event' | 'spot_change' }[];
-  metadata?: {
-    method?: string;
-    waterType?: string;
-    targetSpecies?: string[];
-  };
-  statsSummary?: {
-    totalCatches: number;
-    totalXp: number;
-    speciesCount: number;
-  };
+
+  notes?: string | SessionTimelineNote[];
+
+  metadata?: SessionMetadata;
+
+  statsSummary?: SessionStatsSummary;
+
   acceptanceStateByUser?: Record<string, 'pending' | 'accepted' | 'declined'>;
+
   createdFromLiveFlow?: boolean;
   savedAsDraftForParticipants?: boolean;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Spot                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export interface SpotStatsSummary {
+  totalCatches: number;
+  totalSessions?: number;
+  topSpecies: string[];
+  avgRating?: number;
+  ratingCount?: number;
+}
+
 export interface Spot {
   id?: string;
+
+  /**
+   * v2-first fields
+   */
+  title?: string;
+  lat?: number;
+  lng?: number;
+  latitude?: number;
+  longitude?: number;
+
+  privacy?: 'private' | 'friends' | 'public';
+
+  mainImage?: string;
+  extraImages?: string[];
+
+  bottomType?: string;
+  bottom_type?: string;
+
+  waterType?: 'canal' | 'river' | 'lake' | 'pond' | 'sea' | 'polder' | string;
+  water_type?: string;
+
+  spotSize?: string;
+  spot_size?: string;
+
+  waterSize?: string;
+  water_size?: string;
+
+  nightFishingAllowed?: boolean;
+  night_fishing_allowed?: boolean;
+
+  radius?: number;
+  city?: string;
+  province?: string;
+
+  createdBy?: string;
+  created_at?: AnyTimestamp;
+  updated_at?: AnyTimestamp;
+  migratedAt?: AnyTimestamp;
+  schemaVersion?: number;
+
+  statsSummary?: SpotStatsSummary;
+
+  /**
+   * legacy-compatible fields
+   */
   userId: string;
   authorName?: string;
   authorPhoto?: string;
+
   name: string;
   description?: string;
   coordinates: { lat: number; lng: number };
-  waterType?: 'canal' | 'river' | 'lake' | 'pond' | 'sea' | 'polder';
+
   waterBodyName?: string;
   visibility: 'private' | 'friends' | 'public';
-  isPrivate?: boolean; // Legacy
+  isPrivate?: boolean;
   isFavorite?: boolean;
+
   techniques?: string[];
   targetSpecies?: string[];
   amenities?: string[];
+
   linkedGearIds?: string[];
   linkedSetupIds?: string[];
+
   photoURLs?: string[];
   mainPhotoURL?: string;
-  createdAt: any;
-  updatedAt: any;
-  stats?: {
-    totalCatches: number;
-    totalSessions?: number;
-    topSpecies: string[];
-    avgRating?: number;
-    ratingCount?: number;
-  };
+
+  createdAt: AnyTimestamp;
+  updatedAt: AnyTimestamp;
+
+  stats?: SpotStatsSummary;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Other domain models                                                        */
+/* -------------------------------------------------------------------------- */
 
 export interface Species {
   id?: string;
@@ -233,7 +415,7 @@ export interface ClubMember {
   userId: string;
   clubId: string;
   role: 'owner' | 'admin' | 'member';
-  joinedAt: any;
+  joinedAt: AnyTimestamp;
   userDisplayName?: string;
   userPhotoURL?: string;
 }
@@ -247,7 +429,7 @@ export interface ClubFeedItem {
   authorPhoto: string;
   contentId?: string;
   text?: string;
-  createdAt: any;
+  createdAt: AnyTimestamp;
 }
 
 export interface FishingTool {
@@ -272,7 +454,7 @@ export interface KnowledgeContent {
   photoURL?: string;
   authorId?: string;
   authorName?: string;
-  publishedAt: any;
+  publishedAt: AnyTimestamp;
   tags: string[];
   relatedSpeciesIds?: string[];
   relatedToolIds?: string[];
@@ -284,13 +466,13 @@ export interface ToolResult {
   toolId: string;
   input: any;
   output: any;
-  createdAt: any;
-  expiresAt?: any;
+  createdAt: AnyTimestamp;
+  expiresAt?: AnyTimestamp;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mijn Visgear — Data Models
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/* Mijn Visgear                                                               */
+/* -------------------------------------------------------------------------- */
 
 export type GearCategory =
   | 'rod'
@@ -322,22 +504,17 @@ export interface GearItem {
   model?: string;
   description?: string;
   photoURL?: string;
-  purchaseDate?: any;
+  purchaseDate?: AnyTimestamp;
   purchasePrice?: number;
   isFavorite: boolean;
-  /** IDs of catches where this gear was used */
   linkedCatchIds?: string[];
-  /** IDs of sessions where this gear was used */
   linkedSessionIds?: string[];
-  /** IDs of setups this gear belongs to */
   linkedSetupIds?: string[];
-  /** Total usage count across catches + sessions */
   usageCount?: number;
   notes?: string;
-  /** Optional link to product_catalog for affiliate matching */
   affiliateProductId?: string;
-  createdAt: any;
-  updatedAt: any;
+  createdAt: AnyTimestamp;
+  updatedAt: AnyTimestamp;
 }
 
 export interface GearSetup {
@@ -345,48 +522,41 @@ export interface GearSetup {
   userId: string;
   name: string;
   description?: string;
-  /** Individual gear items (ordered: rod, reel, line, leader, lure) */
   rodId?: string;
   reelId?: string;
   lineId?: string;
   leaderId?: string;
   lureId?: string;
-  /** All gear IDs in this setup for quick lookup */
   gearIds: string[];
   catchCount?: number;
   sessionCount?: number;
   notes?: string;
-  createdAt: any;
-  updatedAt: any;
+  createdAt: AnyTimestamp;
+  updatedAt: AnyTimestamp;
 }
 
 export type ProductSource = 'fishinn' | 'bol';
 
 export interface ProductCatalogItem {
   id?: string;
-  /** External product ID from the source */
   externalId: string;
   source: ProductSource;
   name: string;
   brand?: string;
-  /** Normalized category matching GearCategory where possible */
   category?: string;
   description?: string;
   imageURL?: string;
   price?: number;
   currency?: string;
-  /** Affiliate click-through URL */
   affiliateURL: string;
   ean?: string;
   inStock?: boolean;
-  /** ISO timestamp of when this was fetched and cached */
-  cachedAt: any;
+  cachedAt: AnyTimestamp;
 }
 
 export interface ProductCacheMetadata {
   source: ProductSource;
-  lastFetched: any;
+  lastFetched: AnyTimestamp;
   itemCount: number;
-  /** True if last refresh succeeded */
   isValid: boolean;
 }
