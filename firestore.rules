@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    /* ------------------------------------------------------------------ */
+    /* Helpers                                                            */
+    /* ------------------------------------------------------------------ */
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -11,101 +15,221 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "j.vandenbol@gmail.com" &&
-         request.auth.token.email_verified == true);
+        request.auth.token.email == "j.vandenbol@gmail.com" &&
+        request.auth.token.email_verified == true;
     }
 
-    function isValidV2Catch(data) {
-      return data.userId == request.auth.uid &&
-             data.status in ['draft', 'complete', 'pending'];
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
 
-    function isValidV2Session(data) {
-      return data.userId == request.auth.uid &&
-             (!('type' in data) || data.type in ['live', 'retro']) &&
-             (!('isActive' in data) || data.isActive is bool);
+    function isValidVisibility(value) {
+      return value in ['public', 'friends', 'private'];
     }
 
-    function isValidV2Spot(data) {
-      return data.userId == request.auth.uid &&
-             data.title is string &&
-             data.title.size() > 0 &&
-             data.title.size() < 100 &&
-             data.privacy in ['private', 'friends', 'public'] &&
-             data.lat is number &&
-             data.lng is number;
+    function isValidCatchStatus(value) {
+      return value in ['draft', 'complete', 'pending'];
     }
 
+    function isValidSessionStatus(value) {
+      return value in [
+        'draft',
+        'planned',
+        'live',
+        'paused',
+        'ended',
+        'completed',
+        'pending_acceptance',
+        'archived'
+      ];
+    }
+
+    function isValidSessionMode(value) {
+      return value in ['live', 'retro'];
+    }
+
+    function isValidSpotWaterType(value) {
+      return value in ['canal', 'river', 'lake', 'pond', 'sea', 'polder'];
+    }
+
+    function spotReadable() {
+      return isAuthenticated() && (
+        resource.data.privacy == 'public' ||
+        resource.data.visibility == 'public' ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.privacy == 'friends' ||
+        resource.data.visibility == 'friends'
+      );
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Users                                                              */
+    /* ------------------------------------------------------------------ */
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email is string &&
+        isValidEmail(request.resource.data.email) &&
+        request.resource.data.displayName is string &&
+        request.resource.data.displayName.size() > 0 &&
+        request.resource.data.displayName.size() < 50 &&
+        request.resource.data.xp is number &&
+        request.resource.data.xp >= 0 &&
+        request.resource.data.level is number &&
+        request.resource.data.level >= 1;
+
+      allow update: if isOwner(userId) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.displayName is string &&
+        request.resource.data.displayName.size() > 0 &&
+        request.resource.data.displayName.size() < 50 &&
+        (!('xp' in request.resource.data) || (
+          request.resource.data.xp is number &&
+          request.resource.data.xp >= 0
+        )) &&
+        (!('level' in request.resource.data) || (
+          request.resource.data.level is number &&
+          request.resource.data.level >= 1
+        ));
+
+      allow delete: if false;
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Catches v2                                                         */
+    /* ------------------------------------------------------------------ */
     match /catches_v2/{catchId} {
-      allow read: if isAuthenticated() &&
-        (
-          !('isPrivate' in resource.data) ||
-          resource.data.isPrivate == false ||
-          resource.data.userId == request.auth.uid
-        );
+      allow read: if isAuthenticated() && (
+        !('isPrivate' in resource.data) ||
+        resource.data.isPrivate == false ||
+        resource.data.userId == request.auth.uid
+      );
 
-      allow create: if isAuthenticated() && isValidV2Catch(request.resource.data);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status is string &&
+        isValidCatchStatus(request.resource.data.status) &&
+        request.resource.data.timestamp != null;
+
       allow update: if isAuthenticated() &&
         resource.data.userId == request.auth.uid &&
-        isValidV2Catch(request.resource.data);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.status is string &&
+        isValidCatchStatus(request.resource.data.status);
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Sessions v2                                                        */
+    /* ------------------------------------------------------------------ */
     match /sessions_v2/{sessionId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.createdBy == request.auth.uid ||
-        (resource.data.participantIds is list && request.auth.uid in resource.data.participantIds) ||
-        (resource.data.invitedUserIds is list && request.auth.uid in resource.data.invitedUserIds)
+        resource.data.ownerUserId == request.auth.uid ||
+        (resource.data.participantIds is list &&
+          request.auth.uid in resource.data.participantIds) ||
+        (resource.data.participantUserIds is list &&
+          request.auth.uid in resource.data.participantUserIds) ||
+        (resource.data.invitedUserIds is list &&
+          request.auth.uid in resource.data.invitedUserIds)
       );
 
-      allow create: if isAuthenticated() && isValidV2Session(request.resource.data);
+      allow create: if isAuthenticated() &&
+        (
+          request.resource.data.userId == request.auth.uid ||
+          request.resource.data.createdBy == request.auth.uid ||
+          request.resource.data.ownerUserId == request.auth.uid
+        ) &&
+        request.resource.data.mode is string &&
+        isValidSessionMode(request.resource.data.mode) &&
+        request.resource.data.status is string &&
+        isValidSessionStatus(request.resource.data.status);
 
       allow update: if isAuthenticated() && (
         (
-          (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid) &&
-          isValidV2Session(request.resource.data)
-        ) ||
-        (
-          resource.data.invitedUserIds is list &&
-          request.auth.uid in resource.data.invitedUserIds &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'participantIds',
-            'acceptedUserIds',
-            'pendingUserIds',
-            'acceptanceStateByUser',
-            'updatedAt',
-            'lastActivityAt'
-          ])
-        )
+          resource.data.userId == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.ownerUserId == request.auth.uid
+        ) &&
+        request.resource.data.status is string &&
+        isValidSessionStatus(request.resource.data.status)
       );
 
-      allow delete: if isAuthenticated() &&
-        (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid);
-    }
-
-    match /spots_v2/{spotId} {
-      allow read: if isAuthenticated() && (
-        resource.data.privacy == 'public' ||
+      allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.createdBy == request.auth.uid ||
-        resource.data.privacy == 'friends'
+        resource.data.ownerUserId == request.auth.uid
       );
+    }
 
-      allow create: if isAuthenticated() && isValidV2Spot(request.resource.data);
+    /* ------------------------------------------------------------------ */
+    /* Spots v2                                                           */
+    /* ------------------------------------------------------------------ */
+    match /spots_v2/{spotId} {
+      allow read: if spotReadable();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.title.size() < 100 &&
+        request.resource.data.lat is number &&
+        request.resource.data.lng is number &&
+        (
+          !('privacy' in request.resource.data) ||
+          isValidVisibility(request.resource.data.privacy)
+        ) &&
+        (
+          !('visibility' in request.resource.data) ||
+          isValidVisibility(request.resource.data.visibility)
+        ) &&
+        (
+          !('waterType' in request.resource.data) ||
+          isValidSpotWaterType(request.resource.data.waterType)
+        );
 
       allow update: if isAuthenticated() &&
         (
           resource.data.userId == request.auth.uid ||
           resource.data.createdBy == request.auth.uid
         ) &&
-        isValidV2Spot(request.resource.data);
+        request.resource.data.userId == resource.data.userId &&
+        (
+          !('title' in request.resource.data) ||
+          (
+            request.resource.data.title is string &&
+            request.resource.data.title.size() > 0 &&
+            request.resource.data.title.size() < 100
+          )
+        ) &&
+        (
+          !('lat' in request.resource.data) ||
+          request.resource.data.lat is number
+        ) &&
+        (
+          !('lng' in request.resource.data) ||
+          request.resource.data.lng is number
+        ) &&
+        (
+          !('privacy' in request.resource.data) ||
+          isValidVisibility(request.resource.data.privacy)
+        ) &&
+        (
+          !('visibility' in request.resource.data) ||
+          isValidVisibility(request.resource.data.visibility)
+        ) &&
+        (
+          !('waterType' in request.resource.data) ||
+          isValidSpotWaterType(request.resource.data.waterType)
+        );
 
       allow delete: if isAuthenticated() &&
         (
@@ -114,9 +238,42 @@ service cloud.firestore {
         );
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Species                                                            */
+    /* ------------------------------------------------------------------ */
     match /species/{speciesId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Legacy collections you still use                                   */
+    /* ------------------------------------------------------------------ */
+    match /clubs/{clubId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /club_members/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /club_feed/{feedId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid || isAdmin()
+      );
     }
   }
 }
