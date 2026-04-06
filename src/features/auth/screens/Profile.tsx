@@ -89,71 +89,129 @@ export default function Profile() {
     <PageLayout>
       <div className="max-w-5xl mx-auto space-y-8 pb-32">
         {/* Profile Header */}
-        <section className="relative">
-          <Card className="bg-surface-card border-none overflow-hidden rounded-2xl md:rounded-[2.5rem] shadow-premium">
-            {/* Cover Image Placeholder */}
-            <div className="h-24 md:h-40 bg-gradient-to-r from-brand/20 via-brand/10 to-transparent relative">
-              <div className="absolute inset-0 bg-black/20" />
-              <div className="absolute bottom-4 right-4 flex gap-2">
-                <Button variant="secondary" size="sm" className="bg-black/40 backdrop-blur-md border-white/10 text-white h-9 px-4 rounded-xl">
-                  <Share2 className="w-4 h-4 mr-2" />
-                  Delen
-                </Button>
-                <Button variant="secondary" size="sm" className="bg-black/40 backdrop-blur-md border-white/10 text-white h-9 px-4 rounded-xl" onClick={() => navigate('/settings')}>
-                  <SettingsIcon className="w-4 h-4 mr-2" />
-                  Instellingen
-                </Button>
+<section className="relative">
+  <Card className="overflow-hidden rounded-[2rem] md:rounded-[2.5rem] border-none bg-surface-card shadow-premium">
+    {/* Cover */}
+    <div className="relative h-28 md:h-44 bg-gradient-to-r from-brand/20 via-brand/10 to-transparent">
+      <div className="absolute inset-0 bg-black/20" />
+
+      {/* Desktop actions only inside cover */}
+      <div className="hidden md:flex absolute bottom-4 right-4 gap-2 z-10">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-10 px-4 rounded-xl bg-black/40 backdrop-blur-md border-white/10 text-white"
+        >
+          <Share2 className="w-4 h-4 mr-2" />
+          Delen
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-10 px-4 rounded-xl bg-black/40 backdrop-blur-md border-white/10 text-white"
+          onClick={() => navigate('/settings')}
+        >
+          <SettingsIcon className="w-4 h-4 mr-2" />
+          Instellingen
+        </Button>
+      </div>
+    </div>
+
+    <div className="relative z-10 px-5 md:px-10 pb-8 md:pb-12">
+      {/* Avatar */}
+      <div className="-mt-12 md:-mt-16 flex justify-center md:justify-start">
+        <div className="relative group">
+          <div className="w-24 h-24 md:w-32 md:h-32 rounded-[1.75rem] md:rounded-[2rem] border-4 border-surface-card overflow-hidden bg-surface-soft shadow-2xl">
+            {profile?.photoURL ? (
+              <img
+                src={profile.photoURL}
+                alt={profile?.displayName || 'Profile'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-brand/10 text-brand">
+                <Fish className="w-10 h-10 md:w-12 md:h-12" />
+              </div>
+            )}
+          </div>
+
+          <button className="absolute bottom-0 right-0 p-2 bg-brand text-bg-main rounded-xl shadow-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+            <Edit2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile actions below avatar */}
+      <div className="mt-4 flex md:hidden gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-1 h-11 rounded-2xl bg-bg-main/70 backdrop-blur-md border-border-subtle text-text-primary"
+        >
+          <Share2 className="w-4 h-4 mr-2" />
+          Delen
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-1 h-11 rounded-2xl bg-bg-main/70 backdrop-blur-md border-border-subtle text-text-primary"
+          onClick={() => navigate('/settings')}
+        >
+          <SettingsIcon className="w-4 h-4 mr-2" />
+          Instellingen
+        </Button>
+      </div>
+
+      {/* Main content */}
+      <div className="mt-5 md:mt-6 flex flex-col md:flex-row md:items-end md:justify-between gap-6 md:gap-8">
+        {/* Left */}
+        <div className="flex-1 text-center md:text-left">
+          <div className="flex flex-col md:flex-row items-center md:items-end justify-center md:justify-start gap-2 md:gap-3">
+            <h1 className="text-3xl md:text-4xl font-bold text-text-primary tracking-tight leading-none">
+              {profile?.displayName || 'Gebruiker'}
+            </h1>
+            <div className="mt-1 md:mt-0">
+              <LevelBadge level={profile?.level || 1} showTitle size="md" />
+            </div>
+          </div>
+
+          <p className="mt-4 text-base md:text-lg text-text-secondary font-medium max-w-2xl mx-auto md:mx-0 leading-relaxed">
+            {profile?.bio || 'Gepassioneerd sportvisser uit Nederland. Altijd op zoek naar die ene monster snoekbaars!'}
+          </p>
+        </div>
+
+        {/* Right / Stats */}
+        <div className="w-full md:w-auto md:min-w-[320px]">
+          <div className="rounded-[1.75rem] border border-border-subtle bg-bg-main/35 backdrop-blur-sm px-4 py-4 md:px-5 md:py-5">
+            <div className="grid grid-cols-2 items-stretch">
+              <div className="text-center px-3 py-2 border-r border-border-subtle">
+                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-text-muted">
+                  XP
+                </p>
+                <p className="text-3xl md:text-4xl font-bold text-brand leading-none">
+                  {(profile?.xp || 0).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="text-center px-3 py-2">
+                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-text-muted">
+                  Level
+                </p>
+                <p className="text-3xl md:text-4xl font-bold text-text-primary leading-none">
+                  {profile?.level || 1}
+                </p>
               </div>
             </div>
 
-            <div className="px-6 md:px-10 pb-8 md:pb-12 -mt-10 md:-mt-14 relative z-10">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div className="flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-8 text-center md:text-left">
-                  <div className="relative group">
-                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-2xl md:rounded-[2rem] border-4 border-surface-card overflow-hidden bg-surface-soft shadow-2xl">
-                      {profile?.photoURL ? (
-                        <img src={profile.photoURL} alt={profile.displayName} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-brand/10 text-brand">
-                          <Fish className="w-12 h-12" />
-                        </div>
-                      )}
-                    </div>
-                    <button className="absolute bottom-0 right-0 p-2 bg-brand text-bg-main rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="space-y-2 md:pb-2">
-                    <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
-                      <h1 className="text-2xl md:text-4xl font-bold text-text-primary tracking-tight">{profile?.displayName}</h1>
-                      <LevelBadge level={profile?.level || 1} showTitle size="md" />
-                    </div>
-                    <p className="text-sm md:text-base text-text-secondary font-medium max-w-md">
-                      {profile?.bio || 'Gepassioneerd sportvisser uit Nederland. Altijd op zoek naar die ene monster snoekbaars!'}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-end gap-3 md:pb-2">
-                  <div className="flex items-center gap-4">
-                    <div className="text-center px-4 py-2 border-r border-border-subtle">
-                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">XP</p>
-                      <p className="text-xl font-bold text-brand">{(profile?.xp || 0).toLocaleString()}</p>
-                    </div>
-                    <div className="text-center px-4 py-2">
-                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Level</p>
-                      <p className="text-xl font-bold text-text-primary">{profile?.level || 1}</p>
-                    </div>
-                  </div>
-                  {/* XP Progress towards next level */}
-                  <div className="w-full min-w-[180px] md:min-w-[240px]">
-                    <XpProgressBar xp={profile?.xp || 0} compact />
-                  </div>
-                </div>
-              </div>
+            <div className="mt-5">
+              <XpProgressBar xp={profile?.xp || 0} compact />
             </div>
-          </Card>
-        </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Card>
+</section>
 
         {/* Tab Navigation */}
         <div className="flex items-center gap-1 bg-surface-card p-1 rounded-2xl border border-border-subtle overflow-x-auto no-scrollbar">
