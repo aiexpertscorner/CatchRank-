@@ -7,7 +7,7 @@ import {
   limit,
   doc,
   updateDoc,
-  Timestamp
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../App';
@@ -25,6 +25,27 @@ interface SessionContextType {
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
+const SESSIONS_COLLECTION = 'sessions_v2';
+
+const getSessionOwnerId = (session: Partial<Session> | null | undefined): string | undefined => {
+  if (!session) return undefined;
+  return (
+    (session as any).createdBy ||
+    (session as any).userId ||
+    (session as any).ownerUserId
+  );
+};
+
+const isSessionPaused = (session: Partial<Session> | null | undefined): boolean => {
+  if (!session) return false;
+  return (session as any).status === 'paused';
+};
+
+const isSessionLive = (session: Partial<Session> | null | undefined): boolean => {
+  if (!session) return false;
+  return (session as any).isActive === true && !isSessionPaused(session);
+};
+
 export const useSession = () => {
   const context = useContext(SessionContext);
   if (!context) throw new Error('useSession must be used within SessionProvider');
@@ -37,50 +58,66 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!profile) {
+    if (!profile?.uid) {
       setActiveSession(null);
       setLoading(false);
       return;
     }
 
-    // Query for sessions where user is a participant and status is 'live' or 'paused'
+    setLoading(true);
+
+    /**
+     * v2 truth:
+     * - collection: sessions_v2
+     * - active state: isActive === true
+     * - participant field: participantIds
+     */
     const q = query(
-      collection(db, 'sessions'),
-      where('participantUserIds', 'array-contains', profile.uid),
-      where('status', 'in', ['live', 'paused']),
+      collection(db, SESSIONS_COLLECTION),
+      where('participantIds', 'array-contains', profile.uid),
+      where('isActive', '==', true),
       limit(1)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const sessionDoc = snapshot.docs[0];
-        setActiveSession({ id: sessionDoc.id, ...sessionDoc.data() } as Session);
-      } else {
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const sessionDoc = snapshot.docs[0];
+          setActiveSession({ id: sessionDoc.id, ...sessionDoc.data() } as Session);
+        } else {
+          setActiveSession(null);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Session listener error:', error);
         setActiveSession(null);
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error('Session listener error:', error);
-      setLoading(false);
-    });
+    );
 
     return () => unsubscribe();
-  }, [profile]);
+  }, [profile?.uid]);
 
   const endActiveSession = async () => {
-    if (!activeSession || !profile) return;
+    if (!activeSession || !profile?.uid || !activeSession.id) return;
+
     try {
-      await updateDoc(doc(db, 'sessions', activeSession.id!), {
-        status: 'completed',
-        endedAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
+      await updateDoc(doc(db, SESSIONS_COLLECTION, activeSession.id), {
+        isActive: false,
+        status: 'completed', // compatibility field for older UI
+        endTime: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        lastActivityAt: Timestamp.now(),
       });
+
       toast.success('Sessie beëindigd en opgeslagen!');
 
-      // Award session completion XP to the owner
-      if (activeSession.ownerUserId === profile.uid) {
+      const ownerId = getSessionOwnerId(activeSession);
+      if (ownerId === profile.uid) {
         const SESSION_COMPLETION_XP = 50;
-        xpService.addXpToUser(profile.uid, SESSION_COMPLETION_XP).catch(err =>
+        xpService.addXpToUser(profile.uid, SESSION_COMPLETION_XP).catch((err) =>
           console.error('XP award failed (endActiveSession):', err)
         );
       }
@@ -91,12 +128,16 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const pauseActiveSession = async () => {
-    if (!activeSession || activeSession.status !== 'live') return;
+    if (!activeSession?.id || !isSessionLive(activeSession)) return;
+
     try {
-      await updateDoc(doc(db, 'sessions', activeSession.id!), {
-        status: 'paused',
-        updatedAt: Timestamp.now()
+      await updateDoc(doc(db, SESSIONS_COLLECTION, activeSession.id), {
+        isActive: true,
+        status: 'paused', // compatibility + explicit paused state
+        updatedAt: Timestamp.now(),
+        lastActivityAt: Timestamp.now(),
       });
+
       toast.info('Sessie gepauzeerd.');
     } catch (error) {
       console.error('Pause session error:', error);
@@ -105,12 +146,16 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resumeActiveSession = async () => {
-    if (!activeSession || activeSession.status !== 'paused') return;
+    if (!activeSession?.id || !isSessionPaused(activeSession)) return;
+
     try {
-      await updateDoc(doc(db, 'sessions', activeSession.id!), {
-        status: 'live',
-        updatedAt: Timestamp.now()
+      await updateDoc(doc(db, SESSIONS_COLLECTION, activeSession.id), {
+        isActive: true,
+        status: 'live', // compatibility field
+        updatedAt: Timestamp.now(),
+        lastActivityAt: Timestamp.now(),
       });
+
       toast.success('Sessie hervat!');
     } catch (error) {
       console.error('Resume session error:', error);
@@ -119,13 +164,15 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   return (
-    <SessionContext.Provider value={{ 
-      activeSession, 
-      loading, 
-      endActiveSession, 
-      pauseActiveSession, 
-      resumeActiveSession 
-    }}>
+    <SessionContext.Provider
+      value={{
+        activeSession,
+        loading,
+        endActiveSession,
+        pauseActiveSession,
+        resumeActiveSession,
+      }}
+    >
       {children}
     </SessionContext.Provider>
   );
