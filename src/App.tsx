@@ -8,6 +8,9 @@ import {
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
@@ -42,9 +45,9 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  loginWithGoogle: () => Promise<void>;
-  loginWithEmail: (email: string, password: string) => Promise<void>;
-  registerWithEmail: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (rememberMe?: boolean) => Promise<void>;
+  loginWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  registerWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -116,9 +119,17 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const loginWithGoogle = async () => {
+  const applyPersistence = async (rememberMe = true) => {
+    await setPersistence(
+      auth,
+      rememberMe ? browserLocalPersistence : browserSessionPersistence
+    );
+  };
+
+  const loginWithGoogle = async (rememberMe = true) => {
     const provider = new GoogleAuthProvider();
     try {
+      await applyPersistence(rememberMe);
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Sign in error:', error);
@@ -126,8 +137,13 @@ export default function App() {
     }
   };
 
-  const loginWithEmail = async (email: string, password: string) => {
+  const loginWithEmail = async (
+    email: string,
+    password: string,
+    rememberMe = true
+  ) => {
     try {
+      await applyPersistence(rememberMe);
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
       console.error('Login error:', error);
@@ -135,8 +151,13 @@ export default function App() {
     }
   };
 
-  const registerWithEmail = async (email: string, password: string) => {
+  const registerWithEmail = async (
+    email: string,
+    password: string,
+    rememberMe = true
+  ) => {
     try {
+      await applyPersistence(rememberMe);
       await createUserWithEmailAndPassword(auth, email, password);
     } catch (error) {
       console.error('Register error:', error);
@@ -184,7 +205,11 @@ export default function App() {
     );
   }
 
-  const showOnboarding = Boolean(user && profile && profile.onboardingStatus !== 'complete');
+  const showOnboarding = Boolean(
+    user &&
+      profile &&
+      profile.onboardingStatus !== 'complete'
+  );
 
   return (
     <AuthContext.Provider
@@ -203,7 +228,10 @@ export default function App() {
         <Toaster position="top-right" richColors closeButton />
         <Router>
           <Routes>
-            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+            <Route
+              path="/login"
+              element={!user ? <Login /> : <Navigate to="/" replace />}
+            />
 
             <Route
               path="/onboarding"
@@ -223,7 +251,11 @@ export default function App() {
             <Route
               element={
                 user ? (
-                  showOnboarding ? <Navigate to="/onboarding" replace /> : <AppShell />
+                  showOnboarding ? (
+                    <Navigate to="/onboarding" replace />
+                  ) : (
+                    <AppShell />
+                  )
                 ) : (
                   <Navigate to="/login" replace />
                 )
