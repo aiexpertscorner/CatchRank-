@@ -5,6 +5,10 @@
 
 export type AnyTimestamp = any;
 
+/* -------------------------------------------------------------------------- */
+/* User                                                                       */
+/* -------------------------------------------------------------------------- */
+
 export interface UserSettings {
   units: {
     weight: 'kg' | 'lb';
@@ -36,16 +40,25 @@ export interface UserProfile {
   bio?: string;
 
   onboardingStatus?: 'welcome' | 'profile' | 'preferences' | 'location' | 'complete';
+  onboardingCompletedAt?: AnyTimestamp;
+  starterRewardPending?: boolean;
+
   experienceLevel?: 'beginner' | 'intermediate' | 'advanced';
   favoriteSpecies?: string[];
   fishingTypes?: string[];
-  locationPreference?: { lat: number; lng: number; name: string };
+
+  locationPreference?: {
+    lat: number;
+    lng: number;
+    name: string;
+  };
 
   stats?: {
     totalCatches: number;
     totalSessions: number;
     totalSpots: number;
     speciesCount: number;
+    totalPrs?: number;
     personalRecords?: Record<string, { length?: number; weight?: number }>;
   };
 
@@ -74,7 +87,7 @@ export interface UserProfile {
   };
 
   lastActive?: AnyTimestamp;
-  createdAt: AnyTimestamp;
+  createdAt?: AnyTimestamp;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -239,16 +252,16 @@ export interface Session {
    * legacy-compatible fields
    */
   ownerUserId?: string;
-  participantUserIds: string[];
-  invitedUserIds: string[];
-  acceptedUserIds: string[];
-  pendingUserIds: string[];
+  participantUserIds?: string[];
+  invitedUserIds?: string[];
+  acceptedUserIds?: string[];
+  pendingUserIds?: string[];
 
   title?: string;
   description?: string;
   sessionType?: string;
-  mode: 'live' | 'retro';
-  status:
+  mode?: 'live' | 'retro';
+  status?:
     | 'draft'
     | 'planned'
     | 'live'
@@ -261,19 +274,19 @@ export interface Session {
   startedAt?: AnyTimestamp;
   endedAt?: AnyTimestamp;
 
-  createdAt: AnyTimestamp;
-  updatedAt: AnyTimestamp;
+  createdAt?: AnyTimestamp;
+  updatedAt?: AnyTimestamp;
 
   durationMinutes?: number;
 
   activeSpotId?: string;
-  linkedSpotIds: string[];
-  spotTimeline: SessionSpotTimelineEntry[];
+  linkedSpotIds?: string[];
+  spotTimeline?: SessionSpotTimelineEntry[];
 
-  linkedCatchIds: string[];
-  linkedSetupIds: string[];
-  linkedGearIds: string[];
-  linkedProductIds: string[];
+  linkedCatchIds?: string[];
+  linkedSetupIds?: string[];
+  linkedGearIds?: string[];
+  linkedProductIds?: string[];
 
   gearIds?: string[];
 
@@ -281,7 +294,7 @@ export interface Session {
   weatherSnapshotEnd?: WeatherSnapshot;
   forecastSummary?: string;
 
-  visibility: 'public' | 'friends' | 'private';
+  visibility?: 'public' | 'friends' | 'private';
 
   notes?: string | SessionTimelineNote[];
 
@@ -293,6 +306,18 @@ export interface Session {
 
   createdFromLiveFlow?: boolean;
   savedAsDraftForParticipants?: boolean;
+
+  /**
+   * Optional backend/session integrity fields seen in v2 indexes
+   */
+  canonical?: boolean;
+  dedupeKey?: string;
+  dedupedAt?: AnyTimestamp;
+  duplicateOf?: string;
+  isDuplicate?: boolean;
+  mainImage?: string;
+  extraImages?: string[];
+  video?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -377,8 +402,8 @@ export interface Spot {
   photoURLs?: string[];
   mainPhotoURL?: string;
 
-  createdAt: AnyTimestamp;
-  updatedAt: AnyTimestamp;
+  createdAt?: AnyTimestamp;
+  updatedAt?: AnyTimestamp;
 
   stats?: SpotStatsSummary;
 }
@@ -389,11 +414,27 @@ export interface Spot {
 
 export interface Species {
   id?: string;
+
+  /**
+   * App-friendly normalized fields
+   */
   name: string;
   scientificName?: string;
   description?: string;
   photoURL?: string;
   xpValue?: number;
+
+  /**
+   * Raw Firestore species fields
+   */
+  species_id?: string;
+  name_nl?: string;
+  name_latin?: string;
+  rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | string;
+  xp_base?: number;
+  habitat?: string;
+  set_group?: string;
+  search_keywords?: string[];
 }
 
 export interface Club {
