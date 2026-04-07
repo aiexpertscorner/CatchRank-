@@ -5,7 +5,6 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../../lib/firebase';
 import { useAuth } from '../../../App';
 import { Button, Card } from '../../../components/ui/Base';
-import Logo from '../Logo';
 import { toast } from 'sonner';
 
 export default function Login() {
@@ -21,6 +20,8 @@ export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  const logoSrc = `${import.meta.env.BASE_URL}logo/logo-icon.svg`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,8 +96,14 @@ export default function Login() {
         >
           <div className="mb-8 text-center">
             <div className="mb-6 flex justify-center">
-              <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/[0.04] bg-surface-soft/80 shadow-[0_8px_30px_rgba(0,0,0,0.25)] md:h-32 md:w-32">
-                <Logo size="xl" withText={false} />
+              <div className="relative flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/[0.04] bg-surface-soft/80 shadow-[0_8px_30px_rgba(0,0,0,0.25)] md:h-32 md:w-32">
+                <div className="absolute inset-0 rounded-[2rem] bg-brand/10 blur-2xl opacity-40" />
+                <img
+                  src={logoSrc}
+                  alt="CatchRank logo"
+                  className="relative z-10 h-20 w-20 object-contain md:h-24 md:w-24"
+                  draggable={false}
+                />
               </div>
             </div>
 
