@@ -5,6 +5,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../../lib/firebase';
 import { useAuth } from '../../../App';
 import { Button, Card } from '../../../components/ui/Base';
+import { Logo } from '../../../components/branding/Logo';
 import { toast } from 'sonner';
 
 export default function Login() {
@@ -20,8 +21,6 @@ export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
-
-  const logoSrc = `${import.meta.env.BASE_URL}logo-icon.png`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,57 +82,63 @@ export default function Login() {
 
   return (
     <>
-      <div className="min-h-screen bg-bg-main flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand/5 blur-[120px] rounded-full" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-brand/5 blur-[120px] rounded-full" />
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-bg-main p-4">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute left-[-10%] top-[-10%] h-[40%] w-[40%] rounded-full bg-brand/5 blur-[120px]" />
+          <div className="absolute bottom-[-10%] right-[-10%] h-[40%] w-[40%] rounded-full bg-brand/5 blur-[120px]" />
         </div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md relative z-10"
+          className="relative z-10 w-full max-w-md"
         >
-<div className="mb-8 text-center">
-  <div className="flex justify-center mb-6">
-    <div className="flex h-28 w-28 md:h-32 md:w-32 items-center justify-center 
-                    rounded-[2rem] 
-                    border border-white/[0.04] 
-                    bg-surface-soft/80 
-                    shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
+          <div className="mb-8 text-center">
+            <div className="mb-6 flex justify-center">
+              <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/[0.04] bg-surface-soft/80 shadow-[0_8px_30px_rgba(0,0,0,0.25)] md:h-32 md:w-32">
+                <Logo size="xl" withText={false} />
+              </div>
+            </div>
 
-      <Logo size="xl" withText={false} />
+            <h1 className="mb-2 text-4xl font-krub font-bold uppercase tracking-tight text-brand">
+              CatchRank
+            </h1>
 
-    </div>
-  </div>
+            <p className="mb-3 text-sm font-black uppercase tracking-[0.28em] text-text-muted">
+              Log. Groei. Vang meer.
+            </p>
 
-  <h1 className="text-4xl font-krub font-bold text-brand tracking-tight uppercase mb-2">
-    CatchRank
-  </h1>
+            <p className="mx-auto max-w-sm text-base font-medium leading-relaxed text-text-secondary">
+              Houd je vangsten bij, ontdek wat werkt en haal meer uit je sessies — solo of samen met andere vissers.
+            </p>
 
-  <p className="text-sm text-text-muted uppercase tracking-[0.28em] font-black mb-3">
-    Log. Leer. Vang meer.
-  </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2.5">
+              <span className="rounded-full border border-white/[0.06] bg-surface-soft/70 px-3 py-1.5 text-[11px] font-bold text-text-muted">
+                Vislogboek & statistieken
+              </span>
+              <span className="rounded-full border border-white/[0.06] bg-surface-soft/70 px-3 py-1.5 text-[11px] font-bold text-text-muted">
+                Inzichten & tools
+              </span>
+              <span className="rounded-full border border-white/[0.06] bg-surface-soft/70 px-3 py-1.5 text-[11px] font-bold text-text-muted">
+                XP, rankings & clubs
+              </span>
+            </div>
+          </div>
 
-  <p className="text-text-secondary font-medium">
-    Log je vangsten, verbeter je skills.
-  </p>
-</div>
-
-          <Card className="p-8 border border-border-subtle bg-surface-card/80 backdrop-blur-xl rounded-[2.5rem] shadow-2xl">
+          <Card className="rounded-[2.5rem] border border-border-subtle bg-surface-card/80 p-8 shadow-2xl backdrop-blur-xl">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-widest ml-1">
+                  <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-text-muted">
                     Email Adres
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                    <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-4 py-3.5 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
+                      className="w-full rounded-2xl border border-border-subtle bg-bg-main py-3.5 pl-12 pr-4 text-sm text-text-primary transition-all focus:border-brand focus:outline-none"
                       placeholder="naam@voorbeeld.nl"
                       autoComplete="email"
                       required
@@ -142,16 +147,16 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-text-muted uppercase tracking-widest ml-1">
+                  <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-text-muted">
                     Wachtwoord
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                    <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-12 py-3.5 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
+                      className="w-full rounded-2xl border border-border-subtle bg-bg-main py-3.5 pl-12 pr-12 text-sm text-text-primary transition-all focus:border-brand focus:outline-none"
                       placeholder="••••••••"
                       autoComplete={isRegister ? 'new-password' : 'current-password'}
                       required
@@ -159,13 +164,13 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors hover:text-text-primary"
                       aria-label={showPassword ? 'Verberg wachtwoord' : 'Toon wachtwoord'}
                     >
                       {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
+                        <EyeOff className="h-4 w-4" />
                       ) : (
-                        <Eye className="w-4 h-4" />
+                        <Eye className="h-4 w-4" />
                       )}
                     </button>
                   </div>
@@ -173,7 +178,7 @@ export default function Login() {
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
+                <label className="flex cursor-pointer select-none items-center gap-3">
                   <input
                     type="checkbox"
                     checked={rememberMe}
@@ -181,13 +186,13 @@ export default function Login() {
                     className="sr-only"
                   />
                   <span
-                    className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                    className={`flex h-5 w-5 items-center justify-center rounded-md border transition-all ${
                       rememberMe
-                        ? 'bg-brand border-brand'
-                        : 'bg-bg-main border-border-subtle'
+                        ? 'border-brand bg-brand'
+                        : 'border-border-subtle bg-bg-main'
                     }`}
                   >
-                    {rememberMe && <span className="w-2 h-2 rounded-sm bg-bg-main" />}
+                    {rememberMe && <span className="h-2 w-2 rounded-sm bg-bg-main" />}
                   </span>
                   <span className="text-xs font-bold text-text-muted">
                     Onthoud mij
@@ -197,7 +202,7 @@ export default function Login() {
                 {!isRegister && (
                   <button
                     type="button"
-                    className="text-xs font-bold text-text-muted hover:text-brand transition-colors"
+                    className="text-xs font-bold text-text-muted transition-colors hover:text-brand"
                     onClick={openForgotModal}
                   >
                     Wachtwoord vergeten?
@@ -207,11 +212,11 @@ export default function Login() {
 
               <Button
                 type="submit"
-                className="w-full h-14 rounded-2xl font-bold shadow-premium-accent"
+                className="h-14 w-full rounded-2xl font-bold shadow-premium-accent"
                 disabled={loading}
               >
                 {loading ? (
-                  <div className="w-6 h-6 border-2 border-bg-main border-t-transparent rounded-full animate-spin" />
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-bg-main border-t-transparent" />
                 ) : (
                   <>{isRegister ? 'Account Aanmaken' : 'Inloggen'}</>
                 )}
@@ -220,7 +225,7 @@ export default function Login() {
 
             <div className="relative my-8">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border-subtle"></div>
+                <div className="w-full border-t border-border-subtle" />
               </div>
               <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest">
                 <span className="bg-surface-card px-4 text-text-dim">
@@ -232,13 +237,13 @@ export default function Login() {
             <Button
               variant="secondary"
               onClick={handleGoogleLogin}
-              className="w-full h-14 rounded-2xl font-bold border border-border-subtle"
+              className="h-14 w-full rounded-2xl border border-border-subtle font-bold"
               disabled={loading}
             >
               <img
                 src="https://www.google.com/favicon.ico"
                 alt="Google"
-                className="w-4 h-4 mr-3"
+                className="mr-3 h-4 w-4"
               />
               Google
             </Button>
@@ -247,7 +252,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setIsRegister(!isRegister)}
-                className="text-xs font-bold text-text-muted hover:text-brand transition-colors"
+                className="text-xs font-bold text-text-muted transition-colors hover:text-brand"
               >
                 {isRegister
                   ? 'Heb je al een account? Log in'
@@ -256,16 +261,16 @@ export default function Login() {
             </div>
           </Card>
 
-          <div className="mt-12 flex items-center justify-center gap-6 text-[10px] font-black text-text-dim uppercase tracking-widest">
-            <a href="#" className="hover:text-text-muted transition-colors">
+          <div className="mt-12 flex items-center justify-center gap-6 text-[10px] font-black uppercase tracking-widest text-text-dim">
+            <a href="#" className="transition-colors hover:text-text-muted">
               Privacy
             </a>
-            <div className="w-1 h-1 bg-border-subtle rounded-full" />
-            <a href="#" className="hover:text-text-muted transition-colors">
+            <div className="h-1 w-1 rounded-full bg-border-subtle" />
+            <a href="#" className="transition-colors hover:text-text-muted">
               Voorwaarden
             </a>
-            <div className="w-1 h-1 bg-border-subtle rounded-full" />
-            <a href="#" className="hover:text-text-muted transition-colors">
+            <div className="h-1 w-1 rounded-full bg-border-subtle" />
+            <a href="#" className="transition-colors hover:text-text-muted">
               Support
             </a>
           </div>
@@ -289,14 +294,14 @@ export default function Login() {
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
               className="relative w-full max-w-md"
             >
-              <Card className="p-7 border border-border-subtle bg-surface-card rounded-[2rem] shadow-2xl">
-                <div className="flex items-start justify-between gap-4 mb-6">
+              <Card className="rounded-[2rem] border border-border-subtle bg-surface-card p-7 shadow-2xl">
+                <div className="mb-6 flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center">
-                      <KeyRound className="w-6 h-6 text-brand" />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10">
+                      <KeyRound className="h-6 w-6 text-brand" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-text-primary tracking-tight">
+                      <h3 className="text-xl font-bold tracking-tight text-text-primary">
                         Wachtwoord resetten
                       </h3>
                       <p className="text-sm text-text-secondary">
@@ -308,24 +313,24 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => !resetLoading && setShowForgotModal(false)}
-                    className="text-text-muted hover:text-text-primary transition-colors"
+                    className="text-text-muted transition-colors hover:text-text-primary"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
 
                 <form onSubmit={handlePasswordReset} className="space-y-5">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-text-muted uppercase tracking-widest ml-1">
+                    <label className="ml-1 text-[10px] font-black uppercase tracking-widest text-text-muted">
                       Email Adres
                     </label>
                     <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                      <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                       <input
                         type="email"
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
-                        className="w-full bg-bg-main border border-border-subtle rounded-2xl pl-12 pr-4 py-3.5 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
+                        className="w-full rounded-2xl border border-border-subtle bg-bg-main py-3.5 pl-12 pr-4 text-sm text-text-primary transition-all focus:border-brand focus:outline-none"
                         placeholder="naam@voorbeeld.nl"
                         required
                         autoFocus
@@ -337,7 +342,7 @@ export default function Login() {
                     <Button
                       type="button"
                       variant="secondary"
-                      className="flex-1 h-12 rounded-2xl font-bold"
+                      className="h-12 flex-1 rounded-2xl font-bold"
                       onClick={() => setShowForgotModal(false)}
                       disabled={resetLoading}
                     >
@@ -346,11 +351,11 @@ export default function Login() {
 
                     <Button
                       type="submit"
-                      className="flex-[1.2] h-12 rounded-2xl font-bold shadow-premium-accent"
+                      className="h-12 flex-[1.2] rounded-2xl font-bold shadow-premium-accent"
                       disabled={resetLoading}
                     >
                       {resetLoading ? (
-                        <div className="w-5 h-5 border-2 border-bg-main border-t-transparent rounded-full animate-spin" />
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-bg-main border-t-transparent" />
                       ) : (
                         'Versturen'
                       )}
