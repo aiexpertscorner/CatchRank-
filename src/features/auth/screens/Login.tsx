@@ -94,34 +94,34 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md relative z-10"
         >
-          <div className="mb-8 text-center">
-            <div className="flex justify-center mb-6">
-              <div className="relative group">
-                <div className="absolute inset-[-10px] rounded-[2rem] bg-brand/20 blur-2xl opacity-60 transition-opacity duration-500 group-hover:opacity-90" />
+        <div className="mb-8 text-center">
+  <div className="flex justify-center mb-6">
+    <div className="relative group flex items-center justify-center">
+      {/* Subtiele achtergrondglow */}
+      <div className="absolute inset-0 scale-125 rounded-full bg-brand/20 blur-3xl opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+      <div className="absolute inset-0 scale-110 rounded-full bg-brand/10 blur-2xl opacity-80" />
 
-                <div className="relative flex items-center justify-center rounded-[2rem] border border-white/10 bg-surface-card/80 backdrop-blur-xl px-6 py-5 shadow-2xl">
-                  <img
-                    src={logoSrc}
-                    alt="CatchRank logo icon"
-                    className="relative z-10 h-16 md:h-20 w-auto object-contain transition-transform duration-500 group-hover:scale-[1.04]"
-                    draggable={false}
-                  />
-                </div>
-              </div>
-            </div>
+      <img
+        src={logoSrc}
+        alt="CatchRank logo icon"
+        className="relative z-10 h-32 w-32 md:h-40 md:w-40 object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-500 group-hover:scale-[1.03]"
+        draggable={false}
+      />
+    </div>
+  </div>
 
-            <h1 className="text-4xl font-krub font-bold text-text-primary tracking-tight uppercase mb-2">
-              CatchRank
-            </h1>
+  <h1 className="text-4xl font-krub font-bold text-brand tracking-tight uppercase mb-2">
+    CatchRank
+  </h1>
 
-            <p className="text-sm text-text-muted uppercase tracking-[0.28em] font-black mb-3">
-              Log. Leer. Vang meer.
-            </p>
+  <p className="text-sm text-text-muted uppercase tracking-[0.28em] font-black mb-3">
+    Log. Leer. Vang meer.
+  </p>
 
-            <p className="text-text-secondary font-medium">
-              Log je vangsten, verbeter je skills.
-            </p>
-          </div>
+  <p className="text-text-secondary font-medium">
+    Log je vangsten, verbeter je skills.
+  </p>
+</div>
 
           <Card className="p-8 border border-border-subtle bg-surface-card/80 backdrop-blur-xl rounded-[2.5rem] shadow-2xl">
             <form onSubmit={handleSubmit} className="space-y-6">
