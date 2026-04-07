@@ -21,7 +21,7 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
 
-  const logoSrc = `${import.meta.env.BASE_URL}logo-icon.svg`;
+  const logoSrc = `${import.meta.env.BASE_URL}logo-icon.png`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
