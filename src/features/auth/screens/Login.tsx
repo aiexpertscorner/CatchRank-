@@ -21,7 +21,7 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
 
-  const logoSrc = `${import.meta.env.BASE_URL}logo-full.png`;
+  const logoSrc = `${import.meta.env.BASE_URL}logo-icon.svg`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,15 +94,41 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md relative z-10"
         >
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center px-6 py-5 bg-surface-card rounded-[2rem] border border-border-subtle shadow-2xl mb-6 relative group overflow-hidden">
-              <div className="absolute inset-0 bg-brand/10 blur-xl group-hover:bg-brand/20 transition-all" />
-              <img
-                src={logoSrc}
-                alt="CatchRank logo"
-                className="relative z-10 h-14 md:h-16 w-auto object-contain"
-              />
-            </div>
+       <div className="flex justify-center mb-8">
+  <div className="relative group">
+
+    {/* Glow effect */}
+    <div className="absolute inset-0 rounded-2xl 
+                    bg-gradient-to-br from-primary/30 to-accent/20 
+                    blur-xl opacity-70 
+                    group-hover:opacity-100 transition duration-500" />
+
+    {/* Container */}
+    <div className="relative flex items-center justify-center 
+                    bg-neutral-900/80 backdrop-blur-md 
+                    border border-white/10 
+                    rounded-2xl p-5 
+                    shadow-lg shadow-black/40">
+
+      {/* SVG logo */}
+      <img
+        src={logoSrc}
+        alt="CatchRank logo icon"
+        className="h-16 md:h-20 w-auto 
+                   object-contain 
+                   transition-transform duration-500 
+                   group-hover:scale-105"
+      />
+
+    </div>
+
+    {/* Optional tagline */}
+    <p className="text-xs text-white/50 mt-3 text-center tracking-wide">
+      Log. Leer. Vang meer.
+    </p>
+
+  </div>
+</div>
 
             <h1 className="text-4xl font-krub font-bold text-text-primary tracking-tight uppercase mb-2">
               CatchRank
