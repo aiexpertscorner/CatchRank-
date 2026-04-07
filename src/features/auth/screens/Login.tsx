@@ -84,7 +84,7 @@ export default function Login() {
   return (
     <>
       <div className="min-h-screen bg-bg-main flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+        <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand/5 blur-[120px] rounded-full" />
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-brand/5 blur-[120px] rounded-full" />
         </div>
@@ -94,45 +94,30 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md relative z-10"
         >
-       <div className="flex justify-center mb-8">
-  <div className="relative group">
+          <div className="mb-8 text-center">
+            <div className="flex justify-center mb-6">
+              <div className="relative group">
+                <div className="absolute inset-[-10px] rounded-[2rem] bg-brand/20 blur-2xl opacity-60 transition-opacity duration-500 group-hover:opacity-90" />
 
-    {/* Glow effect */}
-    <div className="absolute inset-0 rounded-2xl 
-                    bg-gradient-to-br from-primary/30 to-accent/20 
-                    blur-xl opacity-70 
-                    group-hover:opacity-100 transition duration-500" />
-
-    {/* Container */}
-    <div className="relative flex items-center justify-center 
-                    bg-neutral-900/80 backdrop-blur-md 
-                    border border-white/10 
-                    rounded-2xl p-5 
-                    shadow-lg shadow-black/40">
-
-      {/* SVG logo */}
-      <img
-        src={logoSrc}
-        alt="CatchRank logo icon"
-        className="h-16 md:h-20 w-auto 
-                   object-contain 
-                   transition-transform duration-500 
-                   group-hover:scale-105"
-      />
-
-    </div>
-
-    {/* Optional tagline */}
-    <p className="text-xs text-white/50 mt-3 text-center tracking-wide">
-      Log. Leer. Vang meer.
-    </p>
-
-  </div>
-</div>
+                <div className="relative flex items-center justify-center rounded-[2rem] border border-white/10 bg-surface-card/80 backdrop-blur-xl px-6 py-5 shadow-2xl">
+                  <img
+                    src={logoSrc}
+                    alt="CatchRank logo icon"
+                    className="relative z-10 h-16 md:h-20 w-auto object-contain transition-transform duration-500 group-hover:scale-[1.04]"
+                    draggable={false}
+                  />
+                </div>
+              </div>
+            </div>
 
             <h1 className="text-4xl font-krub font-bold text-text-primary tracking-tight uppercase mb-2">
               CatchRank
             </h1>
+
+            <p className="text-sm text-text-muted uppercase tracking-[0.28em] font-black mb-3">
+              Log. Leer. Vang meer.
+            </p>
+
             <p className="text-text-secondary font-medium">
               Log je vangsten, verbeter je skills.
             </p>
