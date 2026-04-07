@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -7,7 +7,6 @@ import {
   Layers,
   ShoppingBag,
   ExternalLink,
-  Heart,
   Edit2,
   Trash2,
   Grid,
@@ -17,6 +16,9 @@ import {
   Loader2,
   AlertCircle,
   TrendingUp,
+  Tag,
+  Fish,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
@@ -26,6 +28,7 @@ import { toast } from 'sonner';
 import { gearService } from '../services/gearService';
 import { productFeedService } from '../services/productFeedService';
 import { GearItem, GearSetup, ProductCatalogItem, GEAR_CATEGORY_LABELS, GearCategory } from '../../../types';
+import { PRODUCT_FEED_MAX_ITEMS_PER_SOURCE } from '../../../config/env';
 import { GearItemModal } from '../components/GearItemModal';
 import { SetupModal } from '../components/SetupModal';
 import { cn } from '../../../lib/utils';
@@ -79,6 +82,7 @@ export default function Gear() {
   const [myGear, setMyGear] = useState<GearItem[]>([]);
   const [setups, setSetups] = useState<GearSetup[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
+  const [activeCluster, setActiveCluster] = useState<string>('all');
 
   const [gearLoading, setGearLoading] = useState(true);
   const [setupsLoading, setSetupsLoading] = useState(true);
@@ -87,6 +91,7 @@ export default function Gear() {
   // ── Modal state ─────────────────────────────────────────────────────────
   const [isGearModalOpen, setIsGearModalOpen] = useState(false);
   const [editingGear, setEditingGear] = useState<GearItem | null>(null);
+  const [prefillGear, setPrefillGear] = useState<Partial<GearItem> | null>(null);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [editingSetup, setEditingSetup] = useState<GearSetup | null>(null);
 
@@ -111,30 +116,26 @@ export default function Gear() {
 
   // ── Load products when Discover tab is active ───────────────────────────
   useEffect(() => {
-    if (activeTab !== 'discover' || products.length > 0) return;
+    if (activeTab !== 'discover') return;
+    // Session cache in productFeedService prevents re-fetches within 10 min
+    if (products.length > 0 && storeFilter === 'all') return;
 
     setProductsLoading(true);
     const source = storeFilter !== 'all' ? (storeFilter as 'fishinn' | 'bol') : undefined;
-    productFeedService.getProducts(source, undefined, 60)
-      .then((items) => setProducts(items))
+    productFeedService.getProducts(source, undefined, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE)
+      .then((items) => { setProducts(items); setActiveCluster('all'); })
       .catch((err) => console.error('Products load error:', err))
       .finally(() => setProductsLoading(false));
   }, [activeTab, storeFilter]);
 
-  // Reload products when store filter changes
-  useEffect(() => {
-    if (activeTab !== 'discover') return;
-    setProductsLoading(true);
-    setProducts([]);
-    const source = storeFilter !== 'all' ? (storeFilter as 'fishinn' | 'bol') : undefined;
-    productFeedService.getProducts(source, undefined, 60)
-      .then((items) => setProducts(items))
-      .catch(() => {})
-      .finally(() => setProductsLoading(false));
-  }, [storeFilter]);
-
   // ── Derived data ────────────────────────────────────────────────────────
   const favorites = myGear.filter((g) => g.isFavorite);
+
+  // Derive clusters from loaded products (client-side, no extra Firestore reads)
+  const productClusters = useMemo(
+    () => productFeedService.deriveClustersFromProducts(products),
+    [products]
+  );
 
   const filterGear = (items: GearItem[]) =>
     items.filter((g) => {
@@ -154,12 +155,30 @@ export default function Gear() {
       !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.brand?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
+    const matchesCluster = activeCluster === 'all' || (p.clusters ?? []).includes(activeCluster);
+    return matchesSearch && matchesCluster;
   });
 
   // ── Actions ─────────────────────────────────────────────────────────────
-  const openAddGear = () => { setEditingGear(null); setIsGearModalOpen(true); };
-  const openEditGear = (item: GearItem) => { setEditingGear(item); setIsGearModalOpen(true); };
+  const openAddGear = (prefill?: Partial<GearItem>) => {
+    setEditingGear(null);
+    setPrefillGear(prefill ?? null);
+    setIsGearModalOpen(true);
+  };
+  const openEditGear = (item: GearItem) => {
+    setEditingGear(item);
+    setPrefillGear(null);
+    setIsGearModalOpen(true);
+  };
+  const handleAddToGear = (product: ProductCatalogItem) => {
+    openAddGear({
+      name: product.name,
+      brand: product.brand,
+      category: (product.category as GearCategory) || 'accessory',
+      photoURL: product.imageURL,
+      affiliateProductId: product.id,
+    });
+  };
   const openAddSetup = () => { setEditingSetup(null); setIsSetupModalOpen(true); };
   const openEditSetup = (s: GearSetup) => { setEditingSetup(s); setIsSetupModalOpen(true); };
 
@@ -367,8 +386,13 @@ export default function Gear() {
             {activeTab === 'discover' && (
               <DiscoverTab
                 products={filteredProducts}
+                allProducts={products}
                 loading={productsLoading}
                 searchQuery={searchQuery}
+                clusters={productClusters}
+                activeCluster={activeCluster}
+                onClusterChange={setActiveCluster}
+                onAddToGear={handleAddToGear}
               />
             )}
           </motion.div>
@@ -378,8 +402,9 @@ export default function Gear() {
       {/* Modals */}
       <GearItemModal
         isOpen={isGearModalOpen}
-        onClose={() => { setIsGearModalOpen(false); setEditingGear(null); }}
+        onClose={() => { setIsGearModalOpen(false); setEditingGear(null); setPrefillGear(null); }}
         editItem={editingGear}
+        prefillData={prefillGear ?? undefined}
       />
       <SetupModal
         isOpen={isSetupModalOpen}
@@ -686,82 +711,293 @@ function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[]
 
 // ─── Discover Tab ────────────────────────────────────────────────────────────
 
-function DiscoverTab({ products, loading, searchQuery }: {
+const CLUSTER_TYPE_COLORS: Record<string, string> = {
+  species:   'text-blue-400 bg-blue-500/10 border-blue-500/20',
+  technique: 'text-brand bg-brand/10 border-brand/20',
+  category:  'text-text-secondary bg-surface-soft border-border-subtle',
+};
+
+function DiscoverTab({
+  products,
+  allProducts,
+  loading,
+  searchQuery,
+  clusters,
+  activeCluster,
+  onClusterChange,
+  onAddToGear,
+}: {
   products: ProductCatalogItem[];
+  allProducts: ProductCatalogItem[];
   loading: boolean;
   searchQuery: string;
+  clusters: Array<{ key: string; label: string; count: number; type: string }>;
+  activeCluster: string;
+  onClusterChange: (key: string) => void;
+  onAddToGear: (product: ProductCatalogItem) => void;
 }) {
-  if (loading) return <LoadingState />;
+  if (loading) {
+    return (
+      <div className="space-y-4 px-2 md:px-0">
+        {/* Skeleton cluster pills */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          {[100, 80, 110, 90, 70, 95].map((w, i) => (
+            <div key={i} className="h-8 rounded-xl bg-surface-card animate-pulse flex-shrink-0" style={{ width: w }} />
+          ))}
+        </div>
+        {/* Skeleton product grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="rounded-2xl bg-surface-card animate-pulse overflow-hidden">
+              <div className="aspect-square bg-surface-soft" />
+              <div className="p-3 space-y-2">
+                <div className="h-2 bg-surface-soft rounded w-1/2" />
+                <div className="h-3 bg-surface-soft rounded w-full" />
+                <div className="h-3 bg-surface-soft rounded w-3/4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  if (products.length === 0 && !loading) {
+  if (allProducts.length === 0) {
     return (
       <EmptyState
         icon={ShoppingBag}
-        message={searchQuery ? 'Geen producten gevonden.' : 'Nog geen producten in de catalogus.'}
-        subMessage={searchQuery ? 'Probeer een andere zoekterm.' : 'Productcatalogus wordt automatisch gevuld vanuit Fishinn en Bol.com feeds.'}
+        message="Productcatalogus leeg"
+        subMessage="Voer 'node scripts/seed-product-catalog.mjs' uit om bol.com visproducten te laden."
       />
     );
   }
 
+  if (products.length === 0 && searchQuery) {
+    return (
+      <EmptyState
+        icon={Search}
+        message="Geen producten gevonden"
+        subMessage={`Geen resultaten voor "${searchQuery}". Probeer een andere zoekterm.`}
+      />
+    );
+  }
+
+  if (products.length === 0 && activeCluster !== 'all') {
+    return (
+      <div className="space-y-4 px-2 md:px-0">
+        <ClusterPills clusters={clusters} active={activeCluster} onChange={onClusterChange} />
+        <EmptyState icon={Fish} message="Geen producten in dit cluster" subMessage="Kies een andere categorie of filter." />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 px-2 md:px-0">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="space-y-5 px-2 md:px-0">
+      {/* Cluster pills */}
+      {clusters.length > 0 && (
+        <ClusterPills clusters={clusters} active={activeCluster} onChange={onClusterChange} />
+      )}
+
+      {/* Count + active filter indicator */}
+      <div className="flex items-center justify-between">
+        <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">
+          {products.length} product{products.length !== 1 ? 'en' : ''}
+          {activeCluster !== 'all' && (
+            <span className="text-brand ml-1">
+              · {clusters.find(c => c.key === activeCluster)?.label}
+            </span>
+          )}
+        </p>
+        {activeCluster !== 'all' && (
+          <button
+            onClick={() => onClusterChange('all')}
+            className="flex items-center gap-1 text-[9px] font-black text-text-muted uppercase tracking-widest hover:text-brand transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Reset
+          </button>
+        )}
+      </div>
+
+      {/* Product grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {products.map((p) => (
-          <ProductCard key={p.id} product={p} />
+          <ProductCard key={p.id ?? p.externalId} product={p} onAddToGear={onAddToGear} />
         ))}
       </div>
 
-      {/* Utility disclaimer — no shop feel */}
+      {/* Affiliate disclaimer */}
       <p className="text-center text-[9px] text-text-dim font-bold uppercase tracking-widest pb-4">
-        Productlinks via Fishinn en Bol.com — affiliate partnerschap
+        Productlinks via Bol.com — affiliate partnerschap
       </p>
     </div>
   );
 }
 
-function ProductCard({ product }: { product: ProductCatalogItem }) {
-  const storeLabel = product.source === 'fishinn' ? 'Fishinn' : 'Bol.com';
+function ClusterPills({
+  clusters,
+  active,
+  onChange,
+}: {
+  clusters: Array<{ key: string; label: string; count: number; type: string }>;
+  active: string;
+  onChange: (key: string) => void;
+}) {
+  // Show: species first, then technique, then category — top 12 max
+  const ordered = [
+    ...clusters.filter(c => c.type === 'species'),
+    ...clusters.filter(c => c.type === 'technique'),
+    ...clusters.filter(c => c.type === 'category'),
+  ].slice(0, 12);
 
   return (
-    <Card padding="none" className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col">
+    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+      <button
+        onClick={() => onChange('all')}
+        className={cn(
+          'flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all',
+          active === 'all'
+            ? 'bg-brand text-bg-main border-brand shadow-lg shadow-brand/20'
+            : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+        )}
+      >
+        Alle
+      </button>
+      {ordered.map(c => (
+        <button
+          key={c.key}
+          onClick={() => onChange(c.key)}
+          className={cn(
+            'flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all',
+            active === c.key
+              ? 'bg-brand text-bg-main border-brand shadow-lg shadow-brand/20'
+              : cn('hover:border-brand/30', CLUSTER_TYPE_COLORS[c.type] || 'bg-surface-card text-text-muted border-border-subtle')
+          )}
+        >
+          {c.label}
+          <span className={cn(
+            'text-[8px] font-black px-1 py-0.5 rounded',
+            active === c.key ? 'bg-bg-main/20 text-bg-main' : 'bg-black/10'
+          )}>
+            {c.count}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ProductCard({
+  product,
+  onAddToGear,
+}: {
+  product: ProductCatalogItem;
+  onAddToGear: (product: ProductCatalogItem) => void;
+}) {
+  const ratingAvg = product.rating?.average;
+  // Bol.com uses 0-10 scale; convert to 5-star display
+  const stars = ratingAvg != null ? Math.round((ratingAvg / 10) * 5 * 2) / 2 : null;
+
+  return (
+    <Card
+      padding="none"
+      className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col"
+    >
+      {/* Image */}
       <div className="aspect-square relative overflow-hidden bg-surface-soft">
-        {product.imageURL
-          ? <img src={product.imageURL} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-          : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-10 h-10" /></div>
-        }
-        {product.price && (
-          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md rounded-lg px-2 py-0.5">
-            <span className="text-[9px] font-black text-white">€{product.price.toFixed(2)}</span>
+        {product.imageURL ? (
+          <img
+            src={product.imageURL}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-text-dim">
+            <Package className="w-10 h-10" />
           </div>
         )}
+
+        {/* Price overlay */}
+        {product.price != null && (
+          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md rounded-lg px-2 py-0.5">
+            <span className="text-[10px] font-black text-white">
+              €{product.price.toFixed(2)}
+            </span>
+          </div>
+        )}
+
+        {/* Source badge */}
         <div className="absolute top-2 right-2">
-          <div className={cn(
-            'text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md',
-            product.source === 'fishinn' ? 'bg-blue-600 text-white' : 'bg-[#0000A4] text-white'
-          )}>
-            {storeLabel}
+          <div className="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-[#0000A4] text-white">
+            Bol
           </div>
         </div>
+
+        {/* In-stock indicator */}
+        {product.inStock === false && (
+          <div className="absolute top-2 left-2 text-[7px] font-black bg-surface/80 text-text-muted px-1.5 py-0.5 rounded">
+            Uitverkocht
+          </div>
+        )}
       </div>
 
-      <div className="p-3 flex-1 flex flex-col justify-between">
+      {/* Info */}
+      <div className="p-3 flex-1 flex flex-col justify-between gap-2">
         <div>
           {product.brand && (
-            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">{product.brand}</p>
+            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">
+              {product.brand}
+            </p>
           )}
-          <h4 className="text-xs font-bold text-text-primary tracking-tight line-clamp-2 mb-2">{product.name}</h4>
+          <h4 className="text-xs font-bold text-text-primary tracking-tight line-clamp-2">
+            {product.name}
+          </h4>
+
+          {/* Rating */}
+          {stars != null && (
+            <div className="flex items-center gap-1 mt-1">
+              <div className="flex gap-0.5">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <Star
+                    key={i}
+                    className={cn(
+                      'w-2.5 h-2.5',
+                      i <= Math.floor(stars) ? 'text-brand fill-brand' : 'text-text-dim'
+                    )}
+                  />
+                ))}
+              </div>
+              {product.rating?.count != null && product.rating.count > 0 && (
+                <span className="text-[8px] text-text-dim font-bold">
+                  ({product.rating.count})
+                </span>
+              )}
+            </div>
+          )}
         </div>
-        {product.affiliateURL && (
-          <a
-            href={product.affiliateURL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-center gap-1.5 h-8 rounded-xl bg-surface-soft text-text-muted hover:bg-brand/10 hover:text-brand text-[9px] font-black uppercase tracking-widest transition-all border border-border-subtle hover:border-brand/30"
+
+        {/* Actions */}
+        <div className="flex gap-1.5">
+          {product.affiliateURL && (
+            <a
+              href={product.affiliateURL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-1 h-8 rounded-xl bg-surface-soft text-text-muted hover:bg-brand/10 hover:text-brand text-[9px] font-black uppercase tracking-widest transition-all border border-border-subtle hover:border-brand/30"
+            >
+              Bekijk
+              <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+            </a>
+          )}
+          <button
+            onClick={() => onAddToGear(product)}
+            title="Voeg toe aan Mijn Gear"
+            className="w-8 h-8 rounded-xl bg-brand/10 text-brand hover:bg-brand hover:text-bg-main flex items-center justify-center transition-all border border-brand/20 hover:border-brand flex-shrink-0"
           >
-            Bekijk
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-        )}
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </Card>
   );

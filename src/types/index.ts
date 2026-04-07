@@ -578,6 +578,24 @@ export interface GearSetup {
 
 export type ProductSource = 'fishinn' | 'bol';
 
+export interface ProductTaxonomy {
+  species: string[];       // ['karper', 'snoek', 'baars']
+  technique: string[];     // ['karpervissen', 'roofvissen']
+  skillLevel: string;      // 'beginner' | 'allround' | 'gevorderd'
+}
+
+export interface ProductScores {
+  relevance: number;   // 0-100
+  commercial: number;  // 0-100
+  rating: number;      // 0-100
+  composite: number;   // weighted composite 0-100
+}
+
+export interface ProductRating {
+  average: number;  // bol.com 0-10 scale
+  count: number;
+}
+
 export interface ProductCatalogItem {
   id?: string;
   externalId: string;
@@ -592,7 +610,21 @@ export interface ProductCatalogItem {
   affiliateURL: string;
   ean?: string;
   inStock?: boolean;
-  cachedAt: AnyTimestamp;
+  cachedAt?: AnyTimestamp;
+  // Taxonomy + scoring (written by seed script)
+  taxonomy?: ProductTaxonomy;
+  scores?: ProductScores;
+  clusters?: string[];     // ['species:karper', 'technique:roofvissen', 'category:rod']
+  rating?: ProductRating;
+}
+
+export interface ProductCluster {
+  id?: string;
+  key: string;               // 'species:karper'
+  label: string;             // 'Karper'
+  total: number;
+  topProductIds: string[];   // Firestore doc IDs (top 24)
+  updatedAt?: AnyTimestamp;
 }
 
 export interface ProductCacheMetadata {
@@ -600,4 +632,5 @@ export interface ProductCacheMetadata {
   lastFetched: AnyTimestamp;
   itemCount: number;
   isValid: boolean;
+  clusterCount?: number;
 }

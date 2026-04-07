@@ -12,29 +12,66 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { ProductCatalogItem, ProductCacheMetadata, ProductSource } from '../../../types';
-import { PRODUCT_FEED_CACHE_TTL_MS, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE, FEATURE_FLAGS } from '../../../config/env';
+import {
+  ProductCatalogItem,
+  ProductCacheMetadata,
+  ProductCluster,
+  ProductSource,
+} from '../../../types';
+import {
+  PRODUCT_FEED_CACHE_TTL_MS,
+  PRODUCT_FEED_MAX_ITEMS_PER_SOURCE,
+  FEATURE_FLAGS,
+} from '../../../config/env';
 
 /**
- * Product Feed Service — Mijn Visgear
+ * Product Feed Service — Mijn Visgear / Ontdekken
  *
  * Architecture:
- * - Products are stored in `product_catalog` Firestore collection (one doc per product)
- * - Cache metadata stored in `product_cache_meta` (one doc per source)
- * - Refresh happens server-side (/api/gear/fishinn-feed, /api/gear/bol-feed)
- * - Client reads only from Firestore — NO direct feed API calls from client
- * - TTL: 24 hours (configurable via PRODUCT_FEED_CACHE_TTL_MS)
- * - Max items: PRODUCT_FEED_MAX_ITEMS_PER_SOURCE per source to control read costs
+ * - Products live in `product_catalog` (one doc per product, written by seed script)
+ * - Clusters live in `product_clusters` (one doc per cluster, written by seed script)
+ * - Cache metadata in `product_cache_meta` (one doc per source)
+ * - Client reads ONLY from Firestore — NO direct feed API calls from client
+ * - Session-level in-memory cache prevents repeated Firestore reads within a session
+ * - TTL: 24h for server-side refresh (feature-flagged), 10min for session cache
  *
- * Dev-safe: FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH must be true to trigger
- * server-side refresh. By default it's off — reads cached data only.
+ * Cost model:
+ * - First load of Discover tab: ~200 reads (all products)
+ * - Subsequent tab switches within 10 min: 0 reads (session cache)
+ * - Cluster reads: ~1-15 reads (one per cluster doc), cached separately
  */
 
-// ─── Cache Helpers ─────────────────────────────────────────────────────────
+// ─── Session-level in-memory cache ────────────────────────────────────────────
+// Prevents repeated Firestore reads within a single browser session.
+// Key format: `products:{source}:{category}` or `clusters`
+const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-/**
- * Check if the cache for a given source is stale (older than TTL).
- */
+interface SessionCacheEntry<T> {
+  data: T;
+  fetchedAt: number;
+}
+
+const sessionCache = new Map<string, SessionCacheEntry<any>>();
+
+function fromCache<T>(key: string): T | null {
+  const entry = sessionCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > SESSION_TTL_MS) {
+    sessionCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function toCache<T>(key: string, data: T): void {
+  sessionCache.set(key, { data, fetchedAt: Date.now() });
+}
+
+export function clearProductCache(): void {
+  sessionCache.clear();
+}
+
+// ─── Firestore cache staleness check ─────────────────────────────────────────
 async function isCacheStale(source: ProductSource): Promise<boolean> {
   const metaRef = doc(db, 'product_cache_meta', source);
   const snap = await getDoc(metaRef);
@@ -44,16 +81,14 @@ async function isCacheStale(source: ProductSource): Promise<boolean> {
   const meta = snap.data() as ProductCacheMetadata;
   if (!meta.isValid || !meta.lastFetched) return true;
 
-  const lastFetched = meta.lastFetched instanceof Timestamp
-    ? meta.lastFetched.toDate().getTime()
-    : Date.now();
+  const lastFetched =
+    meta.lastFetched instanceof Timestamp
+      ? meta.lastFetched.toDate().getTime()
+      : Date.now();
 
   return Date.now() - lastFetched > PRODUCT_FEED_CACHE_TTL_MS;
 }
 
-/**
- * Update cache metadata after a successful refresh.
- */
 async function updateCacheMeta(source: ProductSource, itemCount: number): Promise<void> {
   await setDoc(doc(db, 'product_cache_meta', source), {
     source,
@@ -63,95 +98,81 @@ async function updateCacheMeta(source: ProductSource, itemCount: number): Promis
   } as ProductCacheMetadata);
 }
 
-// ─── Feed Refresh (server-side triggered) ──────────────────────────────────
-
-/**
- * Trigger a server-side refresh of the Fishinn product feed.
- * Calls /api/gear/fishinn-feed which fetches TradeTracker JSON,
- * normalizes it, and stores results in Firestore product_catalog.
- *
- * Dev-safe: only runs if FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH is true.
- */
+// ─── Background refresh stubs (server-side only, feature-flagged) ─────────────
 async function refreshFishinnFeed(): Promise<void> {
-  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) {
-    console.info('[productFeedService] Feed refresh disabled (dev-safe mode)');
-    return;
-  }
-
+  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) return;
   try {
     const response = await fetch('/api/gear/fishinn-feed', { method: 'POST' });
     if (!response.ok) throw new Error(`Feed refresh failed: ${response.status}`);
-    const result = await response.json();
-    console.info(`[productFeedService] Fishinn feed refreshed: ${result.count} products`);
   } catch (err) {
     console.error('[productFeedService] Fishinn feed refresh error:', err);
   }
 }
 
-/**
- * Trigger a server-side refresh of the Bol.com product catalog.
- * Calls /api/gear/bol-feed which uses OAuth2 + Marketing Catalog API,
- * normalizes results, and stores in Firestore product_catalog.
- *
- * Dev-safe: only runs if FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH is true.
- */
 async function refreshBolFeed(): Promise<void> {
-  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) {
-    console.info('[productFeedService] Feed refresh disabled (dev-safe mode)');
-    return;
-  }
-
+  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) return;
   try {
     const response = await fetch('/api/gear/bol-feed', { method: 'POST' });
     if (!response.ok) throw new Error(`Bol feed refresh failed: ${response.status}`);
-    const result = await response.json();
-    console.info(`[productFeedService] Bol feed refreshed: ${result.count} products`);
   } catch (err) {
     console.error('[productFeedService] Bol feed refresh error:', err);
   }
 }
 
-// ─── Public API ────────────────────────────────────────────────────────────
-
+// ─── Public API ───────────────────────────────────────────────────────────────
 export const productFeedService = {
   /**
-   * Get cached products from Firestore.
+   * Get products from Firestore (session-cached).
+   * Session cache prevents repeated reads when switching tabs.
    * Optionally filter by source and/or category.
-   * Checks cache staleness and triggers refresh if needed (feature-flagged).
-   *
-   * Returns up to PRODUCT_FEED_MAX_ITEMS_PER_SOURCE items per source.
+   * Returns up to PRODUCT_FEED_MAX_ITEMS_PER_SOURCE items.
    */
   async getProducts(
     source?: ProductSource,
     category?: string,
     maxItems = PRODUCT_FEED_MAX_ITEMS_PER_SOURCE
   ): Promise<ProductCatalogItem[]> {
+    const cacheKey = `products:${source ?? 'all'}:${category ?? 'all'}`;
+    const cached = fromCache<ProductCatalogItem[]>(cacheKey);
+    if (cached) return cached;
+
     const constraints: any[] = [];
 
-    if (source) {
-      constraints.push(where('source', '==', source));
-    }
-    if (category) {
-      constraints.push(where('category', '==', category));
-    }
+    if (source) constraints.push(where('source', '==', source));
+    if (category) constraints.push(where('category', '==', category));
 
-    constraints.push(orderBy('cachedAt', 'desc'));
+    // Sort by composite score descending if available, else by cachedAt
+    constraints.push(orderBy('scores.composite', 'desc'));
     constraints.push(limit(maxItems));
 
-    const q = query(collection(db, 'product_catalog'), ...constraints);
-    const snap = await getDocs(q);
-    const products = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductCatalogItem));
+    let products: ProductCatalogItem[];
 
-    // Trigger background refresh if cache is stale (non-blocking)
+    try {
+      const q = query(collection(db, 'product_catalog'), ...constraints);
+      const snap = await getDocs(q);
+      products = snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductCatalogItem));
+    } catch {
+      // Composite score index may not exist yet — fall back to cachedAt order
+      const fallbackConstraints: any[] = [];
+      if (source) fallbackConstraints.push(where('source', '==', source));
+      if (category) fallbackConstraints.push(where('category', '==', category));
+      fallbackConstraints.push(orderBy('cachedAt', 'desc'));
+      fallbackConstraints.push(limit(maxItems));
+
+      const q = query(collection(db, 'product_catalog'), ...fallbackConstraints);
+      const snap = await getDocs(q);
+      products = snap.docs.map(d => ({ id: d.id, ...d.data() } as ProductCatalogItem));
+    }
+
+    toCache(cacheKey, products);
+
+    // Background staleness check (non-blocking, feature-flagged)
     if (FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) {
       const sourcesToCheck: ProductSource[] = source ? [source] : ['fishinn', 'bol'];
       for (const s of sourcesToCheck) {
-        isCacheStale(s).then((stale) => {
-          if (stale) {
-            if (s === 'fishinn') refreshFishinnFeed();
-            else refreshBolFeed();
-          }
-        }).catch(() => {});
+        isCacheStale(s)
+          .then(stale => { if (stale) (s === 'fishinn' ? refreshFishinnFeed : refreshBolFeed)(); })
+          .catch(() => {});
       }
     }
 
@@ -159,17 +180,82 @@ export const productFeedService = {
   },
 
   /**
-   * Search products by keyword (client-side filter on cached results).
-   * Searches name, brand, and description fields.
+   * Get all product clusters from Firestore (session-cached).
+   * Clusters are written by the seed script and reflect taxonomy groupings.
+   * Returns clusters sorted by total product count (highest first).
    */
-  async searchProducts(
-    keyword: string,
-    source?: ProductSource
-  ): Promise<ProductCatalogItem[]> {
+  async getProductClusters(): Promise<ProductCluster[]> {
+    const cacheKey = 'clusters:all';
+    const cached = fromCache<ProductCluster[]>(cacheKey);
+    if (cached) return cached;
+
+    const snap = await getDocs(collection(db, 'product_clusters'));
+    const clusters = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as ProductCluster))
+      .sort((a, b) => b.total - a.total);
+
+    toCache(cacheKey, clusters);
+    return clusters;
+  },
+
+  /**
+   * Derive clusters client-side from a set of already-loaded products.
+   * Faster than a Firestore read when products are already in session cache.
+   * Returns clusters sorted by product count.
+   */
+  deriveClustersFromProducts(products: ProductCatalogItem[]): Array<{
+    key: string;
+    label: string;
+    count: number;
+    type: 'species' | 'technique' | 'category';
+  }> {
+    const LABELS: Record<string, string> = {
+      'species:karper':          'Karper',
+      'species:snoek':           'Snoek',
+      'species:baars':           'Baars',
+      'species:zander':          'Zander',
+      'species:forel':           'Forel',
+      'technique:karpervissen':  'Karpervissen',
+      'technique:roofvissen':    'Roofvissen',
+      'technique:feedervissen':  'Feedervissen',
+      'technique:vliegvissen':   'Vliegvissen',
+      'category:rod':            'Hengels',
+      'category:reel':           'Molens',
+      'category:lure':           'Kunstaas',
+      'category:line':           'Lijnen',
+      'category:bait':           'Aas',
+      'category:hook':           'Haken',
+      'category:accessory':      'Accessoires',
+    };
+
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      for (const cluster of p.clusters ?? []) {
+        counts.set(cluster, (counts.get(cluster) ?? 0) + 1);
+      }
+    }
+
+    return [...counts.entries()]
+      .filter(([key]) => LABELS[key]) // only known clusters
+      .map(([key, count]) => ({
+        key,
+        label: LABELS[key],
+        count,
+        type: key.startsWith('species:') ? 'species'
+          : key.startsWith('technique:') ? 'technique'
+          : 'category',
+      }))
+      .sort((a, b) => b.count - a.count);
+  },
+
+  /**
+   * Search products by keyword (client-side filter on session-cached results).
+   */
+  async searchProducts(keyword: string, source?: ProductSource): Promise<ProductCatalogItem[]> {
     const all = await this.getProducts(source);
     const lower = keyword.toLowerCase();
     return all.filter(
-      (p) =>
+      p =>
         p.name.toLowerCase().includes(lower) ||
         p.brand?.toLowerCase().includes(lower) ||
         p.description?.toLowerCase().includes(lower)
@@ -178,10 +264,7 @@ export const productFeedService = {
 
   /**
    * Write a batch of normalized products to Firestore cache.
-   * Called from server-side feed processing (admin/trigger only).
-   * Each product is stored as a separate document with externalId as key.
-   *
-   * Uses setDoc (upsert) to avoid duplicates on re-fetch.
+   * For server-side use only (seed script / admin trigger).
    */
   async writeProductsToCache(products: Omit<ProductCatalogItem, 'id'>[]): Promise<void> {
     for (const product of products.slice(0, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE)) {
@@ -192,22 +275,22 @@ export const productFeedService = {
       });
     }
     if (products.length > 0) {
-      await updateCacheMeta(products[0].source, Math.min(products.length, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE));
+      await updateCacheMeta(
+        products[0].source,
+        Math.min(products.length, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE)
+      );
     }
   },
 
-  /** Expose for admin/debug use */
   refreshFishinnFeed,
   refreshBolFeed,
 };
 
-// ─── Normalizers (used by server.ts endpoints) ─────────────────────────────
+// ─── Normalizers (used by server-side endpoints if applicable) ────────────────
 
-/**
- * Normalize a raw TradeTracker/Fishinn product to ProductCatalogItem shape.
- * TradeTracker JSON feed structure varies — this handles the common fields.
- */
-export function normalizeFishinnProduct(raw: Record<string, any>): Omit<ProductCatalogItem, 'id' | 'cachedAt'> {
+export function normalizeFishinnProduct(
+  raw: Record<string, any>
+): Omit<ProductCatalogItem, 'id' | 'cachedAt'> {
   return {
     externalId: String(raw.ID ?? raw.id ?? raw.productId ?? Math.random()),
     source: 'fishinn',
@@ -224,10 +307,9 @@ export function normalizeFishinnProduct(raw: Record<string, any>): Omit<ProductC
   };
 }
 
-/**
- * Normalize a raw Bol.com Marketing Catalog product to ProductCatalogItem shape.
- */
-export function normalizeBolProduct(raw: Record<string, any>): Omit<ProductCatalogItem, 'id' | 'cachedAt'> {
+export function normalizeBolProduct(
+  raw: Record<string, any>
+): Omit<ProductCatalogItem, 'id' | 'cachedAt'> {
   return {
     externalId: String(raw.ean ?? raw.productId ?? raw.id ?? Math.random()),
     source: 'bol',
