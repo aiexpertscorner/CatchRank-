@@ -1125,15 +1125,6 @@ Als een flow nog niet actief is:
 
 ## 38. SCHEMA / RULES / CODE CONSISTENCY
 
-Claude Code moet waar mogelijk gebruikmaken van de schema-artifacts in het project, zoals:
-
-- `docs/firestore-schema.canonical.json`
-- `docs/firestore-schema.generated.json`
-- `docs/firestore-code-usage.generated.json`
-- `docs/firestore-code-usage-ast.generated.json`
-- `docs/firestore-schema-enriched.diff.md`
-- `docs/firestore-fields.md`
-
 ### Regels
 - geen willekeurige field names verzinnen
 - v2 collecties prefereren boven legacy collecties als dat de projectstandaard is

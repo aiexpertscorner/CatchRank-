@@ -56,7 +56,7 @@ export default function Spots() {
     if (!profile) return;
 
     const q = query(
-      collection(db, 'spots'),
+      collection(db, 'spots_v2'),
       where('userId', '==', profile.uid),
       orderBy('createdAt', 'desc')
     );
@@ -74,9 +74,10 @@ export default function Spots() {
 
   const filteredAndSorted = useMemo(() => {
     let result = spots.filter(s => {
-      const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const spotName = (s as any).title || s.name || '';
+      const matchesSearch = spotName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.waterType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.waterBodyName?.toLowerCase().includes(searchQuery.toLowerCase());
+        (s as any).waterBodyName?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = filterWaterType === 'all' || s.waterType === filterWaterType;
       return matchesSearch && matchesType;
     });
@@ -257,14 +258,14 @@ export default function Spots() {
                     <div className="flex items-center gap-4 p-5">
                       <div className="w-16 h-16 rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm overflow-hidden flex-shrink-0">
                         {s.mainPhotoURL ? (
-                          <img src={s.mainPhotoURL} alt={s.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <img src={s.mainPhotoURL} alt={(s as any).title || s.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         ) : (
                           <MapPin className="w-8 h-8" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="text-base font-bold text-text-primary tracking-tight truncate">{s.name}</h4>
+                          <h4 className="text-base font-bold text-text-primary tracking-tight truncate">{(s as any).title || s.name}</h4>
                           {s.isFavorite && <Star className="w-3.5 h-3.5 text-brand fill-brand flex-shrink-0" />}
                           {s.visibility === 'private' ? (
                             <Lock className="w-3 h-3 text-text-dim flex-shrink-0" />

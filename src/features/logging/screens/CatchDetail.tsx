@@ -445,7 +445,7 @@ export default function CatchDetail() {
             className="relative w-full max-w-2xl max-h-[95vh] overflow-hidden rounded-[2.5rem] shadow-2xl z-10"
           >
             <CatchForm
-              editingCatch={catchData}
+              initialData={catchData}
               activeSessionId={catchData.sessionId}
               onComplete={(updatedId) => {
                 setIsEditOpen(false);
