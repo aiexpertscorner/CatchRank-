@@ -112,6 +112,16 @@ export interface WeatherSnapshot {
   uv?: number;
   precipitation?: number;
   moonPhase?: number;
+
+  tempC?: number;
+  feelslikeC?: number;
+  humidityPct?: number;
+  pressureMb?: number;
+  windKph?: number;
+  visKm?: number;
+  precipMm?: number;
+  sunrise?: string;
+  sunset?: string;
 }
 
 export interface WaterSnapshot {
@@ -203,6 +213,9 @@ export interface Catch {
   xpEarned?: number;
   isPrivate?: boolean;
   notes?: string;
+  city?: string;
+  moonPhase?: number | string;
+  video?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -213,6 +226,7 @@ export interface SessionStatsSummary {
   totalCatches?: number;
   totalXp?: number;
   speciesCount?: number;
+  totalFish?: number;
 }
 
 export interface SessionMetadata {
@@ -236,6 +250,8 @@ export interface Session {
 
   startTime?: AnyTimestamp;
   endTime?: AnyTimestamp;
+  startAt?: AnyTimestamp;
+  endAt?: AnyTimestamp;
 
   isActive?: boolean;
   lastActivityAt?: AnyTimestamp;
@@ -311,10 +327,14 @@ export interface Session {
    * Optional backend/session integrity fields seen in v2 indexes
    */
   canonical?: boolean;
+  canonicalKey?: string;
+  canonicalSetAt?: AnyTimestamp;
   dedupeKey?: string;
   dedupedAt?: AnyTimestamp;
   duplicateOf?: string;
   isDuplicate?: boolean;
+  catchCount?: number;
+  totalXp?: number;
   mainImage?: string;
   extraImages?: string[];
   video?: string;
@@ -576,7 +596,27 @@ export interface GearSetup {
   updatedAt: AnyTimestamp;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Product Catalog / Discover                                                 */
+/* -------------------------------------------------------------------------- */
+
 export type ProductSource = 'fishinn' | 'bol';
+
+export type ProductMainSection =
+  | 'karper'
+  | 'roofvis'
+  | 'witvis'
+  | 'allround'
+  | string;
+
+export type ProductClusterType =
+  | 'species'
+  | 'technique'
+  | 'category'
+  | 'section'
+  | 'detail'
+  | 'seed'
+  | 'misc';
 
 export interface ProductTaxonomy {
   species: string[];       // ['karper', 'snoek', 'baars']
@@ -611,10 +651,27 @@ export interface ProductCatalogItem {
   ean?: string;
   inStock?: boolean;
   cachedAt?: AnyTimestamp;
-  // Taxonomy + scoring (written by seed script)
+
+  /**
+   * Enriched product structure
+   */
+  mainSection?: ProductMainSection;
+  subSubCategory?: string;
+
+  /**
+   * Seed metadata
+   */
+  seedClusterKey?: string | null;
+  seedCategory?: string | null;
+  seedProductType?: string | null;
+  seedIntent?: string[];
+
+  /**
+   * Taxonomy + scoring (written by seed script)
+   */
   taxonomy?: ProductTaxonomy;
   scores?: ProductScores;
-  clusters?: string[];     // ['species:karper', 'technique:roofvissen', 'category:rod']
+  clusters?: string[];
   rating?: ProductRating;
 }
 
@@ -622,15 +679,18 @@ export interface ProductCluster {
   id?: string;
   key: string;               // 'species:karper'
   label: string;             // 'Karper'
+  type?: ProductClusterType;
   total: number;
   topProductIds: string[];   // Firestore doc IDs (top 24)
   updatedAt?: AnyTimestamp;
 }
 
 export interface ProductCacheMetadata {
-  source: ProductSource;
+  source: ProductSource | string;
   lastFetched: AnyTimestamp;
   itemCount: number;
   isValid: boolean;
   clusterCount?: number;
+  queryCount?: number;
+  maxProducts?: number;
 }
