@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -16,9 +16,7 @@ import {
   Loader2,
   AlertCircle,
   TrendingUp,
-  Tag,
   Fish,
-  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
@@ -27,32 +25,27 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { gearService } from '../services/gearService';
 import { productFeedService } from '../services/productFeedService';
-import { GearItem, GearSetup, ProductCatalogItem, GEAR_CATEGORY_LABELS, GearCategory } from '../../../types';
+import {
+  GearItem,
+  GearSetup,
+  ProductCatalogItem,
+  GEAR_CATEGORY_LABELS,
+  GearCategory,
+} from '../../../types';
 import { PRODUCT_FEED_MAX_ITEMS_PER_SOURCE } from '../../../config/env';
 import { GearItemModal } from '../components/GearItemModal';
 import { SetupModal } from '../components/SetupModal';
 import { cn } from '../../../lib/utils';
 
-/**
- * Gear Screen — Mijn Visgear
- * Fully functional core module replacing the previous mock-data placeholder.
- *
- * UX order per CLAUDE.md:
- * 1. Eigen Gear   — user_gear Firestore
- * 2. Favorieten   — filtered from eigen gear
- * 3. Setups       — user_setups Firestore
- * 4. Suggesties   — smart placeholder (future ML)
- * 5. Ontdekken    — product_catalog Firestore cache (Fishinn + Bol)
- */
-
 type Tab = 'my-gear' | 'favorites' | 'setups' | 'suggestions' | 'discover';
+type MainSection = 'all' | 'karper' | 'roofvis' | 'witvis' | 'allround';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'my-gear',     label: 'Mijn Gear',   icon: Package },
-  { id: 'favorites',  label: 'Favorieten',  icon: Star },
-  { id: 'setups',     label: 'Setups',      icon: Layers },
-  { id: 'suggestions',label: 'Suggesties',  icon: Lightbulb },
-  { id: 'discover',   label: 'Ontdekken',   icon: ShoppingBag },
+  { id: 'my-gear', label: 'Mijn Gear', icon: Package },
+  { id: 'favorites', label: 'Favorieten', icon: Star },
+  { id: 'setups', label: 'Setups', icon: Layers },
+  { id: 'suggestions', label: 'Suggesties', icon: Lightbulb },
+  { id: 'discover', label: 'Ontdekken', icon: ShoppingBag },
 ];
 
 const CATEGORY_FILTER_OPTIONS: { value: string; label: string }[] = [
@@ -61,24 +54,162 @@ const CATEGORY_FILTER_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const PRODUCT_STORE_FILTERS: { value: string; label: string }[] = [
-  { value: 'all',     label: 'Alle winkels' },
+  { value: 'all', label: 'Alle winkels' },
   { value: 'fishinn', label: 'Fishinn' },
-  { value: 'bol',     label: 'Bol.com' },
+  { value: 'bol', label: 'Bol.com' },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
+const MAIN_SECTION_OPTIONS: { value: MainSection; label: string }[] = [
+  { value: 'all', label: 'Alles' },
+  { value: 'karper', label: 'Karper' },
+  { value: 'roofvis', label: 'Roofvis' },
+  { value: 'witvis', label: 'Witvis' },
+  { value: 'allround', label: 'Allround' },
+];
+
+const SUBCATEGORY_LABELS: Record<string, string> = {
+  rod: 'Hengels',
+  reel: 'Molens',
+  line: 'Lijnen',
+  lure: 'Kunstaas',
+  bait: 'Aas',
+  hook: 'Haken',
+  accessory: 'Accessoires',
+};
+
+const SUBSUB_LABELS: Record<string, string> = {
+  all: 'Alles',
+  boilie: 'Boilies',
+  wafter: 'Wafters',
+  popup: 'Pop-ups',
+  pva: 'PVA',
+  rig: 'Rigs',
+  leadclip: 'Leadclip',
+  hooklink: 'Onderlijnen',
+  bite_alarm: 'Bite Alarms',
+  rod_pod: 'Rod Pods',
+  spod: 'Spods',
+  marker: 'Marker',
+  karperhengel: 'Karperhengels',
+  feederhengel: 'Feederhengels',
+  method_feeder: 'Method Feeder',
+  groundbait: 'Grondvoer',
+  fluorocarbon: 'Fluorocarbon',
+  braid: 'Gevlochten Lijn',
+  mono: 'Mono',
+  jerkbait: 'Jerkbaits',
+  shad: 'Shads',
+  spinner: 'Spinners',
+  plug: 'Plugs',
+  dropshot: 'Dropshot',
+  softbait: 'Softbaits',
+  spinhengel: 'Spinhengels',
+  reel_front_drag: 'Front Drag',
+  baitrunner: 'Baitrunner',
+};
+
+type EnrichedProduct = ProductCatalogItem & {
+  _mainSection: MainSection;
+  _subCategory: string;
+  _subSubCategory: string;
+};
+
+function getBlob(product: ProductCatalogItem) {
+  return `${product.name ?? ''} ${product.brand ?? ''} ${product.description ?? ''}`.toLowerCase();
+}
+
+function inferMainSection(product: ProductCatalogItem): MainSection {
+  const species = product.taxonomy?.species ?? [];
+  const techniques = product.taxonomy?.technique ?? [];
+  const blob = getBlob(product);
+
+  if (
+    species.includes('karper') ||
+    techniques.includes('karpervissen') ||
+    blob.includes('karper') ||
+    blob.includes('carp') ||
+    blob.includes('boilie') ||
+    blob.includes('wafter') ||
+    blob.includes('popup') ||
+    blob.includes('bite alarm') ||
+    blob.includes('rod pod') ||
+    blob.includes('leadclip') ||
+    blob.includes('baitrunner')
+  ) return 'karper';
+
+  if (
+    species.includes('snoek') ||
+    species.includes('baars') ||
+    species.includes('zander') ||
+    techniques.includes('roofvissen') ||
+    blob.includes('roofvis') ||
+    blob.includes('jerkbait') ||
+    blob.includes('shad') ||
+    blob.includes('dropshot') ||
+    blob.includes('kunstaas') ||
+    blob.includes('spinner') ||
+    blob.includes('plug') ||
+    blob.includes('softbait')
+  ) return 'roofvis';
+
+  if (
+    techniques.includes('feedervissen') ||
+    blob.includes('witvis') ||
+    blob.includes('feeder') ||
+    blob.includes('method feeder') ||
+    blob.includes('grondvoer')
+  ) return 'witvis';
+
+  return 'allround';
+}
+
+function inferSubSubCategory(product: ProductCatalogItem): string {
+  const blob = getBlob(product);
+
+  if (blob.includes('wafter')) return 'wafter';
+  if (blob.includes('pop-up') || blob.includes('popup')) return 'popup';
+  if (blob.includes('boilie')) return 'boilie';
+  if (blob.includes('pva')) return 'pva';
+  if (blob.includes('leadclip')) return 'leadclip';
+  if (blob.includes('hooklink') || blob.includes('onderlijn')) return 'hooklink';
+  if (blob.includes('rig')) return 'rig';
+  if (blob.includes('bite alarm')) return 'bite_alarm';
+  if (blob.includes('rod pod')) return 'rod_pod';
+  if (blob.includes('spod')) return 'spod';
+  if (blob.includes('marker')) return 'marker';
+  if (blob.includes('karperhengel') || blob.includes('carp rod')) return 'karperhengel';
+  if (blob.includes('feederhengel')) return 'feederhengel';
+  if (blob.includes('method feeder')) return 'method_feeder';
+  if (blob.includes('grondvoer')) return 'groundbait';
+  if (blob.includes('fluorocarbon')) return 'fluorocarbon';
+  if (blob.includes('gevlochten') || blob.includes('braid')) return 'braid';
+  if (blob.includes('mono')) return 'mono';
+  if (blob.includes('jerkbait')) return 'jerkbait';
+  if (blob.includes('shad')) return 'shad';
+  if (blob.includes('spinner')) return 'spinner';
+  if (blob.includes('plug') || blob.includes('wobbler')) return 'plug';
+  if (blob.includes('dropshot')) return 'dropshot';
+  if (blob.includes('softbait')) return 'softbait';
+  if (blob.includes('spinhengel')) return 'spinhengel';
+  if (blob.includes('baitrunner')) return 'baitrunner';
+  if (blob.includes('front drag')) return 'reel_front_drag';
+
+  return 'all';
+}
 
 export default function Gear() {
   const { profile } = useAuth();
 
-  // ── Tab & search state ──────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>('my-gear');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [storeFilter, setStoreFilter] = useState('all');
 
-  // ── Data state ──────────────────────────────────────────────────────────
+  const [mainSection, setMainSection] = useState<MainSection>('all');
+  const [subCategory, setSubCategory] = useState<string>('all');
+  const [subSubCategory, setSubSubCategory] = useState<string>('all');
+
   const [myGear, setMyGear] = useState<GearItem[]>([]);
   const [setups, setSetups] = useState<GearSetup[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
@@ -88,14 +219,12 @@ export default function Gear() {
   const [setupsLoading, setSetupsLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(false);
 
-  // ── Modal state ─────────────────────────────────────────────────────────
   const [isGearModalOpen, setIsGearModalOpen] = useState(false);
   const [editingGear, setEditingGear] = useState<GearItem | null>(null);
   const [prefillGear, setPrefillGear] = useState<Partial<GearItem> | null>(null);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [editingSetup, setEditingSetup] = useState<GearSetup | null>(null);
 
-  // ── Firestore subscriptions ─────────────────────────────────────────────
   useEffect(() => {
     if (!profile) return;
 
@@ -111,31 +240,65 @@ export default function Gear() {
       (err) => { console.error('Setups sub error:', err); setSetupsLoading(false); }
     );
 
-    return () => { unsubGear(); unsubSetups(); };
+    return () => {
+      unsubGear();
+      unsubSetups();
+    };
   }, [profile]);
 
-  // ── Load products when Discover tab is active ───────────────────────────
   useEffect(() => {
     if (activeTab !== 'discover') return;
-    // Session cache in productFeedService prevents re-fetches within 10 min
-    if (products.length > 0 && storeFilter === 'all') return;
 
     setProductsLoading(true);
     const source = storeFilter !== 'all' ? (storeFilter as 'fishinn' | 'bol') : undefined;
-    productFeedService.getProducts(source, undefined, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE)
-      .then((items) => { setProducts(items); setActiveCluster('all'); })
+
+    productFeedService
+      .getProducts(source, undefined, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE)
+      .then((items) => {
+        setProducts(items);
+        setActiveCluster('all');
+      })
       .catch((err) => console.error('Products load error:', err))
       .finally(() => setProductsLoading(false));
   }, [activeTab, storeFilter]);
 
-  // ── Derived data ────────────────────────────────────────────────────────
   const favorites = myGear.filter((g) => g.isFavorite);
 
-  // Derive clusters from loaded products (client-side, no extra Firestore reads)
   const productClusters = useMemo(
     () => productFeedService.deriveClustersFromProducts(products),
     [products]
   );
+
+  const discoverProductsEnriched = useMemo<EnrichedProduct[]>(() => {
+    return products.map((p) => ({
+      ...p,
+      _mainSection: inferMainSection(p),
+      _subCategory: p.category || 'accessory',
+      _subSubCategory: inferSubSubCategory(p),
+    }));
+  }, [products]);
+
+  const availableSubCategories = useMemo(() => {
+    const filtered = discoverProductsEnriched.filter((p) =>
+      mainSection === 'all' ? true : p._mainSection === mainSection
+    );
+    const unique = [...new Set(filtered.map((p) => p._subCategory).filter(Boolean))];
+    const ordered = unique.sort((a, b) => (SUBCATEGORY_LABELS[a] || a).localeCompare(SUBCATEGORY_LABELS[b] || b));
+    return ['all', ...ordered];
+  }, [discoverProductsEnriched, mainSection]);
+
+  const availableSubSubCategories = useMemo(() => {
+    const filtered = discoverProductsEnriched.filter((p) => {
+      const matchesMain = mainSection === 'all' ? true : p._mainSection === mainSection;
+      const matchesSub = subCategory === 'all' ? true : p._subCategory === subCategory;
+      return matchesMain && matchesSub;
+    });
+
+    const unique = [...new Set(filtered.map((p) => p._subSubCategory).filter(Boolean))];
+    const withoutAll = unique.filter((x) => x !== 'all');
+    const ordered = withoutAll.sort((a, b) => (SUBSUB_LABELS[a] || a).localeCompare(SUBSUB_LABELS[b] || b));
+    return ['all', ...ordered];
+  }, [discoverProductsEnriched, mainSection, subCategory]);
 
   const filterGear = (items: GearItem[]) =>
     items.filter((g) => {
@@ -150,26 +313,35 @@ export default function Gear() {
   const filteredGear = filterGear(myGear);
   const filteredFavorites = filterGear(favorites);
 
-  const filteredProducts = products.filter((p) => {
+  const filteredProducts = discoverProductsEnriched.filter((p) => {
+    const q = searchQuery.toLowerCase();
+
     const matchesSearch =
       !searchQuery ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.brand?.toLowerCase().includes(searchQuery.toLowerCase());
+      p.name.toLowerCase().includes(q) ||
+      p.brand?.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q);
+
+    const matchesMain = mainSection === 'all' ? true : p._mainSection === mainSection;
+    const matchesSub = subCategory === 'all' ? true : p._subCategory === subCategory;
+    const matchesSubSub = subSubCategory === 'all' ? true : p._subSubCategory === subSubCategory;
     const matchesCluster = activeCluster === 'all' || (p.clusters ?? []).includes(activeCluster);
-    return matchesSearch && matchesCluster;
+
+    return matchesSearch && matchesMain && matchesSub && matchesSubSub && matchesCluster;
   });
 
-  // ── Actions ─────────────────────────────────────────────────────────────
   const openAddGear = (prefill?: Partial<GearItem>) => {
     setEditingGear(null);
     setPrefillGear(prefill ?? null);
     setIsGearModalOpen(true);
   };
+
   const openEditGear = (item: GearItem) => {
     setEditingGear(item);
     setPrefillGear(null);
     setIsGearModalOpen(true);
   };
+
   const handleAddToGear = (product: ProductCatalogItem) => {
     openAddGear({
       name: product.name,
@@ -179,8 +351,16 @@ export default function Gear() {
       affiliateProductId: product.id,
     });
   };
-  const openAddSetup = () => { setEditingSetup(null); setIsSetupModalOpen(true); };
-  const openEditSetup = (s: GearSetup) => { setEditingSetup(s); setIsSetupModalOpen(true); };
+
+  const openAddSetup = () => {
+    setEditingSetup(null);
+    setIsSetupModalOpen(true);
+  };
+
+  const openEditSetup = (s: GearSetup) => {
+    setEditingSetup(s);
+    setIsSetupModalOpen(true);
+  };
 
   const handleDeleteGear = async (item: GearItem) => {
     if (!window.confirm(`"${item.name}" verwijderen uit Mijn Gear?`)) return;
@@ -210,35 +390,54 @@ export default function Gear() {
     }
   };
 
-  // ── Gear name lookup helper for setups ──────────────────────────────────
   const gearName = (id?: string) => {
     if (!id) return '—';
     const g = myGear.find((x) => x.id === id);
     return g ? `${g.brand} ${g.name}` : '—';
   };
 
-  // ─── Header action ──────────────────────────────────────────────────────
-  const headerAction = activeTab === 'my-gear' || activeTab === 'favorites' ? (
-    <Button icon={<Plus className="w-4 h-4" />} className="rounded-xl h-11 px-5 font-bold shadow-premium-accent" onClick={openAddGear}>
-      Gear Toevoegen
-    </Button>
-  ) : activeTab === 'setups' ? (
-    <Button icon={<Plus className="w-4 h-4" />} className="rounded-xl h-11 px-5 font-bold shadow-premium-accent" onClick={openAddSetup} disabled={myGear.length === 0}>
-      Nieuwe Setup
-    </Button>
-  ) : null;
+  const headerAction =
+    activeTab === 'my-gear' || activeTab === 'favorites' ? (
+      <Button
+        icon={<Plus className="w-4 h-4" />}
+        className="rounded-xl h-11 px-5 font-bold shadow-premium-accent"
+        onClick={() => openAddGear()}
+      >
+        Gear Toevoegen
+      </Button>
+    ) : activeTab === 'setups' ? (
+      <Button
+        icon={<Plus className="w-4 h-4" />}
+        className="rounded-xl h-11 px-5 font-bold shadow-premium-accent"
+        onClick={openAddSetup}
+        disabled={myGear.length === 0}
+      >
+        Nieuwe Setup
+      </Button>
+    ) : null;
 
   return (
     <PageLayout>
-      <PageHeader title="Mijn Visgear" subtitle="Beheer je uitrusting, setups en ontdek nieuwe items" actions={headerAction} />
+      <PageHeader
+        title="Mijn Visgear"
+        subtitle="Beheer je uitrusting, setups en ontdek nieuwe items"
+        actions={headerAction}
+      />
 
       <div className="space-y-6 pb-32">
-        {/* ── Tab Navigation ──────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 bg-surface-card p-1 rounded-2xl border border-border-subtle overflow-x-auto no-scrollbar mx-2 md:mx-0">
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setSearchQuery(''); setCategoryFilter('all'); }}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setSearchQuery('');
+                setCategoryFilter('all');
+                setMainSection('all');
+                setSubCategory('all');
+                setSubSubCategory('all');
+                setActiveCluster('all');
+              }}
               className={cn(
                 'flex-1 flex items-center justify-center gap-1.5 px-3 md:px-5 py-3 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap',
                 activeTab === tab.id
@@ -252,10 +451,9 @@ export default function Gear() {
           ))}
         </div>
 
-        {/* ── Search + Filters ────────────────────────────────────────────── */}
         {(activeTab === 'my-gear' || activeTab === 'favorites' || activeTab === 'discover') && (
-          <section className="flex flex-col sm:flex-row gap-3 px-2 md:px-0">
-            <div className="relative flex-1">
+          <section className="flex flex-col gap-3 px-2 md:px-0">
+            <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
               <input
                 type="text"
@@ -265,13 +463,15 @@ export default function Gear() {
                 className="w-full bg-surface-card border border-border-subtle rounded-xl pl-11 pr-4 py-3 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-brand transition-all"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
 
-            {/* Category filter (gear tabs) */}
             {(activeTab === 'my-gear' || activeTab === 'favorites') && (
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
                 {CATEGORY_FILTER_OPTIONS.map((opt) => (
@@ -291,33 +491,105 @@ export default function Gear() {
               </div>
             )}
 
-            {/* Store filter + view mode (discover tab) */}
             {activeTab === 'discover' && (
-              <div className="flex gap-2">
-                {PRODUCT_STORE_FILTERS.map((f) => (
-                  <button
-                    key={f.value}
-                    onClick={() => setStoreFilter(f.value)}
-                    className={cn(
-                      'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
-                      storeFilter === f.value
-                        ? 'bg-brand text-bg-main border-brand'
-                        : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
-                    )}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                  {PRODUCT_STORE_FILTERS.map((f) => (
+                    <button
+                      key={f.value}
+                      onClick={() => setStoreFilter(f.value)}
+                      className={cn(
+                        'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
+                        storeFilter === f.value
+                          ? 'bg-brand text-bg-main border-brand'
+                          : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                  {MAIN_SECTION_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setMainSection(opt.value);
+                        setSubCategory('all');
+                        setSubSubCategory('all');
+                      }}
+                      className={cn(
+                        'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
+                        mainSection === opt.value
+                          ? 'bg-brand text-bg-main border-brand'
+                          : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                  {availableSubCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        setSubCategory(cat);
+                        setSubSubCategory('all');
+                      }}
+                      className={cn(
+                        'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
+                        subCategory === cat
+                          ? 'bg-brand text-bg-main border-brand'
+                          : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+                      )}
+                    >
+                      {cat === 'all' ? 'Alle types' : (SUBCATEGORY_LABELS[cat] ?? cat)}
+                    </button>
+                  ))}
+                </div>
+
+                {availableSubSubCategories.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                    {availableSubSubCategories.map((sub) => (
+                      <button
+                        key={sub}
+                        onClick={() => setSubSubCategory(sub)}
+                        className={cn(
+                          'px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all border flex-shrink-0',
+                          subSubCategory === sub
+                            ? 'bg-brand text-bg-main border-brand'
+                            : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
+                        )}
+                      >
+                        {SUBSUB_LABELS[sub] ?? sub}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* View mode toggle (gear tabs) */}
             {(activeTab === 'my-gear' || activeTab === 'favorites') && (
-              <div className="flex bg-surface-card border border-border-subtle rounded-xl p-1 flex-shrink-0">
-                <button onClick={() => setViewMode('grid')} className={cn('p-2 rounded-lg transition-all', viewMode === 'grid' ? 'bg-brand text-bg-main' : 'text-text-muted')}>
+              <div className="flex bg-surface-card border border-border-subtle rounded-xl p-1 flex-shrink-0 self-start">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={cn(
+                    'p-2 rounded-lg transition-all',
+                    viewMode === 'grid' ? 'bg-brand text-bg-main' : 'text-text-muted'
+                  )}
+                >
                   <Grid className="w-4 h-4" />
                 </button>
-                <button onClick={() => setViewMode('list')} className={cn('p-2 rounded-lg transition-all', viewMode === 'list' ? 'bg-brand text-bg-main' : 'text-text-muted')}>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    'p-2 rounded-lg transition-all',
+                    viewMode === 'list' ? 'bg-brand text-bg-main' : 'text-text-muted'
+                  )}
+                >
                   <ListIcon className="w-4 h-4" />
                 </button>
               </div>
@@ -325,7 +597,6 @@ export default function Gear() {
           </section>
         )}
 
-        {/* ── Tab Content ─────────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -334,7 +605,6 @@ export default function Gear() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
           >
-            {/* ── 1. MIJN GEAR ────────────────────────────────────────────── */}
             {activeTab === 'my-gear' && (
               <GearGrid
                 items={filteredGear}
@@ -343,13 +613,12 @@ export default function Gear() {
                 onEdit={openEditGear}
                 onDelete={handleDeleteGear}
                 onToggleFavorite={handleToggleFavorite}
-                onAdd={openAddGear}
+                onAdd={() => openAddGear()}
                 emptyMessage="Nog geen gear toegevoegd."
                 emptySubMessage="Voeg je eerste hengel, molen of kunstaas toe."
               />
             )}
 
-            {/* ── 2. FAVORIETEN ───────────────────────────────────────────── */}
             {activeTab === 'favorites' && (
               <GearGrid
                 items={filteredFavorites}
@@ -358,13 +627,12 @@ export default function Gear() {
                 onEdit={openEditGear}
                 onDelete={handleDeleteGear}
                 onToggleFavorite={handleToggleFavorite}
-                onAdd={openAddGear}
+                onAdd={() => openAddGear()}
                 emptyMessage="Geen favorieten gevonden."
                 emptySubMessage="Markeer gear als favoriet via de ster op een item."
               />
             )}
 
-            {/* ── 3. SETUPS ───────────────────────────────────────────────── */}
             {activeTab === 'setups' && (
               <SetupsTab
                 setups={setups}
@@ -377,12 +645,10 @@ export default function Gear() {
               />
             )}
 
-            {/* ── 4. SUGGESTIES ───────────────────────────────────────────── */}
             {activeTab === 'suggestions' && (
               <SuggestiesTab gear={myGear} setups={setups} />
             )}
 
-            {/* ── 5. ONTDEKKEN ────────────────────────────────────────────── */}
             {activeTab === 'discover' && (
               <DiscoverTab
                 products={filteredProducts}
@@ -399,25 +665,28 @@ export default function Gear() {
         </AnimatePresence>
       </div>
 
-      {/* Modals */}
       <GearItemModal
         isOpen={isGearModalOpen}
-        onClose={() => { setIsGearModalOpen(false); setEditingGear(null); setPrefillGear(null); }}
+        onClose={() => {
+          setIsGearModalOpen(false);
+          setEditingGear(null);
+          setPrefillGear(null);
+        }}
         editItem={editingGear}
         prefillData={prefillGear ?? undefined}
       />
+
       <SetupModal
         isOpen={isSetupModalOpen}
-        onClose={() => { setIsSetupModalOpen(false); setEditingSetup(null); }}
+        onClose={() => {
+          setIsSetupModalOpen(false);
+          setEditingSetup(null);
+        }}
         editSetup={editingSetup}
       />
     </PageLayout>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface GearGridProps {
   items: GearItem[];
@@ -431,13 +700,27 @@ interface GearGridProps {
   emptySubMessage: string;
 }
 
-function GearGrid({ items, loading, viewMode, onEdit, onDelete, onToggleFavorite, onAdd, emptyMessage, emptySubMessage }: GearGridProps) {
+function GearGrid({
+  items,
+  loading,
+  viewMode,
+  onEdit,
+  onDelete,
+  onToggleFavorite,
+  onAdd,
+  emptyMessage,
+  emptySubMessage,
+}: GearGridProps) {
   if (loading) return <LoadingState />;
 
   if (items.length === 0) {
     return (
       <EmptyState icon={Package} message={emptyMessage} subMessage={emptySubMessage}>
-        <Button icon={<Plus className="w-4 h-4" />} onClick={onAdd} className="mt-4 rounded-xl h-11 px-6 font-bold shadow-premium-accent">
+        <Button
+          icon={<Plus className="w-4 h-4" />}
+          onClick={onAdd}
+          className="mt-4 rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+        >
           Gear Toevoegen
         </Button>
       </EmptyState>
@@ -445,17 +728,25 @@ function GearGrid({ items, loading, viewMode, onEdit, onDelete, onToggleFavorite
   }
 
   return (
-    <div className={cn(
-      'px-2 md:px-0',
-      viewMode === 'grid'
-        ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
-        : 'space-y-3'
-    )}>
+    <div
+      className={cn(
+        'px-2 md:px-0',
+        viewMode === 'grid'
+          ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
+          : 'space-y-3'
+      )}
+    >
       {items.map((g) => (
-        <GearItemCard key={g.id} item={g} viewMode={viewMode} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+        <GearItemCard
+          key={g.id}
+          item={g}
+          viewMode={viewMode}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onToggleFavorite={onToggleFavorite}
+        />
       ))}
 
-      {/* Add button */}
       <button
         onClick={onAdd}
         className={cn(
@@ -472,7 +763,13 @@ function GearGrid({ items, loading, viewMode, onEdit, onDelete, onToggleFavorite
   );
 }
 
-function GearItemCard({ item, viewMode, onEdit, onDelete, onToggleFavorite }: {
+function GearItemCard({
+  item,
+  viewMode,
+  onEdit,
+  onDelete,
+  onToggleFavorite,
+}: {
   item: GearItem;
   viewMode: 'grid' | 'list';
   onEdit: (item: GearItem) => void;
@@ -485,36 +782,49 @@ function GearItemCard({ item, viewMode, onEdit, onDelete, onToggleFavorite }: {
     return (
       <Card padding="none" className="border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group overflow-hidden">
         <div className="flex items-center gap-4 p-3">
-          {/* Thumbnail */}
           <div className="w-14 h-14 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0">
-            {item.photoURL
-              ? <img src={item.photoURL} alt={item.name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-6 h-6" /></div>
-            }
+            {item.photoURL ? (
+              <img src={item.photoURL} alt={item.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-text-dim">
+                <Package className="w-6 h-6" />
+              </div>
+            )}
           </div>
-          {/* Info */}
+
           <div className="flex-1 min-w-0">
             <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{item.brand}</p>
             <h4 className="text-sm font-bold text-text-primary truncate">{item.name}</h4>
             <div className="flex items-center gap-2 mt-0.5">
-              <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5">{categoryLabel}</Badge>
+              <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5">
+                {categoryLabel}
+              </Badge>
               {item.usageCount && item.usageCount > 0 && (
                 <span className="text-[8px] text-text-dim font-bold">{item.usageCount}× gebruikt</span>
               )}
             </div>
           </div>
-          {/* Actions */}
+
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
               onClick={() => onToggleFavorite(item)}
-              className={cn('w-7 h-7 rounded-lg flex items-center justify-center transition-all', item.isFavorite ? 'text-brand' : 'text-text-muted hover:text-brand')}
+              className={cn(
+                'w-7 h-7 rounded-lg flex items-center justify-center transition-all',
+                item.isFavorite ? 'text-brand' : 'text-text-muted hover:text-brand'
+              )}
             >
               <Star className={cn('w-3.5 h-3.5', item.isFavorite && 'fill-current')} />
             </button>
-            <button onClick={() => onEdit(item)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-brand transition-colors">
+            <button
+              onClick={() => onEdit(item)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-brand transition-colors"
+            >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
-            <button onClick={() => onDelete(item)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-danger transition-colors">
+            <button
+              onClick={() => onDelete(item)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-danger transition-colors"
+            >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -523,16 +833,17 @@ function GearItemCard({ item, viewMode, onEdit, onDelete, onToggleFavorite }: {
     );
   }
 
-  // Grid mode
   return (
     <Card padding="none" className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col">
-      {/* Image */}
       <div className="aspect-square relative overflow-hidden bg-surface-soft">
-        {item.photoURL
-          ? <img src={item.photoURL} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-          : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-10 h-10" /></div>
-        }
-        {/* Favorite badge */}
+        {item.photoURL ? (
+          <img src={item.photoURL} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-text-dim">
+            <Package className="w-10 h-10" />
+          </div>
+        )}
+
         <button
           onClick={() => onToggleFavorite(item)}
           className={cn(
@@ -542,24 +853,32 @@ function GearItemCard({ item, viewMode, onEdit, onDelete, onToggleFavorite }: {
         >
           <Star className={cn('w-3 h-3', item.isFavorite && 'fill-current')} />
         </button>
-        {/* Usage count */}
+
         {item.usageCount && item.usageCount > 0 && (
           <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md rounded-lg px-2 py-0.5">
             <span className="text-[8px] font-black text-white">{item.usageCount}× gebruikt</span>
           </div>
         )}
       </div>
-      {/* Info */}
+
       <div className="p-3 flex-1 flex flex-col justify-between">
         <div>
           <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">{item.brand}</p>
           <h4 className="text-xs font-bold text-text-primary tracking-tight truncate">{item.name}</h4>
         </div>
+
         <div className="flex items-center justify-between mt-2">
-          <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">{categoryLabel}</Badge>
+          <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
+            {categoryLabel}
+          </Badge>
+
           <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => onEdit(item)} className="text-text-muted hover:text-brand transition-colors"><Edit2 className="w-3 h-3" /></button>
-            <button onClick={() => onDelete(item)} className="text-text-muted hover:text-danger transition-colors"><Trash2 className="w-3 h-3" /></button>
+            <button onClick={() => onEdit(item)} className="text-text-muted hover:text-brand transition-colors">
+              <Edit2 className="w-3 h-3" />
+            </button>
+            <button onClick={() => onDelete(item)} className="text-text-muted hover:text-danger transition-colors">
+              <Trash2 className="w-3 h-3" />
+            </button>
           </div>
         </div>
       </div>
@@ -567,9 +886,15 @@ function GearItemCard({ item, viewMode, onEdit, onDelete, onToggleFavorite }: {
   );
 }
 
-// ─── Setups Tab ──────────────────────────────────────────────────────────────
-
-function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete }: {
+function SetupsTab({
+  setups,
+  loading,
+  myGear,
+  gearName,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
   setups: GearSetup[];
   loading: boolean;
   myGear: GearItem[];
@@ -585,7 +910,9 @@ function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete 
       {myGear.length === 0 && (
         <Card className="p-4 bg-brand/5 border border-brand/20 rounded-2xl flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-text-secondary">Voeg eerst gear toe aan Mijn Gear voordat je een setup samenstelt.</p>
+          <p className="text-sm text-text-secondary">
+            Voeg eerst gear toe aan Mijn Gear voordat je een setup samenstelt.
+          </p>
         </Card>
       )}
 
@@ -593,20 +920,20 @@ function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete 
         <Card key={s.id} className="p-5 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
             <div className="space-y-4 flex-1">
-              {/* Header */}
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl bg-brand/10 flex items-center justify-center text-brand flex-shrink-0">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">{s.name}</h4>
+                  <h4 className="text-base font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">
+                    {s.name}
+                  </h4>
                   <p className="text-[9px] font-bold text-text-muted uppercase tracking-widest">
                     {s.catchCount || 0} vangsten · {s.sessionCount || 0} sessies
                   </p>
                 </div>
               </div>
 
-              {/* Gear breakdown */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {[
                   { label: 'Hengel', id: s.rodId },
@@ -614,22 +941,26 @@ function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete 
                   { label: 'Lijn', id: s.lineId },
                   { label: 'Voorlijn', id: s.leaderId },
                   { label: 'Kunstaas', id: s.lureId },
-                ].filter((x) => x.id).map(({ label, id }) => (
-                  <div key={label} className="bg-bg-main/50 p-2.5 rounded-xl border border-border-subtle">
-                    <p className="text-[7px] font-black text-text-muted uppercase tracking-widest mb-0.5">{label}</p>
-                    <p className="text-xs font-bold text-text-primary truncate">{gearName(id)}</p>
-                  </div>
-                ))}
+                ]
+                  .filter((x) => x.id)
+                  .map(({ label, id }) => (
+                    <div key={label} className="bg-bg-main/50 p-2.5 rounded-xl border border-border-subtle">
+                      <p className="text-[7px] font-black text-text-muted uppercase tracking-widest mb-0.5">{label}</p>
+                      <p className="text-xs font-bold text-text-primary truncate">{gearName(id)}</p>
+                    </div>
+                  ))}
               </div>
 
-              {s.notes && (
-                <p className="text-xs text-text-muted italic">{s.notes}</p>
-              )}
+              {s.notes && <p className="text-xs text-text-muted italic">{s.notes}</p>}
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button variant="secondary" size="sm" className="h-9 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest" onClick={() => onEdit(s)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-9 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest"
+                onClick={() => onEdit(s)}
+              >
                 Wijzig
               </Button>
               <Button variant="ghost" size="sm" className="h-9 w-9 rounded-xl p-0" onClick={() => onDelete(s)}>
@@ -640,7 +971,6 @@ function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete 
         </Card>
       ))}
 
-      {/* Add setup CTA */}
       <button
         onClick={onAdd}
         disabled={myGear.length === 0}
@@ -653,14 +983,11 @@ function SetupsTab({ setups, loading, myGear, gearName, onAdd, onEdit, onDelete 
   );
 }
 
-// ─── Suggesties Tab ──────────────────────────────────────────────────────────
-
 function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[] }) {
   const mostUsedGear = [...gear].sort((a, b) => (b.usageCount ?? 0) - (a.usageCount ?? 0)).slice(0, 3);
 
   return (
     <div className="space-y-6 px-2 md:px-0">
-      {/* Most used gear */}
       {mostUsedGear.length > 0 && (
         <section>
           <h3 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -671,10 +998,13 @@ function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[]
             {mostUsedGear.map((g) => (
               <div key={g.id} className="flex items-center gap-3 p-3 bg-surface-card border border-border-subtle rounded-xl">
                 <div className="w-10 h-10 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0">
-                  {g.photoURL
-                    ? <img src={g.photoURL} alt={g.name} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-text-dim"><Package className="w-5 h-5" /></div>
-                  }
+                  {g.photoURL ? (
+                    <img src={g.photoURL} alt={g.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-text-dim">
+                      <Package className="w-5 h-5" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{g.brand}</p>
@@ -690,7 +1020,6 @@ function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[]
         </section>
       )}
 
-      {/* Placeholder — future ML suggestions */}
       <Card className="p-6 bg-brand/5 border border-brand/20 rounded-2xl text-center space-y-3">
         <div className="w-12 h-12 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mx-auto">
           <Lightbulb className="w-6 h-6" />
@@ -709,12 +1038,10 @@ function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[]
   );
 }
 
-// ─── Discover Tab ────────────────────────────────────────────────────────────
-
 const CLUSTER_TYPE_COLORS: Record<string, string> = {
-  species:   'text-blue-400 bg-blue-500/10 border-blue-500/20',
+  species: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
   technique: 'text-brand bg-brand/10 border-brand/20',
-  category:  'text-text-secondary bg-surface-soft border-border-subtle',
+  category: 'text-text-secondary bg-surface-soft border-border-subtle',
 };
 
 function DiscoverTab({
@@ -727,7 +1054,7 @@ function DiscoverTab({
   onClusterChange,
   onAddToGear,
 }: {
-  products: ProductCatalogItem[];
+  products: EnrichedProduct[];
   allProducts: ProductCatalogItem[];
   loading: boolean;
   searchQuery: string;
@@ -739,13 +1066,11 @@ function DiscoverTab({
   if (loading) {
     return (
       <div className="space-y-4 px-2 md:px-0">
-        {/* Skeleton cluster pills */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
           {[100, 80, 110, 90, 70, 95].map((w, i) => (
             <div key={i} className="h-8 rounded-xl bg-surface-card animate-pulse flex-shrink-0" style={{ width: w }} />
           ))}
         </div>
-        {/* Skeleton product grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-2xl bg-surface-card animate-pulse overflow-hidden">
@@ -767,7 +1092,7 @@ function DiscoverTab({
       <EmptyState
         icon={ShoppingBag}
         message="Productcatalogus leeg"
-        subMessage="Voer 'node scripts/seed-product-catalog.mjs' uit om bol.com visproducten te laden."
+        subMessage="Voer 'node scripts/seed-product-catalog.mjs' uit om visproducten te laden."
       />
     );
   }
@@ -782,32 +1107,37 @@ function DiscoverTab({
     );
   }
 
-  if (products.length === 0 && activeCluster !== 'all') {
+  if (products.length === 0) {
     return (
-      <div className="space-y-4 px-2 md:px-0">
-        <ClusterPills clusters={clusters} active={activeCluster} onChange={onClusterChange} />
-        <EmptyState icon={Fish} message="Geen producten in dit cluster" subMessage="Kies een andere categorie of filter." />
-      </div>
+      <EmptyState
+        icon={Fish}
+        message="Geen producten in deze selectie"
+        subMessage="Kies een andere discipline of subcategorie."
+      />
     );
   }
 
   return (
     <div className="space-y-5 px-2 md:px-0">
-      {/* Cluster pills */}
       {clusters.length > 0 && (
         <ClusterPills clusters={clusters} active={activeCluster} onChange={onClusterChange} />
       )}
 
-      {/* Count + active filter indicator */}
-      <div className="flex items-center justify-between">
-        <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">
-          {products.length} product{products.length !== 1 ? 'en' : ''}
-          {activeCluster !== 'all' && (
-            <span className="text-brand ml-1">
-              · {clusters.find(c => c.key === activeCluster)?.label}
-            </span>
-          )}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">
+            {products.length} product{products.length !== 1 ? 'en' : ''}
+            {activeCluster !== 'all' && (
+              <span className="text-brand ml-1">
+                · {clusters.find((c) => c.key === activeCluster)?.label}
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-text-dim">
+            Ontdek gear per discipline, categorie en specifieke productgroep.
+          </p>
+        </div>
+
         {activeCluster !== 'all' && (
           <button
             onClick={() => onClusterChange('all')}
@@ -819,16 +1149,14 @@ function DiscoverTab({
         )}
       </div>
 
-      {/* Product grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {products.map((p) => (
           <ProductCard key={p.id ?? p.externalId} product={p} onAddToGear={onAddToGear} />
         ))}
       </div>
 
-      {/* Affiliate disclaimer */}
       <p className="text-center text-[9px] text-text-dim font-bold uppercase tracking-widest pb-4">
-        Productlinks via Bol.com — affiliate partnerschap
+        Productlinks via affiliate partners
       </p>
     </div>
   );
@@ -843,11 +1171,10 @@ function ClusterPills({
   active: string;
   onChange: (key: string) => void;
 }) {
-  // Show: species first, then technique, then category — top 12 max
   const ordered = [
-    ...clusters.filter(c => c.type === 'species'),
-    ...clusters.filter(c => c.type === 'technique'),
-    ...clusters.filter(c => c.type === 'category'),
+    ...clusters.filter((c) => c.type === 'species'),
+    ...clusters.filter((c) => c.type === 'technique'),
+    ...clusters.filter((c) => c.type === 'category'),
   ].slice(0, 12);
 
   return (
@@ -863,7 +1190,8 @@ function ClusterPills({
       >
         Alle
       </button>
-      {ordered.map(c => (
+
+      {ordered.map((c) => (
         <button
           key={c.key}
           onClick={() => onChange(c.key)}
@@ -875,10 +1203,12 @@ function ClusterPills({
           )}
         >
           {c.label}
-          <span className={cn(
-            'text-[8px] font-black px-1 py-0.5 rounded',
-            active === c.key ? 'bg-bg-main/20 text-bg-main' : 'bg-black/10'
-          )}>
+          <span
+            className={cn(
+              'text-[8px] font-black px-1 py-0.5 rounded',
+              active === c.key ? 'bg-bg-main/20 text-bg-main' : 'bg-black/10'
+            )}
+          >
             {c.count}
           </span>
         </button>
@@ -891,11 +1221,10 @@ function ProductCard({
   product,
   onAddToGear,
 }: {
-  product: ProductCatalogItem;
+  product: EnrichedProduct;
   onAddToGear: (product: ProductCatalogItem) => void;
 }) {
   const ratingAvg = product.rating?.average;
-  // Bol.com uses 0-10 scale; convert to 5-star display
   const stars = ratingAvg != null ? Math.round((ratingAvg / 10) * 5 * 2) / 2 : null;
 
   return (
@@ -903,7 +1232,6 @@ function ProductCard({
       padding="none"
       className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col"
     >
-      {/* Image */}
       <div className="aspect-square relative overflow-hidden bg-surface-soft">
         {product.imageURL ? (
           <img
@@ -918,23 +1246,18 @@ function ProductCard({
           </div>
         )}
 
-        {/* Price overlay */}
         {product.price != null && (
           <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md rounded-lg px-2 py-0.5">
-            <span className="text-[10px] font-black text-white">
-              €{product.price.toFixed(2)}
-            </span>
+            <span className="text-[10px] font-black text-white">€{product.price.toFixed(2)}</span>
           </div>
         )}
 
-        {/* Source badge */}
         <div className="absolute top-2 right-2">
           <div className="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-[#0000A4] text-white">
-            Bol
+            {product.source === 'fishinn' ? 'Fishinn' : 'Bol'}
           </div>
         </div>
 
-        {/* In-stock indicator */}
         {product.inStock === false && (
           <div className="absolute top-2 left-2 text-[7px] font-black bg-surface/80 text-text-muted px-1.5 py-0.5 rounded">
             Uitverkocht
@@ -942,7 +1265,6 @@ function ProductCard({
         )}
       </div>
 
-      {/* Info */}
       <div className="p-3 flex-1 flex flex-col justify-between gap-2">
         <div>
           {product.brand && (
@@ -950,15 +1272,15 @@ function ProductCard({
               {product.brand}
             </p>
           )}
+
           <h4 className="text-xs font-bold text-text-primary tracking-tight line-clamp-2">
             {product.name}
           </h4>
 
-          {/* Rating */}
           {stars != null && (
             <div className="flex items-center gap-1 mt-1">
               <div className="flex gap-0.5">
-                {[1, 2, 3, 4, 5].map(i => (
+                {[1, 2, 3, 4, 5].map((i) => (
                   <Star
                     key={i}
                     className={cn(
@@ -969,15 +1291,30 @@ function ProductCard({
                 ))}
               </div>
               {product.rating?.count != null && product.rating.count > 0 && (
-                <span className="text-[8px] text-text-dim font-bold">
-                  ({product.rating.count})
-                </span>
+                <span className="text-[8px] text-text-dim font-bold">({product.rating.count})</span>
               )}
             </div>
           )}
+
+          <div className="flex flex-wrap gap-1 mt-2">
+            <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
+              {SUBCATEGORY_LABELS[product.category ?? 'accessory'] ?? (product.category ?? 'Gear')}
+            </Badge>
+
+            {product._mainSection !== 'allround' && (
+              <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
+                {product._mainSection}
+              </Badge>
+            )}
+
+            {product._subSubCategory !== 'all' && (
+              <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
+                {SUBSUB_LABELS[product._subSubCategory] ?? product._subSubCategory}
+              </Badge>
+            )}
+          </div>
         </div>
 
-        {/* Actions */}
         <div className="flex gap-1.5">
           {product.affiliateURL && (
             <a
@@ -990,6 +1327,7 @@ function ProductCard({
               <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
             </a>
           )}
+
           <button
             onClick={() => onAddToGear(product)}
             title="Voeg toe aan Mijn Gear"
@@ -1003,8 +1341,6 @@ function ProductCard({
   );
 }
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
-
 function LoadingState() {
   return (
     <div className="flex justify-center items-center py-16 text-text-muted">
@@ -1013,7 +1349,12 @@ function LoadingState() {
   );
 }
 
-function EmptyState({ icon: Icon, message, subMessage, children }: {
+function EmptyState({
+  icon: Icon,
+  message,
+  subMessage,
+  children,
+}: {
   icon: React.ElementType;
   message: string;
   subMessage: string;
