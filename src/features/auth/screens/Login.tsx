@@ -104,13 +104,13 @@ export default function Login() {
       <img
         src={logoSrc}
         alt="CatchRank logo icon"
-        className="relative z-10 h-32 w-32 md:h-40 md:w-40 object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-500 group-hover:scale-[1.03]"
+        className="relative z-10 h-36 w-36 md:h-44 md:w-44 object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-500 group-hover:scale-[1.03]"
         draggable={false}
       />
     </div>
   </div>
 
-  <h1 className="text-4xl font-krub font-bold text-brand tracking-tight uppercase mb-2">
+  <h1 className="text-2xl font-krub font-bold text-brand tracking-tight uppercase mb-2">
     CatchRank
   </h1>
 
