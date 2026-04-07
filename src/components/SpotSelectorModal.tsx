@@ -48,7 +48,7 @@ export const SpotSelectorModal: React.FC<SpotSelectorModalProps> = ({
     if (!profile) return;
     setLoading(true);
     try {
-      const q = query(collection(db, 'spots'), where('userId', '==', profile.uid));
+      const q = query(collection(db, 'spots_v2'), where('userId', '==', profile.uid));
       const snapshot = await getDocs(q);
       setSpots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Spot)));
     } catch (error) {
@@ -90,10 +90,13 @@ export const SpotSelectorModal: React.FC<SpotSelectorModalProps> = ({
     }
   };
 
-  const filteredSpots = spots.filter(s => 
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.waterType.toLowerCase().includes(search.toLowerCase())
-  );
+  const getSpotName = (s: Spot) => s.title || s.name || '';
+
+  const filteredSpots = spots.filter(s => {
+    const name = getSpotName(s);
+    return name.toLowerCase().includes(search.toLowerCase()) ||
+      (s.waterType || '').toLowerCase().includes(search.toLowerCase());
+  });
 
   if (!isOpen) return null;
 
@@ -246,7 +249,7 @@ export const SpotSelectorModal: React.FC<SpotSelectorModalProps> = ({
                           <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                          <h5 className="font-bold text-primary">{spot.name}</h5>
+                          <h5 className="font-bold text-primary">{getSpotName(spot)}</h5>
                           <p className="text-[10px] sm:text-xs text-text-muted flex items-center gap-1">
                             <Navigation className="w-3 h-3" />
                             {spot.waterType}

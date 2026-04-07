@@ -26,17 +26,24 @@ export const speciesService = {
    */
   async getAllSpecies(): Promise<Species[]> {
     try {
-      const q = query(collection(db, 'species'), orderBy('name', 'asc'));
+      const q = query(collection(db, 'species'), orderBy('name_nl', 'asc'));
       const snapshot = await getDocs(q);
-      
+
       if (snapshot.empty) {
         return COMMON_SPECIES;
       }
-      
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Species));
+
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          // Normalize name_nl → name so the rest of the app works without changes
+          name: data.name_nl ?? data.name ?? doc.id,
+          scientificName: data.name_latin ?? data.scientificName,
+          xpValue: data.xp_base ?? data.xpValue,
+        } as Species;
+      });
     } catch (error) {
       console.error('Error fetching species:', error);
       return COMMON_SPECIES;

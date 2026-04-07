@@ -63,7 +63,7 @@ export default function CatchDetail() {
 
     const fetchData = async () => {
       try {
-        const catchDoc = await getDoc(doc(db, 'catches', id));
+        const catchDoc = await getDoc(doc(db, 'catches_v2', id));
         if (!catchDoc.exists()) {
           toast.error('Vangst niet gevonden');
           navigate('/catches');
@@ -74,14 +74,14 @@ export default function CatchDetail() {
 
         // Load spot details if linked
         if (data.spotId) {
-          const spotDoc = await getDoc(doc(db, 'spots', data.spotId));
+          const spotDoc = await getDoc(doc(db, 'spots_v2', data.spotId));
           if (spotDoc.exists()) {
             setSpot({ id: spotDoc.id, ...spotDoc.data() } as Spot);
           }
 
           // Load related catches at same spot (excluding this one)
           const relatedQuery = query(
-            collection(db, 'catches'),
+            collection(db, 'catches_v2'),
             where('spotId', '==', data.spotId),
             where('status', '==', 'complete'),
             orderBy('timestamp', 'desc'),
@@ -108,7 +108,7 @@ export default function CatchDetail() {
   const handleDelete = async () => {
     if (!catchData?.id || !window.confirm('Vangst definitief verwijderen?')) return;
     try {
-      await deleteDoc(doc(db, 'catches', catchData.id));
+      await deleteDoc(doc(db, 'catches_v2', catchData.id));
       toast.success('Vangst verwijderd');
       navigate('/catches');
     } catch {
@@ -192,7 +192,7 @@ export default function CatchDetail() {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <h1 className={`text-2xl font-black tracking-tight leading-tight ${catchData.photoURL ? 'text-white' : 'text-text-primary'}`}>
-                  {catchData.species || 'Onbekende soort'}
+                  {catchData.speciesGeneral || catchData.species || 'Onbekende soort'}
                 </h1>
                 <div className={`flex items-center gap-3 mt-1 text-sm font-semibold ${catchData.photoURL ? 'text-white/80' : 'text-text-secondary'}`}>
                   {catchData.weight && <span className="flex items-center gap-1"><Scale className="w-4 h-4" />{(catchData.weight / 1000).toFixed(2)} kg</span>}
@@ -232,7 +232,7 @@ export default function CatchDetail() {
                 className="flex items-center gap-1.5 text-xs font-semibold text-accent hover:underline"
               >
                 <MapPin className="w-3.5 h-3.5" />
-                {spot.name}
+                {spot.title || spot.name}
               </button>
             )}
             {catchData.sessionId && (
@@ -389,7 +389,7 @@ export default function CatchDetail() {
           <div className="mt-4">
             <div className="flex items-center justify-between mb-3 px-1">
               <span className="text-xs font-black text-text-muted uppercase tracking-widest">
-                Meer op {spot?.name ?? 'deze stek'}
+                Meer op {spot?.title ?? spot?.name ?? 'deze stek'}
               </span>
               {spot && (
                 <button
@@ -419,7 +419,7 @@ export default function CatchDetail() {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-2.5">
-                      <p className="text-xs font-bold text-white leading-tight truncate">{c.species || 'Onbekend'}</p>
+                      <p className="text-xs font-bold text-white leading-tight truncate">{(c as any).speciesGeneral || c.species || 'Onbekend'}</p>
                       {relTs && <p className="text-[9px] text-white/60">{format(relTs, 'd MMM', { locale: nl })}</p>}
                     </div>
                   </motion.div>
@@ -450,7 +450,7 @@ export default function CatchDetail() {
               onComplete={(updatedId) => {
                 setIsEditOpen(false);
                 // Refresh catch data
-                getDoc(doc(db, 'catches', updatedId)).then(d => {
+                getDoc(doc(db, 'catches_v2', updatedId)).then(d => {
                   if (d.exists()) setCatchData({ id: d.id, ...d.data() } as Catch);
                 });
               }}

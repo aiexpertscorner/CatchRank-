@@ -196,7 +196,7 @@ export default function SpotDetail() {
 
     const fetchSpot = async () => {
       try {
-        const docSnap = await getDoc(doc(db, 'spots', id));
+        const docSnap = await getDoc(doc(db, 'spots_v2', id));
         if (docSnap.exists()) {
           setSpot({ id: docSnap.id, ...docSnap.data() } as Spot);
         } else {
@@ -215,14 +215,14 @@ export default function SpotDetail() {
 
     // Load user's existing rating
     if (profile?.uid) {
-      getDoc(doc(db, 'spots', id, 'ratings', profile.uid))
+      getDoc(doc(db, 'spots_v2', id, 'ratings', profile.uid))
         .then(snap => { if (snap.exists()) setUserRating(snap.data().value || 0); })
         .catch(() => {});
     }
 
     // Catches at this spot
     const catchesQuery = query(
-      collection(db, 'catches'),
+      collection(db, 'catches_v2'),
       where('spotId', '==', id),
       orderBy('timestamp', 'desc'),
       limit(20)
@@ -233,7 +233,7 @@ export default function SpotDetail() {
 
     // Sessions at this spot
     const sessionsQuery = query(
-      collection(db, 'sessions'),
+      collection(db, 'sessions_v2'),
       where('linkedSpotIds', 'array-contains', id),
       orderBy('createdAt', 'desc'),
       limit(5)
@@ -252,7 +252,7 @@ export default function SpotDetail() {
     if (!spot || !id) return;
     if (!window.confirm('Weet je zeker dat je deze stek wilt verwijderen?')) return;
     try {
-      await deleteDoc(doc(db, 'spots', id));
+      await deleteDoc(doc(db, 'spots_v2', id));
       toast.success('Stek verwijderd');
       navigate('/spots');
     } catch (error) {
@@ -264,7 +264,7 @@ export default function SpotDetail() {
     if (!profile?.uid || !id) return;
     setUserRating(value);
     try {
-      await setDoc(doc(db, 'spots', id, 'ratings', profile.uid), {
+      await setDoc(doc(db, 'spots_v2', id, 'ratings', profile.uid), {
         value,
         userId: profile.uid,
         updatedAt: serverTimestamp()
@@ -343,7 +343,7 @@ export default function SpotDetail() {
         <section className="relative h-64 md:h-96 rounded-[2.5rem] overflow-hidden group">
           <img
             src={spot.mainPhotoURL || `https://picsum.photos/seed/${spot.id}/1920/1080`}
-            alt={spot.name}
+            alt={spot.title || spot.name}
             className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
             referrerPolicy="no-referrer"
           />
@@ -382,7 +382,7 @@ export default function SpotDetail() {
               </button>
             </div>
             <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-none mb-2 drop-shadow-lg">
-              {spot.name}
+              {spot.title || spot.name}
             </h1>
             {spot.waterBodyName && (
               <p className="text-lg text-text-secondary font-bold flex items-center gap-2">
@@ -525,7 +525,7 @@ export default function SpotDetail() {
                           {c.photoURL ? (
                             <img
                               src={c.photoURL}
-                              alt={c.species}
+                              alt={(c as any).speciesGeneral || c.species || ''}
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                             />
                           ) : (
@@ -535,7 +535,7 @@ export default function SpotDetail() {
                           )}
                         </div>
                         <div className="flex-1 p-4 flex flex-col justify-center">
-                          <h4 className="font-bold text-text-primary truncate">{c.species || '–'}</h4>
+                          <h4 className="font-bold text-text-primary truncate">{(c as any).speciesGeneral || c.species || '–'}</h4>
                           <div className="flex items-center gap-2 text-xs text-text-muted mt-1">
                             {c.length && <span>{c.length}cm</span>}
                             {c.weight && <span>{(c.weight / 1000).toFixed(2)}kg</span>}

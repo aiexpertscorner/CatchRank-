@@ -178,11 +178,20 @@ service cloud.firestore {
 
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid &&
-        request.resource.data.title is string &&
-        request.resource.data.title.size() > 0 &&
-        request.resource.data.title.size() < 100 &&
-        request.resource.data.lat is number &&
-        request.resource.data.lng is number &&
+        (
+          (request.resource.data.title is string &&
+           request.resource.data.title.size() > 0 &&
+           request.resource.data.title.size() < 100) ||
+          (request.resource.data.name is string &&
+           request.resource.data.name.size() > 0 &&
+           request.resource.data.name.size() < 100)
+        ) &&
+        (
+          (request.resource.data.lat is number &&
+           request.resource.data.lng is number) ||
+          (request.resource.data.latitude is number &&
+           request.resource.data.longitude is number)
+        ) &&
         (
           !('privacy' in request.resource.data) ||
           isValidVisibility(request.resource.data.privacy)
@@ -217,6 +226,14 @@ service cloud.firestore {
         (
           !('lng' in request.resource.data) ||
           request.resource.data.lng is number
+        ) &&
+        (
+          !('latitude' in request.resource.data) ||
+          request.resource.data.latitude is number
+        ) &&
+        (
+          !('longitude' in request.resource.data) ||
+          request.resource.data.longitude is number
         ) &&
         (
           !('privacy' in request.resource.data) ||
@@ -275,5 +292,65 @@ service cloud.firestore {
         resource.data.authorId == request.auth.uid || isAdmin()
       );
     }
+
+    /* ------------------------------------------------------------------ */
+    /* User Gear                                                          */
+    /* ------------------------------------------------------------------ */
+    match /user_gear/{gearId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0;
+
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* User Setups                                                        */
+    /* ------------------------------------------------------------------ */
+    match /user_setups/{setupId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Product Catalog                                                    */
+    /* ------------------------------------------------------------------ */
+    match /product_catalog/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /product_cache_meta/{metaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Challenges (read-only for users)                                  */
+    /* ------------------------------------------------------------------ */
+    match /challenges/{challengeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
   }
 }

@@ -54,7 +54,7 @@ export default function Catches() {
     if (!profile) return;
 
     const q = query(
-      collection(db, 'catches'),
+      collection(db, 'catches_v2'),
       where('userId', '==', profile.uid),
       orderBy('timestamp', 'desc')
     );
@@ -73,21 +73,24 @@ export default function Catches() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Weet je zeker dat je deze vangst wilt verwijderen?')) return;
     try {
-      await deleteDoc(doc(db, 'catches', id));
+      await deleteDoc(doc(db, 'catches_v2', id));
       toast.success('Vangst verwijderd');
     } catch (error) {
       toast.error('Fout bij verwijderen');
     }
   };
 
+  const getCatchSpecies = (c: Catch) => (c as any).speciesGeneral || c.species || '';
+
   const filteredCatches = catches.filter(c => {
-    const matchesSearch = c.species.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const species = getCatchSpecies(c);
+    const matchesSearch = species.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (c.spotName?.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesSpecies = filterSpecies === 'all' || c.species === filterSpecies;
+    const matchesSpecies = filterSpecies === 'all' || species === filterSpecies;
     return matchesSearch && matchesSpecies;
   });
 
-  const speciesList = Array.from(new Set(catches.map(c => c.species)));
+  const speciesList = Array.from(new Set(catches.map(c => getCatchSpecies(c)).filter(Boolean)));
 
   return (
     <PageLayout>
@@ -177,7 +180,7 @@ export default function Catches() {
                   <Card padding="none" hoverable className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden h-full flex flex-col cursor-pointer" onClick={() => c.id && navigate(`/catches/${c.id}`)}>
                     <div className="aspect-square relative overflow-hidden bg-surface-soft">
                       {c.photoURL ? (
-                        <img src={c.photoURL} alt={c.species} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                        <img src={c.photoURL} alt={getCatchSpecies(c)} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-text-muted/20">
                           <Fish className="w-12 h-12" />
@@ -204,7 +207,7 @@ export default function Catches() {
                         <Badge variant={c.status === 'draft' ? 'warning' : 'accent'} className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest mb-1">
                           {c.status === 'draft' ? 'Concept' : `+${c.xpEarned || 25} XP`}
                         </Badge>
-                        <h4 className="text-base font-bold text-white tracking-tight truncate">{c.species}</h4>
+                        <h4 className="text-base font-bold text-white tracking-tight truncate">{getCatchSpecies(c)}</h4>
                       </div>
                     </div>
                     <div className="p-3 space-y-2">
@@ -227,7 +230,7 @@ export default function Catches() {
                   <Card className="p-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl group flex items-center gap-4 cursor-pointer" onClick={() => c.id && navigate(`/catches/${c.id}`)}>
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-soft flex-shrink-0 border border-border-subtle">
                       {c.photoURL ? (
-                        <img src={c.photoURL} alt={c.species} className="w-full h-full object-cover" />
+                        <img src={c.photoURL} alt={getCatchSpecies(c)} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-text-muted/20">
                           <Fish className="w-8 h-8" />
@@ -236,7 +239,7 @@ export default function Catches() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-base font-bold text-text-primary tracking-tight">{c.species}</h4>
+                        <h4 className="text-base font-bold text-text-primary tracking-tight">{getCatchSpecies(c)}</h4>
                         {c.status === 'draft' && <Badge variant="warning" className="text-[7px] py-0.5 px-1.5">Concept</Badge>}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-text-secondary">

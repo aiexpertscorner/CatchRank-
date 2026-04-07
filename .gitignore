@@ -4,5 +4,11 @@ dist/
 coverage/
 .DS_Store
 *.log
+*.json
+*.md
 .env*
 !.env.example
+firebase-applet-config.json
+secrets/
+scripts/
+*.txt
