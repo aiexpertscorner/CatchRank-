@@ -5,7 +5,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../../lib/firebase';
 import { useAuth } from '../../../App';
 import { Button, Card } from '../../../components/ui/Base';
-import { Logo } from '../../../components/branding/Logo';
+import Logo from '../Logo';
 import { toast } from 'sonner';
 
 export default function Login() {
