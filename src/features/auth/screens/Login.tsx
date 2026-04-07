@@ -94,23 +94,20 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md relative z-10"
         >
-        <div className="mb-8 text-center">
+<div className="mb-8 text-center">
   <div className="flex justify-center mb-6">
-    <div className="relative group flex items-center justify-center">
-      {/* Subtiele achtergrondglow */}
-      <div className="absolute inset-0 scale-125 rounded-full bg-brand/20 blur-3xl opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
-      <div className="absolute inset-0 scale-110 rounded-full bg-brand/10 blur-2xl opacity-80" />
+    <div className="flex h-28 w-28 md:h-32 md:w-32 items-center justify-center 
+                    rounded-[2rem] 
+                    border border-white/[0.04] 
+                    bg-surface-soft/80 
+                    shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
 
-      <img
-        src={logoSrc}
-        alt="CatchRank logo icon"
-        className="relative z-10 h-36 w-36 md:h-44 md:w-44 object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-500 group-hover:scale-[1.03]"
-        draggable={false}
-      />
+      <Logo size="xl" withText={false} />
+
     </div>
   </div>
 
-  <h1 className="text-2xl font-krub font-bold text-brand tracking-tight uppercase mb-2">
+  <h1 className="text-4xl font-krub font-bold text-brand tracking-tight uppercase mb-2">
     CatchRank
   </h1>
 
