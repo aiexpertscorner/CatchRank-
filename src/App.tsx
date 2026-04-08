@@ -38,6 +38,7 @@ import Knowledge from './features/knowledge/screens/Knowledge';
 import Tools from './features/tools/screens/Tools';
 import AskDick from './features/tools/screens/AskDick';
 import WeatherForecast from './features/weather/screens/WeatherForecast';
+import { FEATURE_FLAGS } from './config/env';
 
 import { SessionProvider } from './contexts/SessionContext';
 
@@ -275,7 +276,9 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/gear" element={<Gear />} />
               <Route path="/tools" element={<Tools />} />
-              <Route path="/tools/ask-dick" element={<AskDick />} />
+              {FEATURE_FLAGS.ENABLE_AI_ASSISTANT && (
+                <Route path="/tools/ask-dick" element={<AskDick />} />
+              )}
               <Route path="/tools/weather" element={<WeatherForecast />} />
               <Route path="/knowledge" element={<Knowledge />} />
               <Route path="*" element={<Navigate to="/" replace />} />

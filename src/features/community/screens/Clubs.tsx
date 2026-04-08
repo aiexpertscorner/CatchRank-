@@ -33,17 +33,9 @@ export default function Clubs() {
   const [activeTab, setActiveTab] = useState<'my-clubs' | 'discover'>('my-clubs');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Mock Data for Clubs
-  const [myClubs, setMyClubs] = useState([
-    { id: '1', name: 'Snoekbaars Elite NL', description: 'De beste snoekbaarsvissers van Nederland.', memberCount: 142, totalCatches: 1245, photo: 'https://picsum.photos/seed/club1/400/400', isPrivate: true, role: 'member' },
-    { id: '2', name: 'Streetfishing Amsterdam', description: 'Samen de grachten onveilig maken.', memberCount: 85, totalCatches: 642, photo: 'https://picsum.photos/seed/club2/400/400', isPrivate: false, role: 'admin' },
-  ]);
-
-  const [discoverClubs, setDiscoverClubs] = useState([
-    { id: 'd1', name: 'Karper Kanjers', description: 'Voor de echte statische vissers.', memberCount: 210, totalCatches: 890, photo: 'https://picsum.photos/seed/club3/400/400', isPrivate: false },
-    { id: 'd2', name: 'Vliegvissen Veluwe', description: 'Rust, natuur en forel.', memberCount: 45, totalCatches: 156, photo: 'https://picsum.photos/seed/club4/400/400', isPrivate: true },
-    { id: 'd3', name: 'Meerval Monsters', description: 'Op zoek naar de grootste vissen.', memberCount: 124, totalCatches: 432, photo: 'https://picsum.photos/seed/club5/400/400', isPrivate: false },
-  ]);
+  // Clubs Firestore integration is in development — empty for production launch
+  const [myClubs] = useState<any[]>([]);
+  const [discoverClubs] = useState<any[]>([]);
 
   const tabs = [
     { id: 'my-clubs', label: 'Mijn Clubs', icon: Shield },

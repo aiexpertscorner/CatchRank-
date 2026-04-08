@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Plus,
   Search,
@@ -11,11 +11,11 @@ import {
   Trash2,
   Grid,
   List as ListIcon,
-  Lightbulb,
+  Bookmark,
   X,
   Loader2,
   AlertCircle,
-  TrendingUp,
+  Heart,
   Fish,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
@@ -25,9 +25,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { gearService } from '../services/gearService';
 import { productFeedService } from '../services/productFeedService';
+import { gearInteractionService } from '../services/gearInteractionService';
 import {
   GearItem,
   GearSetup,
+  GearUserSave,
   ProductCatalogItem,
   GEAR_CATEGORY_LABELS,
   GearCategory,
@@ -35,16 +37,17 @@ import {
 import { PRODUCT_FEED_MAX_ITEMS_PER_SOURCE } from '../../../config/env';
 import { GearItemModal } from '../components/GearItemModal';
 import { SetupModal } from '../components/SetupModal';
+import { ProductDetailSheet } from '../components/ProductDetailSheet';
 import { cn } from '../../../lib/utils';
 
-type Tab = 'my-gear' | 'favorites' | 'setups' | 'suggestions' | 'discover';
+type Tab = 'my-gear' | 'favorites' | 'setups' | 'wishlist' | 'discover';
 type MainSection = 'all' | 'karper' | 'roofvis' | 'witvis' | 'allround';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'my-gear', label: 'Mijn Gear', icon: Package },
   { id: 'favorites', label: 'Favorieten', icon: Star },
   { id: 'setups', label: 'Setups', icon: Layers },
-  { id: 'suggestions', label: 'Suggesties', icon: Lightbulb },
+  { id: 'wishlist', label: 'Wishlist', icon: Bookmark },
   { id: 'discover', label: 'Ontdekken', icon: ShoppingBag },
 ];
 
@@ -225,6 +228,16 @@ export default function Gear() {
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [editingSetup, setEditingSetup] = useState<GearSetup | null>(null);
 
+  // ── Interactions (likes / wishlist) ─────────────────────────────────────
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [wishlistItems, setWishlistItems] = useState<GearUserSave[]>([]);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [interactionsLoaded, setInteractionsLoaded] = useState(false);
+
+  // ── Product detail sheet ─────────────────────────────────────────────────
+  const [selectedProduct, setSelectedProduct] = useState<EnrichedProduct | null>(null);
+
   useEffect(() => {
     if (!profile) return;
 
@@ -253,7 +266,7 @@ export default function Gear() {
     const source = storeFilter !== 'all' ? (storeFilter as 'fishinn' | 'bol') : undefined;
 
     productFeedService
-      .getProducts(source, undefined, PRODUCT_FEED_MAX_ITEMS_PER_SOURCE)
+      .getProducts({ source, maxItems: PRODUCT_FEED_MAX_ITEMS_PER_SOURCE })
       .then((items) => {
         setProducts(items);
         setActiveCluster('all');
@@ -261,6 +274,35 @@ export default function Gear() {
       .catch((err) => console.error('Products load error:', err))
       .finally(() => setProductsLoading(false));
   }, [activeTab, storeFilter]);
+
+  // Load likes + saved IDs once when discover or wishlist tab is first opened
+  useEffect(() => {
+    if (!profile || interactionsLoaded) return;
+    if (activeTab !== 'discover' && activeTab !== 'wishlist') return;
+
+    Promise.all([
+      gearInteractionService.getUserLikedProductIds(profile.uid),
+      gearInteractionService.getUserSavedProductIds(profile.uid),
+    ])
+      .then(([liked, saved]) => {
+        setLikedIds(liked);
+        setSavedIds(saved);
+        setInteractionsLoaded(true);
+      })
+      .catch((err) => console.error('Interactions load error:', err));
+  }, [profile, activeTab, interactionsLoaded]);
+
+  // Load full wishlist items when wishlist tab opens
+  useEffect(() => {
+    if (!profile || activeTab !== 'wishlist') return;
+
+    setWishlistLoading(true);
+    gearInteractionService
+      .getUserWishlist(profile.uid)
+      .then(setWishlistItems)
+      .catch((err) => console.error('Wishlist load error:', err))
+      .finally(() => setWishlistLoading(false));
+  }, [profile, activeTab]);
 
   const favorites = myGear.filter((g) => g.isFavorite);
 
@@ -395,6 +437,95 @@ export default function Gear() {
     const g = myGear.find((x) => x.id === id);
     return g ? `${g.brand} ${g.name}` : '—';
   };
+
+  // ── Interaction handlers ─────────────────────────────────────────────────
+
+  const handleLike = useCallback(async (product: ProductCatalogItem) => {
+    if (!profile) return;
+    const id = product.id ?? product.externalId;
+    const alreadyLiked = likedIds.has(id);
+
+    // Optimistic update
+    setLikedIds((prev) => {
+      const next = new Set(prev);
+      alreadyLiked ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+    try {
+      if (alreadyLiked) {
+        await gearInteractionService.unlikeProduct(profile.uid, id);
+      } else {
+        await gearInteractionService.likeProduct(profile.uid, id);
+        toast.success('Geliked!');
+      }
+    } catch {
+      // Roll back on error
+      setLikedIds((prev) => {
+        const next = new Set(prev);
+        alreadyLiked ? next.add(id) : next.delete(id);
+        return next;
+      });
+      toast.error('Actie mislukt.');
+    }
+  }, [profile, likedIds]);
+
+  const handleSave = useCallback(async (product: ProductCatalogItem) => {
+    if (!profile) return;
+    const id = product.id ?? product.externalId;
+    const alreadySaved = savedIds.has(id);
+
+    // Optimistic update
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      alreadySaved ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+    try {
+      if (alreadySaved) {
+        await gearInteractionService.removeFromWishlist(profile.uid, id);
+        setWishlistItems((prev) => prev.filter((s) => s.productId !== id));
+        toast.success('Verwijderd uit wishlist.');
+      } else {
+        await gearInteractionService.saveToWishlist(profile.uid, id, {
+          name: product.name,
+          brand: product.brand,
+          category: product.category,
+          imageURL: product.imageURL,
+          price: product.price,
+          affiliateURL: product.affiliateURL,
+          source: product.source,
+        });
+        toast.success('Opgeslagen in wishlist!');
+      }
+    } catch {
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        alreadySaved ? next.add(id) : next.delete(id);
+        return next;
+      });
+      toast.error('Actie mislukt.');
+    }
+  }, [profile, savedIds]);
+
+  const handleShare = useCallback(async (product: ProductCatalogItem) => {
+    const url = product.affiliateURL || window.location.href;
+    const text = `${product.name}${product.brand ? ` – ${product.brand}` : ''}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: text, url });
+        gearInteractionService.recordShare(profile?.uid, product.id ?? product.externalId, 'native', 'discover').catch(() => {});
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success('Link gekopieerd!');
+        gearInteractionService.recordShare(profile?.uid, product.id ?? product.externalId, 'copy', 'discover').catch(() => {});
+      }
+    } catch {
+      // User cancelled share — no error needed
+    }
+  }, [profile]);
 
   const headerAction =
     activeTab === 'my-gear' || activeTab === 'favorites' ? (
@@ -645,8 +776,21 @@ export default function Gear() {
               />
             )}
 
-            {activeTab === 'suggestions' && (
-              <SuggestiesTab gear={myGear} setups={setups} />
+            {activeTab === 'wishlist' && (
+              <WishlistTab
+                items={wishlistItems}
+                loading={wishlistLoading}
+                onRemove={(productId) => {
+                  if (!profile) return;
+                  gearInteractionService.removeFromWishlist(profile.uid, productId)
+                    .then(() => {
+                      setWishlistItems((prev) => prev.filter((s) => s.productId !== productId));
+                      setSavedIds((prev) => { const n = new Set(prev); n.delete(productId); return n; });
+                      toast.success('Verwijderd uit wishlist.');
+                    })
+                    .catch(() => toast.error('Verwijderen mislukt.'));
+                }}
+              />
             )}
 
             {activeTab === 'discover' && (
@@ -659,6 +803,12 @@ export default function Gear() {
                 activeCluster={activeCluster}
                 onClusterChange={setActiveCluster}
                 onAddToGear={handleAddToGear}
+                likedIds={likedIds}
+                savedIds={savedIds}
+                onLike={handleLike}
+                onSave={handleSave}
+                onShare={handleShare}
+                onOpenDetail={setSelectedProduct}
               />
             )}
           </motion.div>
@@ -683,6 +833,18 @@ export default function Gear() {
           setEditingSetup(null);
         }}
         editSetup={editingSetup}
+      />
+
+      <ProductDetailSheet
+        product={selectedProduct}
+        isOpen={selectedProduct !== null}
+        onClose={() => setSelectedProduct(null)}
+        isLiked={selectedProduct ? likedIds.has(selectedProduct.id ?? selectedProduct.externalId) : false}
+        isSaved={selectedProduct ? savedIds.has(selectedProduct.id ?? selectedProduct.externalId) : false}
+        onLike={() => selectedProduct && handleLike(selectedProduct)}
+        onSave={() => selectedProduct && handleSave(selectedProduct)}
+        onShare={() => selectedProduct && handleShare(selectedProduct)}
+        onAddToGear={(p) => { setSelectedProduct(null); handleAddToGear(p); }}
       />
     </PageLayout>
   );
@@ -983,57 +1145,96 @@ function SetupsTab({
   );
 }
 
-function SuggestiesTab({ gear, setups }: { gear: GearItem[]; setups: GearSetup[] }) {
-  const mostUsedGear = [...gear].sort((a, b) => (b.usageCount ?? 0) - (a.usageCount ?? 0)).slice(0, 3);
+function WishlistTab({
+  items,
+  loading,
+  onRemove,
+}: {
+  items: GearUserSave[];
+  loading: boolean;
+  onRemove: (productId: string) => void;
+}) {
+  if (loading) return <LoadingState />;
+
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={Bookmark}
+        message="Wishlist is leeg"
+        subMessage="Sla producten op uit Ontdekken via het bookmark-icoon om ze hier te bewaren."
+      />
+    );
+  }
 
   return (
-    <div className="space-y-6 px-2 md:px-0">
-      {mostUsedGear.length > 0 && (
-        <section>
-          <h3 className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-2">
-            <TrendingUp className="w-3.5 h-3.5 text-brand" />
-            Meest gebruikt
-          </h3>
-          <div className="space-y-2">
-            {mostUsedGear.map((g) => (
-              <div key={g.id} className="flex items-center gap-3 p-3 bg-surface-card border border-border-subtle rounded-xl">
-                <div className="w-10 h-10 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0">
-                  {g.photoURL ? (
-                    <img src={g.photoURL} alt={g.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-text-dim">
-                      <Package className="w-5 h-5" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{g.brand}</p>
-                  <p className="text-sm font-bold text-text-primary truncate">{g.name}</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-brand">{g.usageCount ?? 0}×</p>
-                  <p className="text-[8px] font-black text-text-dim uppercase tracking-widest">gebruikt</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+    <div className="space-y-3 px-2 md:px-0">
+      <p className="text-[9px] font-black text-text-muted uppercase tracking-widest px-1">
+        {items.length} opgeslagen product{items.length !== 1 ? 'en' : ''}
+      </p>
 
-      <Card className="p-6 bg-brand/5 border border-brand/20 rounded-2xl text-center space-y-3">
-        <div className="w-12 h-12 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mx-auto">
-          <Lightbulb className="w-6 h-6" />
-        </div>
-        <h3 className="text-base font-bold text-text-primary">Slimme Suggesties</h3>
-        <p className="text-sm text-text-muted max-w-xs mx-auto">
-          Op basis van jouw vangsten en vislocaties zullen hier gepersonaliseerde geartips verschijnen.
-          Log meer vangsten om suggesties te activeren.
-        </p>
-        <div className="flex items-center justify-center gap-2 text-[9px] font-black text-brand uppercase tracking-widest">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          Komt binnenkort
-        </div>
-      </Card>
+      {items.map((save) => {
+        const snap = save.productSnapshot;
+        return (
+          <div
+            key={save.id ?? save.productId}
+            className="flex items-center gap-3 p-3 bg-surface-card border border-border-subtle rounded-2xl hover:border-brand/20 transition-all group"
+          >
+            {/* Thumbnail */}
+            <div className="w-14 h-14 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0">
+              {snap?.imageURL ? (
+                <img
+                  src={snap.imageURL}
+                  alt={snap.name}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-text-dim">
+                  <Package className="w-6 h-6" />
+                </div>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              {snap?.brand && (
+                <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{snap.brand}</p>
+              )}
+              <p className="text-sm font-bold text-text-primary truncate">{snap?.name ?? '—'}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                {snap?.price != null && (
+                  <span className="text-[9px] font-black text-brand">€{snap.price.toFixed(2)}</span>
+                )}
+                {snap?.source && (
+                  <span className="text-[8px] font-bold text-text-dim uppercase">{snap.source}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {snap?.affiliateURL && (
+                <a
+                  href={snap.affiliateURL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-brand transition-colors border border-border-subtle hover:border-brand/30"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+              <button
+                onClick={() => onRemove(save.productId)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-danger transition-colors"
+                title="Verwijder uit wishlist"
+              >
+                <Bookmark className="w-3.5 h-3.5 fill-current text-brand" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1053,6 +1254,12 @@ function DiscoverTab({
   activeCluster,
   onClusterChange,
   onAddToGear,
+  likedIds,
+  savedIds,
+  onLike,
+  onSave,
+  onShare,
+  onOpenDetail,
 }: {
   products: EnrichedProduct[];
   allProducts: ProductCatalogItem[];
@@ -1062,6 +1269,12 @@ function DiscoverTab({
   activeCluster: string;
   onClusterChange: (key: string) => void;
   onAddToGear: (product: ProductCatalogItem) => void;
+  likedIds: Set<string>;
+  savedIds: Set<string>;
+  onLike: (product: ProductCatalogItem) => void;
+  onSave: (product: ProductCatalogItem) => void;
+  onShare: (product: ProductCatalogItem) => void;
+  onOpenDetail: (product: EnrichedProduct) => void;
 }) {
   if (loading) {
     return (
@@ -1150,9 +1363,21 @@ function DiscoverTab({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        {products.map((p) => (
-          <ProductCard key={p.id ?? p.externalId} product={p} onAddToGear={onAddToGear} />
-        ))}
+        {products.map((p) => {
+          const pid = p.id ?? p.externalId;
+          return (
+            <ProductCard
+              key={pid}
+              product={p}
+              isLiked={likedIds.has(pid)}
+              isSaved={savedIds.has(pid)}
+              onAddToGear={onAddToGear}
+              onLike={() => onLike(p)}
+              onSave={() => onSave(p)}
+              onOpenDetail={() => onOpenDetail(p)}
+            />
+          );
+        })}
       </div>
 
       <p className="text-center text-[9px] text-text-dim font-bold uppercase tracking-widest pb-4">
@@ -1219,10 +1444,20 @@ function ClusterPills({
 
 function ProductCard({
   product,
+  isLiked,
+  isSaved,
   onAddToGear,
+  onLike,
+  onSave,
+  onOpenDetail,
 }: {
   product: EnrichedProduct;
+  isLiked: boolean;
+  isSaved: boolean;
   onAddToGear: (product: ProductCatalogItem) => void;
+  onLike: () => void;
+  onSave: () => void;
+  onOpenDetail: () => void;
 }) {
   const ratingAvg = product.rating?.average;
   const stars = ratingAvg != null ? Math.round((ratingAvg / 10) * 5 * 2) / 2 : null;
@@ -1230,7 +1465,8 @@ function ProductCard({
   return (
     <Card
       padding="none"
-      className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col"
+      className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden flex flex-col cursor-pointer"
+      onClick={onOpenDetail}
     >
       <div className="aspect-square relative overflow-hidden bg-surface-soft">
         {product.imageURL ? (
@@ -1315,25 +1551,42 @@ function ProductCard({
           </div>
         </div>
 
-        <div className="flex gap-1.5">
-          {product.affiliateURL && (
-            <a
-              href={product.affiliateURL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-1 h-8 rounded-xl bg-surface-soft text-text-muted hover:bg-brand/10 hover:text-brand text-[9px] font-black uppercase tracking-widest transition-all border border-border-subtle hover:border-brand/30"
-            >
-              Bekijk
-              <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
-            </a>
-          )}
+        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+          {/* Like */}
+          <button
+            onClick={onLike}
+            title={isLiked ? 'Unlike' : 'Like'}
+            className={cn(
+              'w-8 h-8 rounded-xl flex items-center justify-center transition-all border flex-shrink-0',
+              isLiked
+                ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                : 'bg-surface-soft text-text-muted border-border-subtle hover:text-red-400 hover:border-red-500/20'
+            )}
+          >
+            <Heart className={cn('w-3 h-3', isLiked && 'fill-current')} />
+          </button>
 
+          {/* Save / wishlist */}
+          <button
+            onClick={onSave}
+            title={isSaved ? 'Verwijder uit wishlist' : 'Voeg toe aan wishlist'}
+            className={cn(
+              'w-8 h-8 rounded-xl flex items-center justify-center transition-all border flex-shrink-0',
+              isSaved
+                ? 'bg-brand/10 text-brand border-brand/20'
+                : 'bg-surface-soft text-text-muted border-border-subtle hover:text-brand hover:border-brand/20'
+            )}
+          >
+            <Bookmark className={cn('w-3 h-3', isSaved && 'fill-current')} />
+          </button>
+
+          {/* Add to Mijn Gear */}
           <button
             onClick={() => onAddToGear(product)}
             title="Voeg toe aan Mijn Gear"
             className="w-8 h-8 rounded-xl bg-brand/10 text-brand hover:bg-brand hover:text-bg-main flex items-center justify-center transition-all border border-brand/20 hover:border-brand flex-shrink-0"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3 h-3" />
           </button>
         </div>
       </div>

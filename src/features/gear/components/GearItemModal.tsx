@@ -12,6 +12,7 @@ interface GearItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   editItem?: GearItem | null;
+  prefillData?: Partial<GearItem>;
 }
 
 const CATEGORY_OPTIONS: { value: GearCategory; label: string }[] = (
@@ -29,7 +30,7 @@ const POPULAR_BRANDS = [
  * Add or edit a gear item in Mijn Visgear.
  * Mobile-first bottom-sheet style on small screens.
  */
-export const GearItemModal: React.FC<GearItemModalProps> = ({ isOpen, onClose, editItem }) => {
+export const GearItemModal: React.FC<GearItemModalProps> = ({ isOpen, onClose, editItem, prefillData }) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
 
@@ -64,6 +65,21 @@ export const GearItemModal: React.FC<GearItemModalProps> = ({ isOpen, onClose, e
         notes: editItem.notes ?? '',
       });
       setShowCustomBrand(isCustomBrand);
+    } else if (prefillData) {
+      const isCustomBrand = !!prefillData.brand && !POPULAR_BRANDS.includes(prefillData.brand);
+      setForm({
+        name: prefillData.name ?? '',
+        brand: isCustomBrand ? '__custom__' : (prefillData.brand ?? ''),
+        customBrand: isCustomBrand ? (prefillData.brand ?? '') : '',
+        category: prefillData.category ?? 'rod',
+        model: '',
+        description: '',
+        photoURL: prefillData.photoURL ?? '',
+        purchasePrice: '',
+        isFavorite: false,
+        notes: '',
+      });
+      setShowCustomBrand(isCustomBrand);
     } else {
       setForm({
         name: '',
@@ -79,7 +95,7 @@ export const GearItemModal: React.FC<GearItemModalProps> = ({ isOpen, onClose, e
       });
       setShowCustomBrand(false);
     }
-  }, [editItem, isOpen]);
+  }, [editItem, prefillData, isOpen]);
 
   const resolvedBrand = form.brand === '__custom__' ? form.customBrand : form.brand;
 

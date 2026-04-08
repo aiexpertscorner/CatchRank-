@@ -694,3 +694,78 @@ export interface ProductCacheMetadata {
   queryCount?: number;
   maxProducts?: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Gear V2 — Interactions (likes / saves / shares)                            */
+/* -------------------------------------------------------------------------- */
+
+/** Minimal product snapshot stored inside save/like docs to avoid extra reads */
+export interface GearProductSnapshot {
+  name: string;
+  brand?: string;
+  category?: string;
+  imageURL?: string;
+  price?: number;
+  affiliateURL: string;
+  source: string;
+  mainSection?: string;
+}
+
+/** Stored in gear_user_likes/{userId}_{productId} */
+export interface GearUserLike {
+  id?: string;
+  userId: string;
+  productId: string;
+  createdAt: AnyTimestamp;
+}
+
+/** Stored in gear_user_saves/{userId}_{productId} */
+export interface GearUserSave {
+  id?: string;
+  userId: string;
+  productId: string;
+  saveType: 'wishlist' | 'saved_for_later';
+  sourceContext?: string;
+  /** Denormalized for display without extra Firestore reads */
+  productSnapshot: GearProductSnapshot;
+  createdAt: AnyTimestamp;
+  updatedAt?: AnyTimestamp;
+}
+
+/** Stored in gear_user_shares/{auto-id} */
+export interface GearUserShare {
+  id?: string;
+  userId?: string;
+  productId: string;
+  channel: 'copy' | 'whatsapp' | 'native' | string;
+  sourceScreen?: string;
+  createdAt: AnyTimestamp;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Gear V2 — Slot-based setups                                                */
+/* -------------------------------------------------------------------------- */
+
+export interface GearSetupSlot {
+  slotKey: string;
+  label: string;
+  required?: boolean;
+  gearItemId?: string;
+  productId?: string;
+  productSnapshot?: GearProductSnapshot;
+  notes?: string;
+}
+
+export interface GearSetupV2 {
+  id?: string;
+  userId: string;
+  name: string;
+  discipline: 'karper' | 'roofvis' | 'witvis' | 'nachtvissen' | 'allround' | string;
+  slots: GearSetupSlot[];
+  linkedCatchIds?: string[];
+  linkedSessionIds?: string[];
+  notes?: string;
+  completeness?: number;
+  createdAt: AnyTimestamp;
+  updatedAt: AnyTimestamp;
+}

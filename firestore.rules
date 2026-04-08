@@ -352,5 +352,51 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Gear V2 — User Interactions (likes / saves / shares)              */
+    /* ------------------------------------------------------------------ */
+
+    match /gear_user_likes/{likeId} {
+      // likeId = userId_productId — owner-scoped
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    match /gear_user_saves/{saveId} {
+      // saveId = userId_productId — owner-scoped
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.productId is string &&
+        request.resource.data.saveType in ['wishlist', 'saved_for_later'];
+
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    match /gear_user_shares/{shareId} {
+      // Shares are append-only — analytics / tracking
+      allow read: if isAdmin();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.productId is string;
+
+      allow update, delete: if false;
+    }
+
   }
 }
