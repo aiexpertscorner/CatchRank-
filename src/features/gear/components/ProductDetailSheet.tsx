@@ -14,23 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../../../components/ui/Base';
 import { cn } from '../../../lib/utils';
 import { ProductCatalogItem } from '../../../types';
-
-const SUBSUB_LABELS: Record<string, string> = {
-  boilie: 'Boilies', wafter: 'Wafters', popup: 'Pop-ups', pva: 'PVA',
-  rig: 'Rigs', leadclip: 'Leadclip', hooklink: 'Onderlijnen',
-  bite_alarm: 'Bite Alarms', rod_pod: 'Rod Pods', spod: 'Spods',
-  marker: 'Marker', karperhengel: 'Karperhengels', feederhengel: 'Feederhengels',
-  method_feeder: 'Method Feeder', groundbait: 'Grondvoer',
-  fluorocarbon: 'Fluorocarbon', braid: 'Gevlochten Lijn', mono: 'Mono',
-  jerkbait: 'Jerkbaits', shad: 'Shads', spinner: 'Spinners', plug: 'Plugs',
-  dropshot: 'Dropshot', softbait: 'Softbaits', spinhengel: 'Spinhengels',
-  baitrunner: 'Baitrunner', bivvy: 'Bivvy', stretcher: 'Stretchers',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  rod: 'Hengel', reel: 'Molen', line: 'Lijn', lure: 'Kunstaas',
-  hook: 'Haak', bait: 'Aas', accessory: 'Accessoire', other: 'Overig',
-};
+import { SUBSUB_LABELS, CATEGORY_LABELS } from '../utils/taxonomy';
 
 export interface ProductDetailSheetProps {
   product: (ProductCatalogItem & {

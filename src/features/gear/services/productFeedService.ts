@@ -20,6 +20,12 @@ import {
   ProductSource,
 } from '../../../types';
 import {
+  buildProductBlob,
+  inferMainSection,
+  inferSubSubCategory,
+  enrichProductClient,
+} from '../utils/taxonomy';
+import {
   PRODUCT_FEED_CACHE_TTL_MS,
   PRODUCT_FEED_MAX_ITEMS_PER_SOURCE,
   FEATURE_FLAGS,
@@ -228,114 +234,10 @@ function getClusterLabel(key: string): string {
   return CLUSTER_LABELS[key] || key.replace(/^detail:/, '').replace(/^seed:/, '');
 }
 
-function getProductBlob(product: ProductCatalogItem): string {
-  return [
-    product.name,
-    product.brand,
-    product.description,
-    (product as any).seedCategory,
-    (product as any).seedProductType,
-    ...(product.taxonomy?.species ?? []),
-    ...(product.taxonomy?.technique ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-}
-
-function inferMainSectionFromProduct(product: ProductCatalogItem): string {
-  const explicit = safeString((product as any).mainSection);
-  if (explicit) return explicit;
-
-  const blob = getProductBlob(product);
-  const species = product.taxonomy?.species ?? [];
-  const techniques = product.taxonomy?.technique ?? [];
-
-  if (
-    species.includes('karper') ||
-    techniques.includes('karpervissen') ||
-    blob.includes('karper') ||
-    blob.includes('carp') ||
-    blob.includes('boilie') ||
-    blob.includes('wafter') ||
-    blob.includes('popup')
-  ) return 'karper';
-
-  if (
-    species.includes('snoek') ||
-    species.includes('baars') ||
-    species.includes('zander') ||
-    techniques.includes('roofvissen') ||
-    blob.includes('roofvis') ||
-    blob.includes('jerkbait') ||
-    blob.includes('shad') ||
-    blob.includes('dropshot')
-  ) return 'roofvis';
-
-  if (
-    species.includes('witvis') ||
-    techniques.includes('feedervissen') ||
-    blob.includes('feeder') ||
-    blob.includes('method feeder') ||
-    blob.includes('grondvoer') ||
-    blob.includes('witvis')
-  ) return 'witvis';
-
-  return 'allround';
-}
-
-function inferSubSubCategoryFromProduct(product: ProductCatalogItem): string {
-  const explicit = safeString((product as any).subSubCategory);
-  if (explicit) return explicit;
-
-  const blob = getProductBlob(product);
-
-  if (blob.includes('wafter')) return 'wafter';
-  if (blob.includes('pop-up') || blob.includes('popup')) return 'popup';
-  if (blob.includes('boilie')) return 'boilie';
-  if (blob.includes('pva')) return 'pva';
-  if (blob.includes('leadclip')) return 'leadclip';
-  if (blob.includes('hooklink') || blob.includes('onderlijn')) return 'hooklink';
-  if (blob.includes('rig')) return 'rig';
-  if (blob.includes('bite alarm')) return 'bite_alarm';
-  if (blob.includes('rod pod')) return 'rod_pod';
-  if (blob.includes('spod')) return 'spod';
-  if (blob.includes('marker')) return 'marker';
-  if (blob.includes('karperhengel') || blob.includes('carp rod')) return 'karperhengel';
-  if (blob.includes('feederhengel')) return 'feederhengel';
-  if (blob.includes('method feeder')) return 'method_feeder';
-  if (blob.includes('grondvoer')) return 'groundbait';
-  if (blob.includes('fluorocarbon')) return 'fluorocarbon';
-  if (blob.includes('gevlochten') || blob.includes('braid')) return 'braid';
-  if (blob.includes('mono')) return 'mono';
-  if (blob.includes('jerkbait')) return 'jerkbait';
-  if (blob.includes('shad')) return 'shad';
-  if (blob.includes('spinnerbait')) return 'spinnerbait';
-  if (blob.includes('spinner')) return 'spinner';
-  if (blob.includes('plug') || blob.includes('wobbler') || blob.includes('crankbait')) return 'plug';
-  if (blob.includes('dropshot')) return 'dropshot';
-  if (blob.includes('softbait')) return 'softbait';
-  if (blob.includes('swimbait')) return 'swimbait';
-  if (blob.includes('jighead') || blob.includes('jigkop')) return 'jighead';
-  if (blob.includes('spinhengel')) return 'spinhengel';
-  if (blob.includes('baitrunner')) return 'baitrunner';
-  if (blob.includes('bivvy')) return 'bivvy';
-  if (blob.includes('stretcher') || blob.includes('bedchair')) return 'stretcher';
-  if (blob.includes('sleep system') || blob.includes('slaapzak')) return 'sleep_system';
-
-  return 'all';
-}
-
+// Local inference functions removed — now imported from taxonomy.ts:
+// buildProductBlob, inferMainSection, inferSubSubCategory, inferDisciplines, enrichProductClient
 function enrichProduct(product: ProductCatalogItem): ProductCatalogItem {
-  const enriched: ProductCatalogItem = { ...product };
-
-  (enriched as any).mainSection =
-    safeString((product as any).mainSection) || inferMainSectionFromProduct(product);
-
-  (enriched as any).subSubCategory =
-    safeString((product as any).subSubCategory) || inferSubSubCategoryFromProduct(product);
-
-  return enriched;
+  return enrichProductClient(product);
 }
 
 export const productFeedService = {
@@ -535,7 +437,7 @@ export const productFeedService = {
     return products
       .map((p) => enrichProduct(p))
       .filter((p) => {
-        const blob = getProductBlob(p);
+        const blob = buildProductBlob(p);
 
         const matchesKeyword =
           !keyword || blob.includes(keyword);
@@ -622,8 +524,8 @@ export function normalizeFishinnProduct(
     affiliateURL: raw.deeplink ?? raw.clickURL ?? raw.URL ?? '',
     ean: raw.EAN ?? raw.ean ?? undefined,
     inStock: raw.stock !== '0' && raw.stock !== 0,
-    mainSection: inferMainSectionFromBlob(blob),
-    subSubCategory: inferSubSubCategoryFromBlob(blob),
+    mainSection: inferMainSection(blob, inferTaxonomyFromBlob(blob)),
+    subSubCategory: inferSubSubCategory(blob),
     taxonomy: inferTaxonomyFromBlob(blob),
     clusters: buildSyntheticClustersFromBlob(blob, category),
   } as Omit<ProductCatalogItem, 'id' | 'cachedAt'>;
@@ -651,8 +553,8 @@ export function normalizeBolProduct(
     affiliateURL: raw.url ?? raw.productUrl ?? `https://www.bol.com/nl/p/${raw.ean}/`,
     ean: raw.ean ?? undefined,
     inStock: raw.available ?? true,
-    mainSection: inferMainSectionFromBlob(blob),
-    subSubCategory: inferSubSubCategoryFromBlob(blob),
+    mainSection: inferMainSection(blob, inferTaxonomyFromBlob(blob)),
+    subSubCategory: inferSubSubCategory(blob),
     taxonomy: inferTaxonomyFromBlob(blob),
     clusters: buildSyntheticClustersFromBlob(blob, category),
   } as Omit<ProductCatalogItem, 'id' | 'cachedAt'>;
@@ -721,84 +623,13 @@ function inferTaxonomyFromBlob(blob: string): {
   };
 }
 
-function inferMainSectionFromBlob(blob: string): string {
-  const taxonomy = inferTaxonomyFromBlob(blob);
-  const species = taxonomy.species;
-  const techniques = taxonomy.technique;
-  const lower = blob.toLowerCase();
-
-  if (
-    species.includes('karper') ||
-    techniques.includes('karpervissen') ||
-    lower.includes('boilie') ||
-    lower.includes('wafter') ||
-    lower.includes('popup')
-  ) return 'karper';
-
-  if (
-    species.includes('snoek') ||
-    species.includes('baars') ||
-    species.includes('zander') ||
-    techniques.includes('roofvissen') ||
-    lower.includes('jerkbait') ||
-    lower.includes('shad') ||
-    lower.includes('dropshot')
-  ) return 'roofvis';
-
-  if (
-    species.includes('witvis') ||
-    techniques.includes('feedervissen') ||
-    lower.includes('feeder') ||
-    lower.includes('method feeder') ||
-    lower.includes('grondvoer')
-  ) return 'witvis';
-
-  return 'allround';
-}
-
-function inferSubSubCategoryFromBlob(blob: string): string {
-  const lower = blob.toLowerCase();
-
-  if (lower.includes('wafter')) return 'wafter';
-  if (lower.includes('pop-up') || lower.includes('popup')) return 'popup';
-  if (lower.includes('boilie')) return 'boilie';
-  if (lower.includes('pva')) return 'pva';
-  if (lower.includes('leadclip')) return 'leadclip';
-  if (lower.includes('hooklink') || lower.includes('onderlijn')) return 'hooklink';
-  if (lower.includes('rig')) return 'rig';
-  if (lower.includes('bite alarm')) return 'bite_alarm';
-  if (lower.includes('rod pod')) return 'rod_pod';
-  if (lower.includes('spod')) return 'spod';
-  if (lower.includes('marker')) return 'marker';
-  if (lower.includes('karperhengel') || lower.includes('carp rod')) return 'karperhengel';
-  if (lower.includes('feederhengel')) return 'feederhengel';
-  if (lower.includes('method feeder')) return 'method_feeder';
-  if (lower.includes('grondvoer')) return 'groundbait';
-  if (lower.includes('fluorocarbon')) return 'fluorocarbon';
-  if (lower.includes('gevlochten') || lower.includes('braid')) return 'braid';
-  if (lower.includes('mono')) return 'mono';
-  if (lower.includes('jerkbait')) return 'jerkbait';
-  if (lower.includes('shad')) return 'shad';
-  if (lower.includes('spinnerbait')) return 'spinnerbait';
-  if (lower.includes('spinner')) return 'spinner';
-  if (lower.includes('plug') || lower.includes('wobbler') || lower.includes('crankbait')) return 'plug';
-  if (lower.includes('dropshot')) return 'dropshot';
-  if (lower.includes('softbait')) return 'softbait';
-  if (lower.includes('swimbait')) return 'swimbait';
-  if (lower.includes('jighead') || lower.includes('jigkop')) return 'jighead';
-  if (lower.includes('spinhengel')) return 'spinhengel';
-  if (lower.includes('baitrunner')) return 'baitrunner';
-  if (lower.includes('bivvy')) return 'bivvy';
-  if (lower.includes('stretcher') || lower.includes('bedchair')) return 'stretcher';
-  if (lower.includes('sleep system') || lower.includes('slaapzak')) return 'sleep_system';
-
-  return 'all';
-}
+// inferMainSectionFromBlob and inferSubSubCategoryFromBlob removed —
+// use inferMainSection / inferSubSubCategory from taxonomy.ts
 
 function buildSyntheticClustersFromBlob(blob: string, category: string): string[] {
   const taxonomy = inferTaxonomyFromBlob(blob);
-  const mainSection = inferMainSectionFromBlob(blob);
-  const subSubCategory = inferSubSubCategoryFromBlob(blob);
+  const mainSection = inferMainSection(blob, taxonomy);
+  const subSubCategory = inferSubSubCategory(blob);
 
   return [
     ...taxonomy.species.map((s) => `species:${s}`),
