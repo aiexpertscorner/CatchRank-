@@ -12,3 +12,8 @@ firebase-applet-config.json
 secrets/
 scripts/
 *.txt
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
