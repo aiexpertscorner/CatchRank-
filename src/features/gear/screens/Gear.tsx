@@ -26,9 +26,11 @@ import { toast } from 'sonner';
 import { gearService } from '../services/gearService';
 import { productFeedService } from '../services/productFeedService';
 import { gearInteractionService } from '../services/gearInteractionService';
+import { setupService, DISCIPLINE_LABELS, DISCIPLINE_ICONS } from '../services/setupService';
 import {
   GearItem,
   GearSetup,
+  GearSetupV2,
   GearUserSave,
   ProductCatalogItem,
   GEAR_CATEGORY_LABELS,
@@ -37,11 +39,21 @@ import {
 import { PRODUCT_FEED_MAX_ITEMS_PER_SOURCE } from '../../../config/env';
 import { GearItemModal } from '../components/GearItemModal';
 import { SetupModal } from '../components/SetupModal';
+import { SetupBuilderModal } from '../components/SetupBuilderModal';
 import { ProductDetailSheet } from '../components/ProductDetailSheet';
 import { cn } from '../../../lib/utils';
+import {
+  buildProductBlob,
+  inferMainSection as inferMainSectionTax,
+  inferSubSubCategory as inferSubSubCategoryTax,
+  getReasonsRecommended,
+  SUBSUB_LABELS as SUBSUB_LABELS_TAX,
+  PRIMARY_CATEGORY_LABELS,
+} from '../utils/taxonomy';
+import { parseQuery, getIntentChips } from '../utils/queryParser';
 
 type Tab = 'my-gear' | 'favorites' | 'setups' | 'wishlist' | 'discover';
-type MainSection = 'all' | 'karper' | 'roofvis' | 'witvis' | 'allround';
+type MainSection = 'all' | 'karper' | 'roofvis' | 'witvis' | 'nachtvissen' | 'allround';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'my-gear', label: 'Mijn Gear', icon: Package },
@@ -67,10 +79,14 @@ const MAIN_SECTION_OPTIONS: { value: MainSection; label: string }[] = [
   { value: 'karper', label: 'Karper' },
   { value: 'roofvis', label: 'Roofvis' },
   { value: 'witvis', label: 'Witvis' },
+  { value: 'nachtvissen', label: 'Nachtvissen' },
   { value: 'allround', label: 'Allround' },
 ];
 
+// Use SUBSUB_LABELS from taxonomy.ts (imported as SUBSUB_LABELS_TAX)
+// PRIMARY_CATEGORY_LABELS imported from taxonomy.ts for subcategory display
 const SUBCATEGORY_LABELS: Record<string, string> = {
+  ...PRIMARY_CATEGORY_LABELS,
   rod: 'Hengels',
   reel: 'Molens',
   line: 'Lijnen',
@@ -80,125 +96,11 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   accessory: 'Accessoires',
 };
 
-const SUBSUB_LABELS: Record<string, string> = {
-  all: 'Alles',
-  boilie: 'Boilies',
-  wafter: 'Wafters',
-  popup: 'Pop-ups',
-  pva: 'PVA',
-  rig: 'Rigs',
-  leadclip: 'Leadclip',
-  hooklink: 'Onderlijnen',
-  bite_alarm: 'Bite Alarms',
-  rod_pod: 'Rod Pods',
-  spod: 'Spods',
-  marker: 'Marker',
-  karperhengel: 'Karperhengels',
-  feederhengel: 'Feederhengels',
-  method_feeder: 'Method Feeder',
-  groundbait: 'Grondvoer',
-  fluorocarbon: 'Fluorocarbon',
-  braid: 'Gevlochten Lijn',
-  mono: 'Mono',
-  jerkbait: 'Jerkbaits',
-  shad: 'Shads',
-  spinner: 'Spinners',
-  plug: 'Plugs',
-  dropshot: 'Dropshot',
-  softbait: 'Softbaits',
-  spinhengel: 'Spinhengels',
-  reel_front_drag: 'Front Drag',
-  baitrunner: 'Baitrunner',
-};
-
 type EnrichedProduct = ProductCatalogItem & {
   _mainSection: MainSection;
   _subCategory: string;
   _subSubCategory: string;
 };
-
-function getBlob(product: ProductCatalogItem) {
-  return `${product.name ?? ''} ${product.brand ?? ''} ${product.description ?? ''}`.toLowerCase();
-}
-
-function inferMainSection(product: ProductCatalogItem): MainSection {
-  const species = product.taxonomy?.species ?? [];
-  const techniques = product.taxonomy?.technique ?? [];
-  const blob = getBlob(product);
-
-  if (
-    species.includes('karper') ||
-    techniques.includes('karpervissen') ||
-    blob.includes('karper') ||
-    blob.includes('carp') ||
-    blob.includes('boilie') ||
-    blob.includes('wafter') ||
-    blob.includes('popup') ||
-    blob.includes('bite alarm') ||
-    blob.includes('rod pod') ||
-    blob.includes('leadclip') ||
-    blob.includes('baitrunner')
-  ) return 'karper';
-
-  if (
-    species.includes('snoek') ||
-    species.includes('baars') ||
-    species.includes('zander') ||
-    techniques.includes('roofvissen') ||
-    blob.includes('roofvis') ||
-    blob.includes('jerkbait') ||
-    blob.includes('shad') ||
-    blob.includes('dropshot') ||
-    blob.includes('kunstaas') ||
-    blob.includes('spinner') ||
-    blob.includes('plug') ||
-    blob.includes('softbait')
-  ) return 'roofvis';
-
-  if (
-    techniques.includes('feedervissen') ||
-    blob.includes('witvis') ||
-    blob.includes('feeder') ||
-    blob.includes('method feeder') ||
-    blob.includes('grondvoer')
-  ) return 'witvis';
-
-  return 'allround';
-}
-
-function inferSubSubCategory(product: ProductCatalogItem): string {
-  const blob = getBlob(product);
-
-  if (blob.includes('wafter')) return 'wafter';
-  if (blob.includes('pop-up') || blob.includes('popup')) return 'popup';
-  if (blob.includes('boilie')) return 'boilie';
-  if (blob.includes('pva')) return 'pva';
-  if (blob.includes('leadclip')) return 'leadclip';
-  if (blob.includes('hooklink') || blob.includes('onderlijn')) return 'hooklink';
-  if (blob.includes('rig')) return 'rig';
-  if (blob.includes('bite alarm')) return 'bite_alarm';
-  if (blob.includes('rod pod')) return 'rod_pod';
-  if (blob.includes('spod')) return 'spod';
-  if (blob.includes('marker')) return 'marker';
-  if (blob.includes('karperhengel') || blob.includes('carp rod')) return 'karperhengel';
-  if (blob.includes('feederhengel')) return 'feederhengel';
-  if (blob.includes('method feeder')) return 'method_feeder';
-  if (blob.includes('grondvoer')) return 'groundbait';
-  if (blob.includes('fluorocarbon')) return 'fluorocarbon';
-  if (blob.includes('gevlochten') || blob.includes('braid')) return 'braid';
-  if (blob.includes('mono')) return 'mono';
-  if (blob.includes('jerkbait')) return 'jerkbait';
-  if (blob.includes('shad')) return 'shad';
-  if (blob.includes('spinner')) return 'spinner';
-  if (blob.includes('plug') || blob.includes('wobbler')) return 'plug';
-  if (blob.includes('dropshot')) return 'dropshot';
-  if (blob.includes('softbait')) return 'softbait';
-  if (blob.includes('spinhengel')) return 'spinhengel';
-  if (blob.includes('baitrunner')) return 'baitrunner';
-  if (blob.includes('front drag')) return 'reel_front_drag';
-
-  return 'all';
-}
 
 export default function Gear() {
   const { profile } = useAuth();
@@ -227,6 +129,15 @@ export default function Gear() {
   const [prefillGear, setPrefillGear] = useState<Partial<GearItem> | null>(null);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [editingSetup, setEditingSetup] = useState<GearSetup | null>(null);
+
+  // ── V2 Setups (discipline-aware, slot-based) ─────────────────────────────
+  const [setupsV2, setSetupsV2] = useState<GearSetupV2[]>([]);
+  const [setupsV2Loading, setSetupsV2Loading] = useState(false);
+  const [isSetupBuilderOpen, setIsSetupBuilderOpen] = useState(false);
+  const [editingSetupV2, setEditingSetupV2] = useState<GearSetupV2 | null>(null);
+
+  // ── Parsed search intent ─────────────────────────────────────────────────
+  const [parsedQuery, setParsedQuery] = useState(() => parseQuery(''));
 
   // ── Interactions (likes / wishlist) ─────────────────────────────────────
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -275,6 +186,21 @@ export default function Gear() {
       .finally(() => setProductsLoading(false));
   }, [activeTab, storeFilter]);
 
+  // Load V2 setups when setups tab opens
+  useEffect(() => {
+    if (!profile || activeTab !== 'setups') return;
+    setSetupsV2Loading(true);
+    setupService.getSetups(profile.uid)
+      .then(setSetupsV2)
+      .catch((err) => console.error('SetupV2 load error:', err))
+      .finally(() => setSetupsV2Loading(false));
+  }, [profile, activeTab]);
+
+  // Parse search intent on each query change
+  useEffect(() => {
+    setParsedQuery(parseQuery(searchQuery));
+  }, [searchQuery]);
+
   // Load likes + saved IDs once when discover or wishlist tab is first opened
   useEffect(() => {
     if (!profile || interactionsLoaded) return;
@@ -314,9 +240,9 @@ export default function Gear() {
   const discoverProductsEnriched = useMemo<EnrichedProduct[]>(() => {
     return products.map((p) => ({
       ...p,
-      _mainSection: inferMainSection(p),
+      _mainSection: (inferMainSectionTax(buildProductBlob(p)) as MainSection) || 'allround',
       _subCategory: p.category || 'accessory',
-      _subSubCategory: inferSubSubCategory(p),
+      _subSubCategory: inferSubSubCategoryTax(buildProductBlob(p)),
     }));
   }, [products]);
 
@@ -338,7 +264,7 @@ export default function Gear() {
 
     const unique = [...new Set(filtered.map((p) => p._subSubCategory).filter(Boolean))];
     const withoutAll = unique.filter((x) => x !== 'all');
-    const ordered = withoutAll.sort((a, b) => (SUBSUB_LABELS[a] || a).localeCompare(SUBSUB_LABELS[b] || b));
+    const ordered = withoutAll.sort((a, b) => (SUBSUB_LABELS_TAX[a] || a).localeCompare(SUBSUB_LABELS_TAX[b] || b));
     return ['all', ...ordered];
   }, [discoverProductsEnriched, mainSection, subCategory]);
 
@@ -402,6 +328,27 @@ export default function Gear() {
   const openEditSetup = (s: GearSetup) => {
     setEditingSetup(s);
     setIsSetupModalOpen(true);
+  };
+
+  const openAddSetupV2 = () => {
+    setEditingSetupV2(null);
+    setIsSetupBuilderOpen(true);
+  };
+
+  const openEditSetupV2 = (s: GearSetupV2) => {
+    setEditingSetupV2(s);
+    setIsSetupBuilderOpen(true);
+  };
+
+  const handleDeleteSetupV2 = async (setup: GearSetupV2) => {
+    if (!window.confirm(`Setup "${setup.name}" verwijderen?`)) return;
+    try {
+      await setupService.deleteSetup(setup.id!);
+      setSetupsV2((prev) => prev.filter((s) => s.id !== setup.id));
+      toast.success(`Setup "${setup.name}" verwijderd.`);
+    } catch {
+      toast.error('Verwijderen mislukt.');
+    }
   };
 
   const handleDeleteGear = async (item: GearItem) => {
@@ -540,8 +487,7 @@ export default function Gear() {
       <Button
         icon={<Plus className="w-4 h-4" />}
         className="rounded-xl h-11 px-5 font-bold shadow-premium-accent"
-        onClick={openAddSetup}
-        disabled={myGear.length === 0}
+        onClick={openAddSetupV2}
       >
         Nieuwe Setup
       </Button>
@@ -622,6 +568,19 @@ export default function Gear() {
               </div>
             )}
 
+            {activeTab === 'discover' && searchQuery && getIntentChips(parsedQuery).length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {getIntentChips(parsedQuery).map((chip) => (
+                  <span
+                    key={chip.key}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-brand/10 text-brand border border-brand/20 text-[9px] font-black uppercase tracking-widest"
+                  >
+                    {chip.label}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {activeTab === 'discover' && (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -695,7 +654,7 @@ export default function Gear() {
                             : 'bg-surface-card text-text-muted border-border-subtle hover:border-brand/30'
                         )}
                       >
-                        {SUBSUB_LABELS[sub] ?? sub}
+                        {SUBSUB_LABELS_TAX[sub] ?? sub}
                       </button>
                     ))}
                   </div>
@@ -767,12 +726,15 @@ export default function Gear() {
             {activeTab === 'setups' && (
               <SetupsTab
                 setups={setups}
-                loading={setupsLoading}
+                setupsV2={setupsV2}
+                loading={setupsLoading || setupsV2Loading}
                 myGear={myGear}
                 gearName={gearName}
-                onAdd={openAddSetup}
+                onAdd={openAddSetupV2}
                 onEdit={openEditSetup}
                 onDelete={handleDeleteSetup}
+                onEditV2={openEditSetupV2}
+                onDeleteV2={handleDeleteSetupV2}
               />
             )}
 
@@ -833,6 +795,36 @@ export default function Gear() {
           setEditingSetup(null);
         }}
         editSetup={editingSetup}
+      />
+
+      <SetupBuilderModal
+        isOpen={isSetupBuilderOpen}
+        onClose={() => {
+          setIsSetupBuilderOpen(false);
+          setEditingSetupV2(null);
+        }}
+        editSetup={editingSetupV2}
+        ownedGear={myGear}
+        onCreated={async (data) => {
+          if (data.id) {
+            // Edit path — modal already called updateSetup
+            setSetupsV2((prev) => prev.map((s) => s.id === data.id ? data : s));
+            toast.success('Setup bijgewerkt!');
+          } else {
+            // Create path
+            if (!profile) return;
+            try {
+              const id = await setupService.createSetup(profile.uid, data);
+              const created: GearSetupV2 = { ...data, id, userId: profile.uid };
+              setSetupsV2((prev) => [created, ...prev]);
+              toast.success('Setup aangemaakt!');
+            } catch {
+              toast.error('Setup opslaan mislukt.');
+            }
+          }
+          setIsSetupBuilderOpen(false);
+          setEditingSetupV2(null);
+        }}
       />
 
       <ProductDetailSheet
@@ -1050,32 +1042,47 @@ function GearItemCard({
 
 function SetupsTab({
   setups,
+  setupsV2,
   loading,
   myGear,
   gearName,
   onAdd,
   onEdit,
   onDelete,
+  onEditV2,
+  onDeleteV2,
 }: {
   setups: GearSetup[];
+  setupsV2: GearSetupV2[];
   loading: boolean;
   myGear: GearItem[];
   gearName: (id?: string) => string;
   onAdd: () => void;
   onEdit: (s: GearSetup) => void;
   onDelete: (s: GearSetup) => void;
+  onEditV2: (s: GearSetupV2) => void;
+  onDeleteV2: (s: GearSetupV2) => void;
 }) {
   if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4 px-2 md:px-0">
-      {myGear.length === 0 && (
-        <Card className="p-4 bg-brand/5 border border-brand/20 rounded-2xl flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-text-secondary">
-            Voeg eerst gear toe aan Mijn Gear voordat je een setup samenstelt.
+
+      {/* V2 Setups — discipline-aware, slot-based */}
+      {setupsV2.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[9px] font-black text-text-muted uppercase tracking-widest px-1">
+            Mijn Setups ({setupsV2.length})
           </p>
-        </Card>
+          {setupsV2.map((s) => (
+            <SetupV2Card
+              key={s.id}
+              setup={s}
+              onEdit={onEditV2}
+              onDelete={onDeleteV2}
+            />
+          ))}
+        </div>
       )}
 
       {setups.map((s) => (
@@ -1142,6 +1149,94 @@ function SetupsTab({
         Nieuwe Setup Samenstellen
       </button>
     </div>
+  );
+}
+
+function SetupV2Card({
+  setup,
+  onEdit,
+  onDelete,
+}: {
+  setup: GearSetupV2;
+  onEdit: (s: GearSetupV2) => void;
+  onDelete: (s: GearSetupV2) => void;
+}) {
+  const label = DISCIPLINE_LABELS[setup.discipline] ?? setup.discipline;
+  const icon = DISCIPLINE_ICONS[setup.discipline] ?? '⚙️';
+  const filled = setup.slots?.filter((s) => s.gearItemId || s.productId || s.notes).length ?? 0;
+  const total = setup.slots?.length ?? 0;
+  const pct = setup.completeness ?? (total > 0 ? Math.round((filled / total) * 100) : 0);
+
+  return (
+    <Card className="p-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center text-lg flex-shrink-0">
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{label}</p>
+            <h4 className="text-sm font-bold text-text-primary truncate group-hover:text-brand transition-colors">
+              {setup.name}
+            </h4>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 px-3 rounded-xl font-bold text-[10px] uppercase tracking-widest"
+            onClick={() => onEdit(setup)}
+          >
+            Wijzig
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8 w-8 rounded-xl p-0" onClick={() => onDelete(setup)}>
+            <Trash2 className="w-3.5 h-3.5 text-text-muted hover:text-danger" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Completeness bar */}
+      <div className="mt-3 space-y-1">
+        <div className="flex items-center justify-between">
+          <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">
+            Compleetheid
+          </p>
+          <span className="text-[8px] font-black text-text-muted">{pct}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-surface-soft overflow-hidden">
+          <div
+            className={cn(
+              'h-full rounded-full transition-all duration-500',
+              pct >= 100 ? 'bg-green-500' : pct >= 60 ? 'bg-brand' : 'bg-brand/50'
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Slots preview */}
+      {setup.slots && setup.slots.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {setup.slots.slice(0, 5).map((slot) => (
+            <span
+              key={slot.slotKey}
+              className={cn(
+                'text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border',
+                slot.gearItemId || slot.productId || slot.notes
+                  ? 'bg-brand/10 text-brand border-brand/20'
+                  : 'bg-surface-soft text-text-dim border-border-subtle'
+              )}
+            >
+              {slot.label}
+            </span>
+          ))}
+          {setup.slots.length > 5 && (
+            <span className="text-[8px] font-black text-text-dim px-1">+{setup.slots.length - 5}</span>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1545,7 +1640,7 @@ function ProductCard({
 
             {product._subSubCategory !== 'all' && (
               <Badge variant="neutral" className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest">
-                {SUBSUB_LABELS[product._subSubCategory] ?? product._subSubCategory}
+                {SUBSUB_LABELS_TAX[product._subSubCategory] ?? product._subSubCategory}
               </Badge>
             )}
           </div>
