@@ -534,9 +534,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                  <span className="text-text-muted">Lvl {profile?.level || 1}</span>
                   <span className="text-brand">{xpNeededText}</span>
                 </div>
 
