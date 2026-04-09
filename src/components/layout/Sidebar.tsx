@@ -49,8 +49,8 @@ export const Sidebar: React.FC = () => {
     )}>
       {/* Header */}
       <div className={cn("p-6 flex items-center justify-between relative", isCollapsed && "justify-center")}>
-        {!isCollapsed && <Logo size="md" />}
-        {isCollapsed && <Logo size="sm" withText={false} />}
+        {!isCollapsed && <Logo size="2xl" />}
+        {isCollapsed && <Logo size="2xl" withText={false} />}
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-surface border border-border-subtle rounded-full flex items-center justify-center text-text-muted hover:text-accent hover:border-accent transition-all shadow-sm z-50"
