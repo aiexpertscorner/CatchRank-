@@ -40,7 +40,7 @@ const navItems = [
 
 export const Sidebar: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { profile, logout } = useAuth();
+  const { logout } = useAuth();
 
   return (
     <aside className={cn(

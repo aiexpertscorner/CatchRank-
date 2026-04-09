@@ -17,7 +17,8 @@ import {
   Car,
   Wind,
   Trash2,
-  Plus
+  Plus,
+  Star
 } from 'lucide-react';
 import { Button, Card, Badge } from './ui/Base';
 import { Input, Textarea, Select } from './ui/Inputs';
