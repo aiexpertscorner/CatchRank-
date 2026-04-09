@@ -45,20 +45,6 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
           </div>
         </div>
 
-        {/* Center: Premium subtle bell */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="pointer-events-auto">
-            <button
-              className="group relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.05] bg-surface-soft/72 shadow-[0_4px_18px_rgba(0,0,0,0.14)] transition-all duration-200 active:scale-95"
-              aria-label="Meldingen"
-              type="button"
-            >
-              <Bell className="h-[18px] w-[18px] text-text-secondary transition-colors duration-200 group-hover:text-text-primary" />
-              <span className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full border border-surface bg-danger shadow-[0_0_0_2px_rgba(17,24,39,0.65)]" />
-            </button>
-          </div>
-        </div>
-
         {/* Right controls */}
         <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2">
           {/* Profile */}
