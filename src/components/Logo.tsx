@@ -11,7 +11,7 @@ interface LogoProps {
 export default function Logo({
   className,
   withText = true,
-  size = 'md',
+  size = 'sm',
 }: LogoProps) {
   const [imgError, setImgError] = useState(false);
 
@@ -30,7 +30,7 @@ export default function Logo({
 
   if (!imgError) {
     return (
-      <div className={cn('inline-flex items-center shrink-0 select-none group', current?.wrapper, className)}>
+      <div className={cn('inline-flex items-center shrink-0 select-none group', className)}>
         <img
           src={src}
           alt={alt}
