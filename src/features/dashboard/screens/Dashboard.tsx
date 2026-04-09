@@ -456,6 +456,7 @@ export default function Dashboard() {
   return (
     <PageLayout>
       <div className="space-y-6 px-2 md:px-0 pb-28">
+
         {/* Hero */}
         <section>
           <Card className="relative overflow-hidden rounded-[1.75rem] border border-brand/20 bg-surface-card p-4 shadow-premium">
@@ -534,16 +535,22 @@ export default function Dashboard() {
                 </div>
               </div>
 
-                  <span className="text-brand">{xpNeededText}</span>
+<div className="rounded-2xl border border-border-subtle bg-surface-soft p-3.5">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-text-muted">
+                    Progressie
+                  </span>
+                  <span className="text-[11px] font-black text-brand">
+                    {xpNeededText}
+                  </span>
                 </div>
 
                 <XpProgressBar xp={profile?.xp || 0} compact />
 
-                <p className="text-[11px] text-text-secondary">{progressSubtitle}</p>
+                <p className="mt-2 text-[11px] text-text-secondary">
+                  {progressSubtitle}
+                </p>
               </div>
-            </div>
-          </Card>
-        </section>
 
         {/* Nu toevoegen */}
         <section className="space-y-3">
