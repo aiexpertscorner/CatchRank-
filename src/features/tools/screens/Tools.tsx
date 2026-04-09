@@ -59,7 +59,7 @@ export default function Tools() {
       icon: Cloud, 
       color: 'text-success', 
       bg: 'bg-success/10',
-      path: '/tools/weather'
+      path: '/weather'
     },
     { 
       id: 'lure-selector', 
