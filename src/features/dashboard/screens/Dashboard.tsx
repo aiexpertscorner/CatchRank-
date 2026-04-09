@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Trophy,
-  TrendingUp,
   MapPin,
-  Plus,
   ChevronRight,
-  Zap,
   Clock,
   Fish,
-  Waves,
   Wind,
   Thermometer,
   AlertCircle,
@@ -19,6 +15,8 @@ import {
   ArrowUpRight,
   Droplets,
   Sun,
+  Compass,
+  Gauge,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../App';
@@ -40,13 +38,12 @@ import { Button, Card, Badge } from '../../../components/ui/Base';
 import { RankingCard } from '../../../components/ui/Data';
 import { DashboardSkeleton } from '../../../components/ui/Skeleton';
 import { PageLayout } from '../../../components/layout/PageLayout';
-import { weatherService } from '../../weather/services/weatherService';
+import { weatherService, WeatherData } from '../../weather/services/weatherService';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { CatchForm } from '../../../components/CatchForm';
 import { SessionModal } from '../../../components/SessionModal';
 import { statsService, UserStats } from '../../../services/statsService';
 import { useSession } from '../../../contexts/SessionContext';
-import { LevelBadge } from '../../../components/xp/LevelBadge';
 import { XpProgressBar } from '../../../components/xp/XpProgressBar';
 import { gearService } from '../../gear/services/gearService';
 
@@ -92,7 +89,10 @@ const getSessionCatchCount = (s: Partial<Session> | null | undefined) =>
   0;
 
 const getSessionSpotName = (s: Partial<Session> | null | undefined) =>
-  (s as any)?.spotName || (s as any)?.locationName || (s as any)?.spotTitle || 'Onbekende stek';
+  (s as any)?.spotName ||
+  (s as any)?.locationName ||
+  (s as any)?.spotTitle ||
+  'Onbekende stek';
 
 const getSessionStatus = (s: Partial<Session> | null | undefined) =>
   (s as any)?.status || ((s as any)?.isActive ? 'active' : 'complete');
@@ -159,6 +159,30 @@ const getProgressText = (xp: number) => {
     : `Nog ${xpToNext.toLocaleString()} XP tot Level ${currentLevel + 1}`;
 };
 
+const getXpNeededText = (xp: number) => {
+  const levelThresholds = [
+    0, 150, 400, 800, 1400, 2200, 3200, 4500, 6000, 8000, 10500, 13500, 17000,
+    21500, 27000, 34000, 43000, 54000, 68000, 85000,
+  ];
+
+  const foundLevel =
+    levelThresholds.findIndex(
+      (v, i) => xp >= v && xp < (levelThresholds[i + 1] ?? Infinity)
+    ) + 1;
+
+  const currentLevel = Math.min(
+    foundLevel > 0 ? foundLevel : levelThresholds.length,
+    levelThresholds.length
+  );
+
+  const nextXp = levelThresholds[currentLevel] ?? xp;
+  const xpToNext = Math.max(0, nextXp - xp);
+
+  return currentLevel >= levelThresholds.length
+    ? 'MAX'
+    : `${xpToNext.toLocaleString()} XP nodig`;
+};
+
 const formatDateShort = (value: any) => {
   const date = value?.toDate?.() ?? (value ? new Date(value) : null);
   return date ? format(date, 'd MMM', { locale: nl }) : 'Onbekend';
@@ -167,6 +191,25 @@ const formatDateShort = (value: any) => {
 const formatTimeShort = (value: any) => {
   const date = value?.toDate?.() ?? (value ? new Date(value) : null);
   return date ? format(date, 'HH:mm', { locale: nl }) : '--:--';
+};
+
+const getWindDirectionLabel = (windDir?: string) => {
+  if (!windDir) return '--';
+  return windDir.toUpperCase();
+};
+
+const getHourlyForecast = (weather: WeatherData | null) => {
+  const hours = ((weather?.forecast?.forecastday?.[0] as any)?.hour ?? []) as any[];
+  if (!Array.isArray(hours) || hours.length === 0) return [];
+
+  const now = Date.now();
+
+  return hours
+    .filter((hour) => {
+      const ts = new Date(hour.time).getTime();
+      return ts >= now - 60 * 60 * 1000;
+    })
+    .slice(0, 4);
 };
 
 export default function Dashboard() {
@@ -180,6 +223,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [gearItems, setGearItems] = useState<GearItem[]>([]);
   const [favoriteSpots, setFavoriteSpots] = useState<Spot[]>([]);
+  const [spotsCount, setSpotsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const [isQuickCatchOpen, setIsQuickCatchOpen] = useState(false);
@@ -188,7 +232,7 @@ export default function Dashboard() {
   const [editingCatch, setEditingCatch] = useState<Catch | null>(null);
 
   const savedLocation = localStorage.getItem('weatherLocation') || DEFAULT_LOCATION;
-  const [weather, setWeather] = useState<any>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLocation, setWeatherLocation] = useState(savedLocation);
   const [newLocation, setNewLocation] = useState(savedLocation);
   const [weatherCoords, setWeatherCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -236,7 +280,6 @@ export default function Dashboard() {
         const sessions = snapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Session)
         );
-
         setRecentSessions(sessions.slice(0, 4));
       },
       (error) => {
@@ -263,12 +306,14 @@ export default function Dashboard() {
         const spotsQuery = query(
           collection(db, COLLECTIONS.SPOTS),
           where('userId', '==', profile.uid),
-          limit(8)
+          limit(50)
         );
         const spotsSnap = await getDocs(spotsQuery);
         const spots = spotsSnap.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Spot)
         );
+
+        setSpotsCount(spots.length);
 
         const sortedSpots = [...spots].sort((a, b) => {
           const aScore = ((a as any).isFavorite ? 1000 : 0) + getSpotCatchCount(a);
@@ -335,7 +380,7 @@ export default function Dashboard() {
 
     const loadWeather = async () => {
       try {
-        let data;
+        let data: WeatherData;
 
         if (weatherCoords) {
           data = await weatherService.fetchWeather(
@@ -396,19 +441,29 @@ export default function Dashboard() {
     [profile?.xp]
   );
 
+  const xpNeededText = useMemo(
+    () => getXpNeededText(profile?.xp || 0),
+    [profile?.xp]
+  );
+
+  const hourlyForecast = useMemo(
+    () => getHourlyForecast(weather),
+    [weather]
+  );
+
   if (loading) return <DashboardSkeleton />;
 
   return (
     <PageLayout>
-      <div className="space-y-6 md:space-y-8 px-2 md:px-0 pb-28">
+      <div className="space-y-6 px-2 md:px-0 pb-28">
         {/* Hero */}
         <section>
-          <Card className="relative overflow-hidden rounded-[1.75rem] border border-brand/20 bg-surface-card p-4 md:p-6 shadow-premium">
+          <Card className="relative overflow-hidden rounded-[1.75rem] border border-brand/20 bg-surface-card p-4 shadow-premium">
             <div className="absolute top-0 right-0 w-40 h-40 bg-brand/10 blur-3xl -mr-12 -mt-12 pointer-events-none" />
 
             <div className="relative z-10 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
                   <Badge
                     variant="accent"
                     className="mb-2 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em]"
@@ -416,60 +471,77 @@ export default function Dashboard() {
                     Dashboard
                   </Badge>
 
-                  <h1 className="text-xl md:text-3xl font-bold text-primary tracking-tight leading-tight">
-                    Hallo, <span className="text-accent">{profile?.displayName || 'Visser'}</span>
+                  <h1 className="text-[1.9rem] leading-[0.95] font-black tracking-tight uppercase text-accent break-words">
+                    {profile?.displayName || 'Visser'}
                   </h1>
 
-                  <p className="text-xs md:text-sm text-text-secondary mt-1">
+                  <p className="text-xs text-text-secondary mt-2 max-w-[240px] leading-snug">
                     Level, progressie en laatste activiteit in één overzicht.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right">
-                    <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">
-                      Level
-                    </p>
-                    <p className="text-lg md:text-2xl font-bold text-text-primary">
-                      {profile?.level || 1}
-                    </p>
+                <div className="shrink-0 min-w-[118px] rounded-2xl border border-border-subtle bg-surface-soft px-3 py-2.5">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-text-muted">
+                        Level
+                      </span>
+                      <span className="text-lg font-bold text-text-primary">
+                        {profile?.level || 1}
+                      </span>
+                    </div>
+
+                    <div className="h-px bg-border-subtle" />
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-text-muted">
+                        XP
+                      </span>
+                      <span className="text-lg font-bold text-brand">
+                        {(profile?.xp || 0).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
-                  <LevelBadge level={profile?.level || 1} size="sm" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">XP</p>
-                  <p className="text-sm md:text-xl font-bold text-text-primary mt-1">
-                    {(profile?.xp || 0).toLocaleString()}
+                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">
+                    Vangsten
                   </p>
-                </div>
-
-                <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">Vangsten</p>
-                  <p className="text-sm md:text-xl font-bold text-text-primary mt-1">
+                  <p className="text-base font-bold text-text-primary mt-1">
                     {stats?.totalCatches || 0}
                   </p>
                 </div>
 
                 <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">Sessies</p>
-                  <p className="text-sm md:text-xl font-bold text-text-primary mt-1">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">
+                    Sessies
+                  </p>
+                  <p className="text-base font-bold text-text-primary mt-1">
                     {stats?.totalSessions || 0}
                   </p>
                 </div>
 
                 <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">Soorten</p>
-                  <p className="text-sm md:text-xl font-bold text-text-primary mt-1">
-                    {stats?.speciesCount || 0}
+                  <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">
+                    Stekken
+                  </p>
+                  <p className="text-base font-bold text-text-primary mt-1">
+                    {spotsCount}
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                  <span className="text-text-muted">Lvl {profile?.level || 1}</span>
+                  <span className="text-brand">{xpNeededText}</span>
+                </div>
+
                 <XpProgressBar xp={profile?.xp || 0} compact />
+
                 <p className="text-[11px] text-text-secondary">{progressSubtitle}</p>
               </div>
             </div>
@@ -490,29 +562,22 @@ export default function Dashboard() {
                 label: 'Stek',
                 icon: MapPin,
                 onClick: () => navigate('/spots'),
-                variant: 'secondary' as const,
               },
               {
                 label: 'Sessie',
                 icon: History,
                 onClick: () => setIsSessionModalOpen(true),
-                variant: 'secondary' as const,
               },
               {
                 label: 'Vangst',
                 icon: Fish,
                 onClick: () => setIsQuickCatchOpen(true),
-                variant: 'primary' as const,
               },
             ].map((item) => (
               <button
                 key={item.label}
                 onClick={item.onClick}
-                className={`rounded-2xl border p-3.5 min-h-[92px] flex flex-col items-center justify-center gap-2 text-center transition-all active:scale-95 ${
-                  item.variant === 'primary'
-                    ? 'bg-brand text-bg-main border-brand shadow-premium-accent'
-                    : 'bg-surface-card border-border-subtle text-text-primary'
-                }`}
+                className="rounded-2xl border border-brand bg-brand text-bg-main p-3.5 min-h-[92px] flex flex-col items-center justify-center gap-2 text-center transition-all shadow-premium-accent hover:brightness-105 active:scale-95"
               >
                 <item.icon className="w-5 h-5" />
                 <span className="text-xs font-black tracking-tight">{item.label}</span>
@@ -542,6 +607,7 @@ export default function Dashboard() {
                   <h3 className="text-xl font-bold text-text-primary tracking-tight">
                     {getSessionName(activeSession)}
                   </h3>
+
                   <div className="flex flex-wrap items-center gap-3 text-[11px] text-text-secondary font-bold uppercase tracking-widest">
                     <span className="inline-flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-brand" />
@@ -574,7 +640,7 @@ export default function Dashboard() {
           </motion.section>
         )}
 
-        {/* Drafts */}
+        {/* Concepten */}
         {incompleteCatches.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center justify-between px-1">
@@ -676,7 +742,7 @@ export default function Dashboard() {
                   <p className="text-[9px] font-black uppercase tracking-[0.18em] text-brand">
                     Huidige locatie
                   </p>
-                  <h3 className="text-xl font-bold text-text-primary tracking-tight">
+                  <h3 className="text-2xl font-black text-text-primary tracking-tight uppercase">
                     {weather?.location?.name || weatherLocation}
                   </h3>
                   <p className="text-sm text-text-secondary capitalize">
@@ -684,12 +750,12 @@ export default function Dashboard() {
                   </p>
                 </div>
 
-                <div className="w-12 h-12 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-center shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-center shrink-0">
                   {weather?.current?.condition?.icon ? (
                     <img
                       src={weather.current.condition.icon}
                       alt="Weather"
-                      className="w-8 h-8"
+                      className="w-9 h-9"
                     />
                   ) : (
                     <Cloud className="w-5 h-5 text-brand" />
@@ -697,9 +763,9 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <div className="flex items-center justify-center gap-1 text-text-muted">
+                  <div className="flex items-center justify-center gap-1.5 text-text-muted">
                     <Thermometer className="w-3.5 h-3.5 text-brand" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Temp</span>
                   </div>
@@ -711,19 +777,53 @@ export default function Dashboard() {
                 </div>
 
                 <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <div className="flex items-center justify-center gap-1 text-text-muted">
+                  <div className="flex items-center justify-center gap-1.5 text-text-muted">
                     <Wind className="w-3.5 h-3.5 text-brand" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Wind</span>
                   </div>
                   <p className="text-base font-bold text-text-primary mt-1">
                     {weather?.current?.wind_kph != null
-                      ? `${Math.round(weather.current.wind_kph)}`
+                      ? `${Math.round(weather.current.wind_kph)} km/u`
                       : '--'}
                   </p>
                 </div>
 
                 <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
-                  <div className="flex items-center justify-center gap-1 text-text-muted">
+                  <div className="flex items-center justify-center gap-1.5 text-text-muted">
+                    <Compass className="w-3.5 h-3.5 text-brand" />
+                    <span className="text-[8px] font-black uppercase tracking-widest">Richting</span>
+                  </div>
+                  <p className="text-base font-bold text-text-primary mt-1">
+                    {getWindDirectionLabel(weather?.current?.wind_dir)}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-text-muted">
+                    <Gauge className="w-3.5 h-3.5 text-brand" />
+                    <span className="text-[8px] font-black uppercase tracking-widest">Druk</span>
+                  </div>
+                  <p className="text-base font-bold text-text-primary mt-1">
+                    {weather?.current?.pressure_mb != null
+                      ? `${Math.round(weather.current.pressure_mb)}`
+                      : '--'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-text-muted">
+                    <Sun className="w-3.5 h-3.5 text-brand" />
+                    <span className="text-[8px] font-black uppercase tracking-widest">UV index</span>
+                  </div>
+                  <p className="text-base font-bold text-text-primary mt-1">
+                    {weather?.current?.uv != null ? weather.current.uv : '--'}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-surface-soft border border-border-subtle p-3 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-text-muted">
                     <Droplets className="w-3.5 h-3.5 text-brand" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Vocht</span>
                   </div>
@@ -735,38 +835,84 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {weather?.forecast?.forecastday?.length > 0 && (
-                <div className="pt-2 space-y-2">
-                  {weather.forecast.forecastday.slice(0, 3).map((day: any, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between rounded-xl bg-surface-soft/60 border border-border-subtle px-3 py-2.5"
-                    >
-                      <span className="text-xs font-bold text-text-secondary w-16">
-                        {i === 0
-                          ? 'Vandaag'
-                          : format(new Date(day.date), 'EEE', { locale: nl })}
-                      </span>
+              {hourlyForecast.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between px-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Komende uren
+                    </p>
+                  </div>
 
-                      <div className="flex items-center gap-2">
-                        <img src={day.day.condition.icon} alt="icon" className="w-6 h-6" />
-                        <span className="text-[11px] font-medium text-text-secondary truncate max-w-[110px]">
-                          {day.day.condition.text}
+                  <div className="space-y-2">
+                    {hourlyForecast.map((hour: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between rounded-xl bg-surface-soft/60 border border-border-subtle px-3 py-2.5"
+                      >
+                        <span className="text-xs font-bold text-text-secondary w-12">
+                          {format(new Date(hour.time), 'HH:mm', { locale: nl })}
                         </span>
-                      </div>
 
-                      <span className="text-xs font-black text-brand">
-                        {Math.round(day.day.maxtemp_c)}°
-                        <span className="text-text-dim"> / {Math.round(day.day.mintemp_c)}°</span>
-                      </span>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2 min-w-0 flex-1 px-2">
+                          <img src={hour.condition.icon} alt="icon" className="w-6 h-6" />
+                          <span className="text-[11px] font-medium text-text-secondary truncate">
+                            {hour.condition.text}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-[11px] font-bold text-text-secondary">
+                            {Math.round(hour.wind_kph)} km/u
+                          </span>
+                          <span className="text-xs font-black text-brand w-10 text-right">
+                            {Math.round(hour.temp_c)}°
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
+              {hourlyForecast.length === 0 && weather?.forecast?.forecastday?.length ? (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between px-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-text-muted">
+                      Korte termijn
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {weather.forecast.forecastday.slice(0, 3).map((day, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between rounded-xl bg-surface-soft/60 border border-border-subtle px-3 py-2.5"
+                      >
+                        <span className="text-xs font-bold text-text-secondary w-16">
+                          {i === 0
+                            ? 'Vandaag'
+                            : format(new Date(day.date), 'EEE', { locale: nl })}
+                        </span>
+
+                        <div className="flex items-center gap-2 min-w-0 flex-1 px-2">
+                          <img src={day.day.condition.icon} alt="icon" className="w-6 h-6" />
+                          <span className="text-[11px] font-medium text-text-secondary truncate">
+                            {day.day.condition.text}
+                          </span>
+                        </div>
+
+                        <span className="text-xs font-black text-brand">
+                          {Math.round(day.day.maxtemp_c)}°
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <button
                 onClick={() => navigate('/weather')}
-                className="w-full rounded-2xl border border-brand/20 bg-brand/8 px-4 py-3 flex items-center justify-between text-left transition-all hover:bg-brand/12 active:scale-[0.99]"
+                className="w-full rounded-2xl border border-brand/20 bg-brand/8 px-4 py-3.5 flex items-center justify-between text-left transition-all hover:bg-brand/12 active:scale-[0.99]"
               >
                 <div>
                   <p className="text-sm font-bold text-text-primary">
@@ -782,381 +928,387 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        {/* Main grids */}
-        <section className="space-y-6">
-          {/* Laatste vangsten */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-text-primary tracking-tight">
-                Laatste vangsten
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-brand font-black text-[10px] uppercase tracking-widest"
-                onClick={() => navigate('/catches')}
-              >
-                Alles
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {recentCatches.length > 0 ? (
-                recentCatches.map((c) => {
-                  const tsRaw = getCatchTimestamp(c);
-                  const ts = tsRaw?.toDate?.() ?? (tsRaw ? new Date(tsRaw) : null);
-
-                  return (
-                    <Card
-                      key={c.id}
-                      padding="none"
-                      hoverable
-                      variant="premium"
-                      className="overflow-hidden rounded-2xl border border-border-subtle bg-surface-card"
-                      onClick={() => openEditCatch(c)}
-                    >
-                      <div className="relative aspect-[1/1] overflow-hidden">
-                        {getCatchImage(c) ? (
-                          <img
-                            src={getCatchImage(c)}
-                            alt={getCatchSpecies(c)}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-surface-soft">
-                            <Fish className="w-10 h-10 text-text-muted/20" />
-                          </div>
-                        )}
-
-                        <div className="absolute top-2 left-2">
-                          <Badge
-                            variant="accent"
-                            className="bg-brand text-bg-main border-none text-[9px] font-black"
-                          >
-                            +{c.xpEarned || 0} XP
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="p-3 space-y-1.5">
-                        <p className="text-sm font-bold text-text-primary truncate">
-                          {getCatchSpecies(c)}
-                        </p>
-                        <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-widest text-text-secondary">
-                          {c.weight && <span>{c.weight}g</span>}
-                          {c.length && <span>{c.length}cm</span>}
-                          <span>{ts ? format(ts, 'd MMM', { locale: nl }) : 'Zojuist'}</span>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })
-              ) : (
-                <Card className="col-span-2 p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
-                  <Fish className="w-10 h-10 text-brand/20 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-text-primary">Nog geen vangsten</p>
-                </Card>
-              )}
-            </div>
+        {/* Laatste vangsten */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-base font-bold text-text-primary tracking-tight">
+              Laatste vangsten
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand font-black text-[10px] uppercase tracking-widest"
+              onClick={() => navigate('/catches')}
+            >
+              Alles
+            </Button>
           </div>
 
-          {/* Laatste sessies */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-text-primary tracking-tight">
-                Laatste sessies
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-brand font-black text-[10px] uppercase tracking-widest"
-                onClick={() => navigate('/sessions')}
-              >
-                Alles
-              </Button>
-            </div>
+          <div className="grid grid-cols-2 gap-3">
+            {recentCatches.length > 0 ? (
+              recentCatches.map((c) => {
+                const tsRaw = getCatchTimestamp(c);
+                const ts = tsRaw?.toDate?.() ?? (tsRaw ? new Date(tsRaw) : null);
 
-            <div className="grid grid-cols-1 gap-3">
-              {recentSessions.length > 0 ? (
-                recentSessions.map((session) => {
-                  const status = getSessionStatus(session);
-                  const start = getSessionStart(session);
-                  const end = getSessionEnd(session);
-
-                  return (
-                    <Card
-                      key={(session as any).id}
-                      padding="none"
-                      hoverable
-                      variant="premium"
-                      className="p-4 rounded-2xl border border-border-subtle bg-surface-card"
-                      onClick={() => navigate('/sessions')}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0">
-                          <History className="w-5 h-5 text-brand" />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-bold text-text-primary truncate">
-                              {getSessionName(session)}
-                            </p>
-                            {status === 'active' && (
-                              <span className="text-[8px] font-black uppercase tracking-widest text-brand">
-                                Live
-                              </span>
-                            )}
-                          </div>
-
-                          <p className="text-[10px] font-black uppercase tracking-widest text-text-muted truncate">
-                            {getSessionSpotName(session)}
-                          </p>
-
-                          <div className="flex flex-wrap gap-3 mt-2 text-[10px] font-bold uppercase tracking-widest text-text-secondary">
-                            <span>{formatDateShort(start)}</span>
-                            <span>{formatTimeShort(start)}</span>
-                            {status !== 'active' && end && <span>tot {formatTimeShort(end)}</span>}
-                            <span>{getSessionCatchCount(session)} vangsten</span>
-                          </div>
-                        </div>
-
-                        <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
-                      </div>
-                    </Card>
-                  );
-                })
-              ) : (
-                <Card className="p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
-                  <History className="w-10 h-10 text-brand/20 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-text-primary">Nog geen sessies</p>
-                </Card>
-              )}
-            </div>
-          </div>
-
-          {/* Favoriete stekken */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-text-primary tracking-tight">
-                Favoriete stekken
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-brand font-black text-[10px] uppercase tracking-widest"
-                onClick={() => navigate('/spots')}
-              >
-                Alles
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3">
-              {favoriteSpots.length > 0 ? (
-                favoriteSpots.map((spot) => (
+                return (
                   <Card
-                    key={spot.id}
+                    key={c.id}
+                    padding="none"
+                    hoverable
+                    variant="premium"
+                    className="overflow-hidden rounded-2xl border border-border-subtle bg-surface-card"
+                    onClick={() => openEditCatch(c)}
+                  >
+                    <div className="relative aspect-square overflow-hidden">
+                      {getCatchImage(c) ? (
+                        <img
+                          src={getCatchImage(c)}
+                          alt={getCatchSpecies(c)}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-surface-soft">
+                          <Fish className="w-10 h-10 text-text-muted/20" />
+                        </div>
+                      )}
+
+                      <div className="absolute top-2 left-2">
+                        <Badge
+                          variant="accent"
+                          className="bg-brand text-bg-main border-none text-[9px] font-black"
+                        >
+                          +{c.xpEarned || 0} XP
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="p-3 space-y-1.5">
+                      <p className="text-sm font-bold text-text-primary truncate">
+                        {getCatchSpecies(c)}
+                      </p>
+                      <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-widest text-text-secondary">
+                        {c.weight && <span>{c.weight}g</span>}
+                        {c.length && <span>{c.length}cm</span>}
+                        <span>{ts ? format(ts, 'd MMM', { locale: nl }) : 'Zojuist'}</span>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })
+            ) : (
+              <Card className="col-span-2 p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
+                <Fish className="w-10 h-10 text-brand/20 mx-auto mb-3" />
+                <p className="text-sm font-bold text-text-primary">Nog geen vangsten</p>
+              </Card>
+            )}
+          </div>
+        </section>
+
+        {/* Laatste sessies */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-base font-bold text-text-primary tracking-tight">
+              Laatste sessies
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand font-black text-[10px] uppercase tracking-widest"
+              onClick={() => navigate('/sessions')}
+            >
+              Alles
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            {recentSessions.length > 0 ? (
+              recentSessions.map((session) => {
+                const status = getSessionStatus(session);
+                const start = getSessionStart(session);
+                const end = getSessionEnd(session);
+
+                return (
+                  <Card
+                    key={(session as any).id}
                     padding="none"
                     hoverable
                     variant="premium"
                     className="p-4 rounded-2xl border border-border-subtle bg-surface-card"
-                    onClick={() => navigate('/spots')}
+                    onClick={() => navigate('/sessions')}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-center shrink-0">
-                        <MapPin className="w-5 h-5 text-brand" />
+                      <div className="w-12 h-12 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0">
+                        <History className="w-5 h-5 text-brand" />
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-text-primary truncate">
-                          {getSpotName(spot)}
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm font-bold text-text-primary truncate">
+                            {getSessionName(session)}
+                          </p>
+                          {status === 'active' && (
+                            <span className="text-[8px] font-black uppercase tracking-widest text-brand">
+                              Live
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-[10px] font-black uppercase tracking-widest text-text-muted truncate">
+                          {getSessionSpotName(session)}
                         </p>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mt-1">
-                          {getSpotWaterType(spot)} • {getSpotCatchCount(spot)} vangsten
-                        </p>
+
+                        <div className="flex flex-wrap gap-3 mt-2 text-[10px] font-bold uppercase tracking-widest text-text-secondary">
+                          <span>{formatDateShort(start)}</span>
+                          <span>{formatTimeShort(start)}</span>
+                          {status !== 'active' && end && <span>tot {formatTimeShort(end)}</span>}
+                          <span>{getSessionCatchCount(session)} vangsten</span>
+                        </div>
                       </div>
 
                       <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
                     </div>
                   </Card>
-                ))
-              ) : (
-                <Card className="p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
-                  <MapPin className="w-10 h-10 text-brand/20 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-text-primary">Nog geen stekken</p>
-                </Card>
-              )}
-            </div>
-          </div>
-
-          {/* Mijn gear */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-text-primary tracking-tight">
-                Mijn gear
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-brand font-black text-[10px] uppercase tracking-widest"
-                onClick={() => navigate('/gear')}
-              >
-                Alles
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {gearItems.length > 0 ? (
-                gearItems.map((item, i) => (
-                  <Card
-                    key={item.id || i}
-                    padding="none"
-                    hoverable
-                    variant="premium"
-                    className="overflow-hidden rounded-2xl border border-border-subtle bg-surface-card"
-                    onClick={() => navigate('/gear')}
-                  >
-                    <div className="relative aspect-square bg-surface-soft border-b border-border-subtle overflow-hidden">
-                      {getGearImage(item) ? (
-                        <img
-                          src={getGearImage(item)}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ShoppingBag className="w-10 h-10 text-text-muted/25" />
-                        </div>
-                      )}
-
-                      {item.isFavorite && (
-                        <div className="absolute top-2 right-2 w-6 h-6 rounded-xl bg-brand text-bg-main flex items-center justify-center shadow-lg">
-                          <Star className="w-3 h-3 fill-current" />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-text-muted truncate">
-                        {item.brand || 'Gear'}
-                      </p>
-                      <p className="text-sm font-bold text-text-primary truncate mt-1">
-                        {item.name}
-                      </p>
-                    </div>
-                  </Card>
-                ))
-              ) : (
-                <Card className="col-span-2 p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
-                  <ShoppingBag className="w-10 h-10 text-brand/20 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-text-primary">Nog geen gear</p>
-                </Card>
-              )}
-            </div>
+                );
+              })
+            ) : (
+              <Card className="p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
+                <History className="w-10 h-10 text-brand/20 mx-auto mb-3" />
+                <p className="text-sm font-bold text-text-primary">Nog geen sessies</p>
+              </Card>
+            )}
           </div>
         </section>
 
-        {/* Bottom section */}
-        <section className="grid grid-cols-1 gap-6">
-          {/* Snelle toegang */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm font-black uppercase tracking-[0.18em] text-text-muted">
-                Snelle toegang
-              </h2>
-            </div>
+        {/* Favoriete stekken */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-base font-bold text-text-primary tracking-tight">
+              Favoriete stekken
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand font-black text-[10px] uppercase tracking-widest"
+              onClick={() => navigate('/spots')}
+            >
+              Alles
+            </Button>
+          </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                {
-                  label: 'Logboek',
-                  icon: Fish,
-                  path: '/catches',
-                  color: 'text-accent',
-                  bg: 'bg-accent/10',
-                },
-                {
-                  label: 'Sessies',
-                  icon: History,
-                  path: '/sessions',
-                  color: 'text-success',
-                  bg: 'bg-success/10',
-                },
-                {
-                  label: 'Stekken',
-                  icon: MapPin,
-                  path: '/spots',
-                  color: 'text-water',
-                  bg: 'bg-water/10',
-                },
-                {
-                  label: 'Gear',
-                  icon: ShoppingBag,
-                  path: '/gear',
-                  color: 'text-warning',
-                  bg: 'bg-warning/10',
-                },
-                {
-                  label: 'Ranking',
-                  icon: Trophy,
-                  path: '/rankings',
-                  color: 'text-primary',
-                  bg: 'bg-primary/10',
-                },
-                {
-                  label: 'Weer',
-                  icon: Cloud,
-                  path: '/weather',
-                  color: 'text-blue-400',
-                  bg: 'bg-blue-500/10',
-                },
-              ].map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  className="flex flex-col items-center justify-center text-center gap-2 p-3.5 bg-surface-card rounded-2xl border border-border-subtle/60 hover:border-accent/30 active:scale-95 transition-all min-h-[96px]"
+          <div className="grid grid-cols-1 gap-3">
+            {favoriteSpots.length > 0 ? (
+              favoriteSpots.map((spot) => (
+                <Card
+                  key={spot.id}
+                  padding="none"
+                  hoverable
+                  variant="premium"
+                  className="p-4 rounded-2xl border border-border-subtle bg-surface-card"
+                  onClick={() => navigate('/spots')}
                 >
-                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${item.bg}`}>
-                    <item.icon className={`w-5 h-5 ${item.color}`} />
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-center shrink-0">
+                      <MapPin className="w-5 h-5 text-brand" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-text-primary truncate">
+                        {getSpotName(spot)}
+                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mt-1">
+                        {getSpotWaterType(spot)} • {getSpotCatchCount(spot)} vangsten
+                      </p>
+                    </div>
+
+                    <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
                   </div>
+                </Card>
+              ))
+            ) : (
+              <Card className="p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
+                <MapPin className="w-10 h-10 text-brand/20 mx-auto mb-3" />
+                <p className="text-sm font-bold text-text-primary">Nog geen stekken</p>
+              </Card>
+            )}
+          </div>
+        </section>
+
+        {/* Mijn gear */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-base font-bold text-text-primary tracking-tight">
+              Mijn gear
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand font-black text-[10px] uppercase tracking-widest"
+              onClick={() => navigate('/gear')}
+            >
+              Alles
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {gearItems.length > 0 ? (
+              gearItems.map((item, i) => (
+                <Card
+                  key={item.id || i}
+                  padding="none"
+                  hoverable
+                  variant="premium"
+                  className="overflow-hidden rounded-2xl border border-border-subtle bg-surface-card"
+                  onClick={() => navigate('/gear')}
+                >
+                  <div className="relative aspect-square bg-surface-soft border-b border-border-subtle overflow-hidden">
+                    {getGearImage(item) ? (
+                      <img
+                        src={getGearImage(item)}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ShoppingBag className="w-10 h-10 text-text-muted/25" />
+                      </div>
+                    )}
+
+                    {item.isFavorite && (
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-xl bg-brand text-bg-main flex items-center justify-center shadow-lg">
+                        <Star className="w-3 h-3 fill-current" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-text-muted truncate">
+                      {item.brand || 'Gear'}
+                    </p>
+                    <p className="text-sm font-bold text-text-primary truncate mt-1">
+                      {item.name}
+                    </p>
+                  </div>
+                </Card>
+              ))
+            ) : (
+              <Card className="col-span-2 p-8 text-center rounded-2xl border border-dashed border-border-subtle bg-surface-soft/20">
+                <ShoppingBag className="w-10 h-10 text-brand/20 mx-auto mb-3" />
+                <p className="text-sm font-bold text-text-primary">Nog geen gear</p>
+              </Card>
+            )}
+          </div>
+        </section>
+
+        {/* Snelle toegang */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-text-muted">
+              Snelle toegang
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              {
+                label: 'Logboek',
+                sub: 'Vangsten',
+                icon: Fish,
+                path: '/catches',
+                color: 'text-accent',
+                bg: 'bg-accent/10',
+              },
+              {
+                label: 'Sessies',
+                sub: 'Live vissen',
+                icon: History,
+                path: '/sessions',
+                color: 'text-success',
+                bg: 'bg-success/10',
+              },
+              {
+                label: 'Stekken',
+                sub: 'Jouw plekken',
+                icon: MapPin,
+                path: '/spots',
+                color: 'text-water',
+                bg: 'bg-water/10',
+              },
+              {
+                label: 'Visgear',
+                sub: 'Mijn materiaal',
+                icon: ShoppingBag,
+                path: '/gear',
+                color: 'text-warning',
+                bg: 'bg-warning/10',
+              },
+              {
+                label: 'Ranking',
+                sub: 'XP & scores',
+                icon: Trophy,
+                path: '/rankings',
+                color: 'text-primary',
+                bg: 'bg-primary/10',
+              },
+              {
+                label: 'Weer',
+                sub: 'Visomstandig.',
+                icon: Cloud,
+                path: '/weather',
+                color: 'text-blue-400',
+                bg: 'bg-blue-500/10',
+              },
+            ].map((item) => (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className="flex flex-col items-center justify-center text-center gap-2 p-3.5 bg-surface-card rounded-2xl border border-border-subtle/60 hover:border-accent/30 active:scale-95 transition-all min-h-[96px]"
+              >
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${item.bg}`}>
+                  <item.icon className={`w-5 h-5 ${item.color}`} />
+                </div>
+
+                <div className="leading-none">
                   <p className="text-[11px] font-black text-text-primary tracking-tight">
                     {item.label}
                   </p>
-                </button>
-              ))}
-            </div>
+                  <p className="text-[9px] text-text-muted mt-1 font-medium">
+                    {item.sub}
+                  </p>
+                </div>
+              </button>
+            ))}
           </div>
+        </section>
 
-          {/* Ranking snapshot */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-base font-bold text-text-primary tracking-tight">
-                Ranking snapshot
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-brand font-black text-[10px] uppercase tracking-widest"
-                onClick={() => navigate('/rankings')}
-              >
-                Alles
-              </Button>
-            </div>
-
-            <Card
-              padding="none"
-              variant="premium"
-              className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden"
+        {/* Ranking snapshot */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-base font-bold text-text-primary tracking-tight">
+              Ranking snapshot
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand font-black text-[10px] uppercase tracking-widest"
+              onClick={() => navigate('/rankings')}
             >
-              <RankingCard
-                rank={profile?.rank || 0}
-                name={profile?.displayName || 'Jij'}
-                xp={profile?.xp || 0}
-                isCurrentUser
-                className="p-4 bg-brand/5"
-              />
-            </Card>
+              Alles
+            </Button>
           </div>
+
+          <Card
+            padding="none"
+            variant="premium"
+            className="divide-y divide-border-subtle border border-border-subtle bg-surface-card shadow-premium rounded-2xl overflow-hidden"
+          >
+            <RankingCard
+              rank={profile?.rank || 0}
+              name={profile?.displayName || 'Jij'}
+              xp={profile?.xp || 0}
+              isCurrentUser
+              className="p-4 bg-brand/5"
+            />
+          </Card>
         </section>
       </div>
 
