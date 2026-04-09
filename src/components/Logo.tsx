@@ -30,15 +30,17 @@ export default function Logo({
 
   if (!imgError) {
     return (
-      <div className={cn('inline-flex items-center shrink-0 select-none group', current.wrapper, className)}>
+      <div className={cn('inline-flex items-center shrink-0 select-none group', current?.wrapper, className)}>
         <img
           src={src}
           alt={alt}
           draggable={false}
-          className={cn(
-            'block shrink-0 object-contain align-middle transition-transform duration-300 group-hover:scale-[1.02]',
-            withText ? current.full : current.icon
-          )}
+         // Use optional chaining (?.) for both properties to prevent the crash
+// and ensure current exists before accessing its properties.
+className={cn(
+  'block shrink-0 object-contain align-middle transition-transform duration-300 group-hover:scale-[1.02]',
+  withText ? current?.full : current?.icon
+)}
           onError={() => setImgError(true)}
         />
       </div>

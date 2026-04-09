@@ -17,3 +17,5 @@ scripts/
 .wrangler
 .dev.vars*
 !.dev.vars.example
+docs/feeds/CatchRank_Setup_Coach_Build_Pack_v1.docx
+docs/feeds/viswateren_gezamenlijke_lijst_2026_2028_clean_links_v3.csv
