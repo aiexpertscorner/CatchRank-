@@ -29,7 +29,9 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
   const avatarSrc = useMemo(() => {
     return (
       profile?.photoURL ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.displayName || 'User')}&background=111827&color=ffffff`
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        profile?.displayName || 'User'
+      )}&background=111827&color=ffffff`
     );
   }, [profile?.photoURL, profile?.displayName]);
 
@@ -37,16 +39,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
     <header className="sticky top-0 z-50 h-20 border-b border-border-subtle bg-surface/95 backdrop-blur-xl supports-[backdrop-filter]:bg-surface/85">
       {/* MOBILE */}
       <div className="relative flex h-full items-center px-4 md:hidden">
-        {/* Left: Logo zone with same visual footprint as right controls */}
         <div className="absolute left-4 top-1/2 z-10 -translate-y-1/2">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.04] bg-surface-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.18)]">
             <Logo size="lg" withText={false} />
           </div>
         </div>
 
-        {/* Right controls */}
         <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2">
-          {/* Profile */}
           <div className="relative">
             <button
               onClick={() => setIsProfileOpen((v) => !v)}
@@ -87,7 +86,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
                         <img
                           src={avatarSrc}
                           alt="Profile"
-                          className="h-14 w-14 rounded-2xl border-2 border-white shadow-premium object-cover"
+                          className="h-14 w-14 rounded-2xl border-2 border-white object-cover shadow-premium"
                         />
                         <div className="min-w-0">
                           <p className="truncate tracking-tight font-black text-text-primary">
@@ -160,7 +159,6 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
             </AnimatePresence>
           </div>
 
-          {/* Menu */}
           <button
             onClick={onMenuClick}
             className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.04] bg-surface-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.18)] transition-all duration-200 active:scale-95"
@@ -178,7 +176,6 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
 
       {/* DESKTOP */}
       <div className="hidden h-full items-center justify-between gap-6 px-8 md:flex">
-        {/* Search */}
         <div
           className={cn(
             'flex w-full max-w-md items-center gap-3 rounded-2xl border bg-surface-soft px-5 py-3 transition-all duration-300',
@@ -203,23 +200,12 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
           </div>
         </div>
 
-        {/* Active session */}
         <div className="flex-shrink-0">
           <ActiveSessionHeader />
         </div>
 
-        {/* Desktop right */}
         <div className="flex flex-shrink-0 items-center gap-4">
           <QuickActionMenu className="scale-90" />
-
-          <button
-            className="group relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.05] bg-surface-soft/75 shadow-[0_4px_18px_rgba(0,0,0,0.12)] transition-all duration-200 active:scale-95"
-            aria-label="Meldingen"
-            type="button"
-          >
-            <Bell className="h-[18px] w-[18px] text-text-secondary transition-colors duration-200 group-hover:text-text-primary" />
-            <span className="absolute right-[11px] top-[10px] h-2 w-2 rounded-full border border-surface bg-danger shadow-[0_0_0_2px_rgba(17,24,39,0.55)]" />
-          </button>
 
           <div className="relative">
             <button
@@ -268,7 +254,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick, isMenuOpen }) => {
                         <img
                           src={avatarSrc}
                           alt="Profile"
-                          className="h-14 w-14 rounded-2xl border-2 border-white shadow-premium object-cover"
+                          className="h-14 w-14 rounded-2xl border-2 border-white object-cover shadow-premium"
                         />
                         <div className="min-w-0">
                           <p className="truncate tracking-tight font-black text-text-primary">
