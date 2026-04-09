@@ -471,7 +471,7 @@ export default function Dashboard() {
                     Dashboard
                   </Badge>
 
-                  <h1 className="text-[1.9rem] leading-[0.95] font-black tracking-tight uppercase text-accent break-words">
+                  <h1 className="text-lg font-bold text-text-accent">
                     {profile?.displayName || 'Visser'}
                   </h1>
 
