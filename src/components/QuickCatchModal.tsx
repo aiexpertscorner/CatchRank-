@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Camera,
   X,
@@ -8,10 +9,12 @@ import {
   MapPin,
   Fish,
   Zap,
+  Loader2,
 } from 'lucide-react';
 import { Button, Badge } from './ui/Base';
 import { motion, AnimatePresence } from 'motion/react';
 import { loggingService } from '../features/logging/services/loggingService';
+import { uploadPhoto } from '../lib/storageUtils';
 import { useAuth } from '../App';
 import { toast } from 'sonner';
 
@@ -30,21 +33,51 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
   activeSessionId,
 }) => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+
   const [step, setStep] = useState<'upload' | 'confirm'>('upload');
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string>('');
+  const [selectedSpecies, setSelectedSpecies] = useState<string>('');
+  const [suggestedSpecies, setSuggestedSpecies] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string>('');
+
+  // Load smart species suggestions when modal opens
+  useEffect(() => {
+    if (!isOpen || !profile?.uid) return;
+    loggingService
+      .getSmartSuggestions(profile.uid)
+      .then((s) => setSuggestedSpecies(s.species.slice(0, 4)))
+      .catch(() => setSuggestedSpecies(['Snoekbaars', 'Baars', 'Snoek', 'Karper']));
+  }, [isOpen, profile?.uid]);
+
+  // Revoke object URL when photo changes or modal closes
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = '';
+      }
+    };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPhoto(reader.result as string);
-      setStep('confirm');
-    };
-    reader.readAsDataURL(file);
+    // Revoke old preview URL if any
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    previewUrlRef.current = previewUrl;
+    setPhotoPreview(previewUrl);
+    setPhotoFile(file);
+    setStep('confirm');
   };
 
   const handleQuickSave = async () => {
@@ -53,15 +86,30 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
     setLoading(true);
     try {
       let sessionSpotId: string | undefined;
-
       if (activeSessionId) {
         const session = await loggingService.getSession(activeSessionId);
         sessionSpotId = getSessionSpotId(session);
       }
 
-      const catchId = await loggingService.quickCatch(
+      // Pre-generate the catch ID so Storage path matches Firestore document
+      const catchId = crypto.randomUUID();
+
+      // Upload photo to Storage (if a file was selected)
+      let mainImageUrl: string | undefined;
+      if (photoFile) {
+        setIsUploading(true);
+        try {
+          mainImageUrl = await uploadPhoto(profile.uid, 'catches', catchId, photoFile);
+        } finally {
+          setIsUploading(false);
+        }
+      }
+
+      await loggingService.quickCatch(
         profile.uid,
-        photo ?? '',
+        catchId,
+        mainImageUrl,
+        selectedSpecies || undefined,
         sessionSpotId
       );
 
@@ -73,7 +121,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
         description: 'Je kunt de details later aanvullen in je dagboek.',
         action: {
           label: 'Nu aanvullen',
-          onClick: () => console.log('Navigate to edit catch', catchId),
+          onClick: () => navigate(`/catches/${catchId}`),
         },
       });
 
@@ -89,8 +137,22 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
 
   const reset = () => {
     setStep('upload');
-    setPhoto(null);
+    setPhotoFile(null);
+    setPhotoPreview('');
+    setSelectedSpecies('');
     setLoading(false);
+    setIsUploading(false);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = '';
+    }
+    // Reset file input value so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
   };
 
   if (typeof document === 'undefined') return null;
@@ -103,7 +165,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
           />
 
@@ -135,7 +197,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                 </div>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl hover:bg-surface-soft flex items-center justify-center transition-all text-text-muted hover:text-primary hover:rotate-90 duration-300"
               >
                 <X className="w-5 h-5 sm:w-7 sm:h-7" />
@@ -174,6 +236,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                         ref={fileInputRef}
                         onChange={handleFileChange}
                         accept="image/*"
+                        capture="environment"
                         className="hidden"
                       />
                     </div>
@@ -223,12 +286,13 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 1.05, y: -10 }}
-                    className="space-y-8 sm:space-y-10"
+                    className="space-y-6 sm:space-y-8"
                   >
+                    {/* Photo preview */}
                     <div className="aspect-square w-full rounded-[2.5rem] sm:rounded-[3rem] overflow-hidden border border-border-subtle shadow-premium bg-surface-soft relative group">
-                      {photo ? (
+                      {photoPreview ? (
                         <img
-                          src={photo}
+                          src={photoPreview}
                           alt="Preview"
                           className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                         />
@@ -243,29 +307,50 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                      <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 right-6 text-white opacity-0 group-hover:opacity-100 transition-all duration-500 translate-y-4 group-hover:translate-y-0">
-                        <p className="text-xs sm:text-sm font-bold flex items-center gap-2">
-                          <Camera className="w-4 h-4 text-accent" /> Wat een plaatje!
-                        </p>
-                      </div>
+
+                      {/* Change photo button */}
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute bottom-4 right-4 w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-black/70"
+                      >
+                        <Camera className="w-5 h-5 text-white" />
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                      />
                     </div>
 
-                    <div className="space-y-4 sm:space-y-6">
-                      <div className="p-5 bg-accent/5 border border-accent/10 rounded-2xl flex items-center gap-4 animate-pulse">
-                        <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
-                          <Zap className="w-5 h-5 text-accent" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black text-accent uppercase tracking-widest">
-                            Dick Beet's Inzicht
-                          </p>
-                          <p className="text-xs font-medium text-text-secondary">
-                            "Ik gok op een <span className="font-bold text-primary">Snoek</span> op basis van je locatie en het seizoen!"
-                          </p>
+                    {/* Quick species chips */}
+                    {suggestedSpecies.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                          Wat voor vis? (optioneel)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {suggestedSpecies.map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setSelectedSpecies(selectedSpecies === s ? '' : s)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                                selectedSpecies === s
+                                  ? 'bg-accent text-white border-accent'
+                                  : 'bg-surface-soft border-border-subtle text-text-secondary hover:border-accent/40'
+                              }`}
+                            >
+                              {s}
+                            </button>
+                          ))}
                         </div>
                       </div>
+                    )}
 
-                      <div className="flex items-start gap-4 sm:gap-5 p-6 sm:p-8 bg-warning/5 border border-warning/10 rounded-[1.5rem] sm:rounded-[2rem]">
+                    <div className="space-y-4 sm:space-y-5">
+                      <div className="flex items-start gap-4 sm:gap-5 p-5 sm:p-6 bg-warning/5 border border-warning/10 rounded-[1.5rem] sm:rounded-[2rem]">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-warning/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
                           <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-warning" />
                         </div>
@@ -279,17 +364,17 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between p-6 sm:p-8 bg-surface-soft/50 rounded-[1.5rem] sm:rounded-[2rem] border border-border-subtle">
+                      <div className="flex items-center justify-between p-5 sm:p-6 bg-surface-soft/50 rounded-[1.5rem] sm:rounded-[2rem] border border-border-subtle">
                         <div className="flex items-center gap-4 sm:gap-5">
                           <div className="w-10 h-10 sm:w-12 sm:h-12 bg-accent/10 rounded-xl sm:rounded-2xl flex items-center justify-center">
                             <Fish className="w-5 h-5 sm:w-6 sm:h-6 text-accent" />
                           </div>
                           <div>
                             <p className="text-base sm:text-lg font-black text-primary tracking-tight">
-                              Vangst Loggen
+                              {selectedSpecies || 'Vangst Loggen'}
                             </p>
                             <p className="text-[8px] sm:text-[10px] font-black text-text-muted uppercase tracking-widest">
-                              Klaar voor verwerking
+                              {selectedSpecies ? 'Soort geselecteerd' : 'Klaar voor verwerking'}
                             </p>
                           </div>
                         </div>
@@ -340,9 +425,15 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                     className="flex-[2] h-12 sm:h-14 text-base sm:text-lg rounded-2xl shadow-premium-accent font-black transition-all active:scale-95"
                     onClick={handleQuickSave}
                     isLoading={loading}
-                    icon={<Check className="w-5 h-5 sm:w-6 sm:h-6" />}
+                    icon={
+                      isUploading ? (
+                        <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
+                      ) : (
+                        <Check className="w-5 h-5 sm:w-6 sm:h-6" />
+                      )
+                    }
                   >
-                    Snel Opslaan
+                    {isUploading ? 'Uploaden...' : 'Snel Opslaan'}
                   </Button>
                 </>
               )}

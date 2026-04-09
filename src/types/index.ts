@@ -184,7 +184,7 @@ export interface Catch {
   /**
    * legacy-compatible fields
    */
-  species: string;
+  species?: string;
   speciesId?: string;
   bait?: string;
   baitId?: string;
@@ -201,7 +201,7 @@ export interface Catch {
   sessionId?: string;
 
   timestamp: AnyTimestamp;
-  catchTime?: AnyTimestamp;
+  catchTime?: string | AnyTimestamp; // HH:MM string or Timestamp
 
   status: 'draft' | 'complete' | 'pending';
   incompleteFields?: string[];
@@ -216,6 +216,11 @@ export interface Catch {
   city?: string;
   moonPhase?: number | string;
   video?: string;
+
+  /** Schema / migration tracking */
+  schemaVersion?: number;
+  sessionAutoCreated?: boolean;
+  sessionStatsApplied?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -412,6 +417,7 @@ export interface Spot {
   isPrivate?: boolean;
   isFavorite?: boolean;
 
+  species?: string[]; // raw Firestore field — used as targetSpecies in legacy docs
   techniques?: string[];
   targetSpecies?: string[];
   amenities?: string[];

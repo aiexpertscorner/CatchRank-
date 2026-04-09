@@ -270,7 +270,18 @@ export default function SessionDetail() {
         </div>
 
         {/* Header Card */}
-        <Card className="bg-surface-card border border-border-subtle rounded-2xl p-5">
+        <Card className="bg-surface-card border border-border-subtle rounded-2xl overflow-hidden">
+          {/* Session photo */}
+          {(session as any).mainImage && (
+            <div className="w-full h-40 overflow-hidden">
+              <img
+                src={(session as any).mainImage}
+                alt="Sessie foto"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+          <div className="p-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-black text-text-primary tracking-tight leading-tight truncate">
@@ -314,6 +325,7 @@ export default function SessionDetail() {
               </span>
             </span>
           </div>
+          </div>{/* /p-5 */}
         </Card>
 
         {/* Stats Strip */}

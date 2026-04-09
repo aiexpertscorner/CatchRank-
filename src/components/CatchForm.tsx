@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gearService } from '../features/gear/services/gearService';
 import { GearItem, GearSetup } from '../types';
 import {
@@ -17,6 +17,10 @@ import {
   Droplets,
   Cloud,
   Save,
+  Clock,
+  Loader2,
+  Moon,
+  Lock,
 } from 'lucide-react';
 import { Button, Card } from './ui/Base';
 import {
@@ -33,6 +37,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { loggingService } from '../features/logging/services/loggingService';
 import { speciesService } from '../features/logging/services/speciesService';
 import { weatherService } from '../features/weather/services/weatherService';
+import { uploadPhoto, deletePhoto, isBase64Image } from '../lib/storageUtils';
 import { useAuth } from '../App';
 import { Catch, Species, Spot } from '../types';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -72,15 +77,32 @@ export const CatchForm: React.FC<CatchFormProps> = ({
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [isSpotModalOpen, setIsSpotModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const [formData, setFormData] = useState<Partial<Catch>>({
-    species: '',
+  // Photo state — preview uses object URL (not base64), file stored for upload
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string>('');
+  const photoPreviewUrlRef = useRef<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Stable catch ID generated once per form session — used as Storage entity ID
+  const [tempCatchId] = useState<string>(() => (initialData as any).id || crypto.randomUUID());
+
+  // Track whether mainImage was uploaded in this session (so we can clean up on cancel)
+  const uploadedThisSession = useRef(false);
+
+  const [formData, setFormData] = useState<Partial<Catch> & Record<string, any>>({
+    speciesGeneral: (initialData as any).speciesGeneral || (initialData as any).species || '',
+    speciesSpecific: (initialData as any).speciesSpecific || '',
     weight: undefined,
     length: undefined,
+    catchTime: '',
     spotId: '',
-    baitId: '',
-    techniqueId: '',
+    baitGeneral: (initialData as any).baitGeneral || (initialData as any).bait || '',
+    baitSpecific: (initialData as any).baitSpecific || '',
+    technique: (initialData as any).technique || '',
     notes: '',
+    moonPhase: '',
     status: 'complete',
     isPrivate: false,
     weather: {},
@@ -99,6 +121,15 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     baits: string[];
     techniques: string[];
   } | null>(null);
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrlRef.current) {
+        URL.revokeObjectURL(photoPreviewUrlRef.current);
+      }
+    };
+  }, []);
 
   const fetchData = async () => {
     if (!profile?.uid) return;
@@ -166,6 +197,37 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile?.uid) return;
+
+    // Revoke old preview URL
+    if (photoPreviewUrlRef.current) {
+      URL.revokeObjectURL(photoPreviewUrlRef.current);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    photoPreviewUrlRef.current = previewUrl;
+    setPhotoPreview(previewUrl);
+    setPhotoFile(file);
+
+    // Upload to Storage immediately for best UX — user sees preview right away
+    setIsUploading(true);
+    try {
+      const url = await uploadPhoto(profile.uid, 'catches', tempCatchId, file, 'main');
+      uploadedThisSession.current = true;
+      setFormData((prev) => ({ ...prev, mainImage: url, photoURL: url }));
+    } catch (err) {
+      console.error('Photo upload failed:', err);
+      toast.error('Foto upload mislukt. Probeer opnieuw.');
+      setPhotoFile(null);
+      setPhotoPreview('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleNext = () => setStep((s) => s + 1);
   const handleBack = () => setStep((s) => s - 1);
 
@@ -179,32 +241,31 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
       const finalData: Partial<Catch> & Record<string, any> = {
         ...formData,
+        id: tempCatchId,
         status: finalStatus,
 
-        /**
-         * v2-friendly fields
-         */
-        speciesGeneral: formData.species || (formData as any).speciesGeneral || '',
-        baitGeneral: formData.baitId || (formData as any).baitGeneral || '',
+        // v2-primary fields
+        speciesGeneral: formData.speciesGeneral || formData.species || '',
+        speciesSpecific: formData.speciesSpecific || '',
+        baitGeneral: formData.baitGeneral || '',
+        baitSpecific: formData.baitSpecific || '',
+        technique: formData.technique || '',
         mainImage: getCatchImage(formData),
         spotName: selectedSpot ? getSpotName(selectedSpot) : formData.spotName,
-        latitude: selectedSpot ? getSpotLat(selectedSpot) : (formData as any).latitude,
-        longitude: selectedSpot ? getSpotLng(selectedSpot) : (formData as any).longitude,
+        latitude: selectedSpot ? getSpotLat(selectedSpot) : formData.latitude,
+        longitude: selectedSpot ? getSpotLng(selectedSpot) : formData.longitude,
 
-        /**
-         * legacy compatibility fields
-         */
+        // legacy compat
+        species: formData.speciesGeneral || formData.species || '',
+        bait: formData.baitSpecific || formData.baitGeneral || '',
         photoURL: getCatchImage(formData),
         location:
           selectedSpot && getSpotLat(selectedSpot) != null && getSpotLng(selectedSpot) != null
-            ? {
-                lat: Number(getSpotLat(selectedSpot)),
-                lng: Number(getSpotLng(selectedSpot)),
-              }
+            ? { lat: Number(getSpotLat(selectedSpot)), lng: Number(getSpotLng(selectedSpot)) }
             : formData.location,
       };
 
-      let catchId = formData.id;
+      let catchId = (initialData as any).id;
       if (catchId) {
         await loggingService.updateCatch(catchId, finalData);
       } else {
@@ -221,9 +282,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
           formData.gear?.reelId,
           formData.gear?.lineId,
           formData.gear?.lureId,
-        ].filter(
-          (id): id is string => Boolean(id) && userGear.some((g) => g.id === id)
-        );
+        ].filter((id): id is string => Boolean(id) && userGear.some((g) => g.id === id));
 
         if (gearIdsToLink.length > 0) {
           gearService
@@ -232,12 +291,11 @@ export const CatchForm: React.FC<CatchFormProps> = ({
         }
       }
 
-      const xp = loggingService.calculateXP(finalData);
+      uploadedThisSession.current = false; // photo is now part of a saved catch — don't clean up
 
+      const xp = loggingService.calculateXP(finalData);
       toast.success(isDraft ? 'Concept opgeslagen!' : 'Vangst succesvol gelogd!', {
-        description: isDraft
-          ? 'Je kunt deze later afmaken.'
-          : `Je hebt +${xp} XP verdiend.`,
+        description: isDraft ? 'Je kunt deze later afmaken.' : `Je hebt +${xp} XP verdiend.`,
       });
 
       onComplete(catchId);
@@ -249,7 +307,15 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     }
   };
 
-  const handleQuickSelect = (field: keyof Catch, value: string) => {
+  const handleCancel = async () => {
+    // Clean up orphaned Storage photo if one was uploaded during this session
+    if (uploadedThisSession.current && formData.mainImage && !isBase64Image(formData.mainImage)) {
+      deletePhoto(formData.mainImage).catch(() => {});
+    }
+    onCancel();
+  };
+
+  const handleQuickSelect = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -262,6 +328,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
   ];
 
   const progress = (step / steps.length) * 100;
+  const currentMainImage = photoPreview || getCatchImage(formData);
 
   return (
     <Card
@@ -285,7 +352,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
             </div>
           </div>
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             className="p-2 text-text-muted hover:text-text-primary transition-colors"
           >
             <X className="w-6 h-6" />
@@ -305,6 +372,8 @@ export const CatchForm: React.FC<CatchFormProps> = ({
       {/* Form Content */}
       <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
         <AnimatePresence mode="wait">
+
+          {/* ──────────────────────────────────────── STEP 1 — De Vis */}
           {step === 1 && (
             <motion.div
               key="step1"
@@ -313,13 +382,16 @@ export const CatchForm: React.FC<CatchFormProps> = ({
               exit={{ opacity: 0, x: -20 }}
               className="space-y-8"
             >
+              {/* Species */}
               <div className="space-y-6">
                 <div className="space-y-4">
                   <Label>Welke vis heb je gevangen?</Label>
                   <div className="grid grid-cols-1 gap-4">
                     <Select
-                      value={formData.species}
-                      onValueChange={(val) => setFormData({ ...formData, species: val })}
+                      value={formData.speciesGeneral}
+                      onValueChange={(val) =>
+                        setFormData({ ...formData, speciesGeneral: val, species: val })
+                      }
                     >
                       <SelectTrigger className="h-14 rounded-2xl bg-bg-main border-border-subtle">
                         <SelectValue placeholder="Kies een vissoort..." />
@@ -335,11 +407,24 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
                     <Input
                       placeholder="Of typ handmatig..."
-                      value={formData.species}
+                      value={formData.speciesGeneral}
                       onChange={(e) =>
-                        setFormData({ ...formData, species: e.target.value })
+                        setFormData({
+                          ...formData,
+                          speciesGeneral: e.target.value,
+                          species: e.target.value,
+                        })
                       }
                       className="h-14 rounded-2xl bg-bg-main border-border-subtle"
+                    />
+
+                    <Input
+                      placeholder="Variant / Subsoort (optioneel)"
+                      value={formData.speciesSpecific}
+                      onChange={(e) =>
+                        setFormData({ ...formData, speciesSpecific: e.target.value })
+                      }
+                      className="h-12 rounded-2xl bg-bg-main border-border-subtle text-sm"
                     />
                   </div>
                 </div>
@@ -354,10 +439,10 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                         <button
                           key={s}
                           type="button"
-                          onClick={() => handleQuickSelect('species', s)}
+                          onClick={() => handleQuickSelect('speciesGeneral', s)}
                           className={cn(
                             'px-4 py-2 rounded-xl text-xs font-bold border transition-all',
-                            formData.species === s
+                            formData.speciesGeneral === s
                               ? 'bg-brand text-bg-main border-brand shadow-premium-accent'
                               : 'bg-surface-soft border-border-subtle text-text-secondary hover:border-brand/40'
                           )}
@@ -370,13 +455,25 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                 )}
               </div>
 
+              {/* Photo */}
               <div className="space-y-4">
                 <Label>Foto van je vangst</Label>
-                <div className="aspect-video w-full bg-surface-soft/30 border-2 border-dashed border-border-subtle rounded-3xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-brand/40 hover:bg-brand/5 transition-all overflow-hidden relative group">
-                  {getCatchImage(formData) ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-video w-full bg-surface-soft/30 border-2 border-dashed border-border-subtle rounded-3xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-brand/40 hover:bg-brand/5 transition-all overflow-hidden relative group"
+                >
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-3xl">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="w-8 h-8 text-brand animate-spin" />
+                        <p className="text-xs font-bold text-white">Uploaden...</p>
+                      </div>
+                    </div>
+                  )}
+                  {currentMainImage ? (
                     <>
                       <img
-                        src={getCatchImage(formData)}
+                        src={currentMainImage}
                         alt="Vangst"
                         className="w-full h-full object-cover"
                       />
@@ -396,20 +493,59 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                         <Camera className="w-8 h-8 text-brand" />
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-bold text-text-primary">
-                          Foto toevoegen
-                        </p>
-                        <p className="text-xs text-text-muted mt-1">
-                          Klik om een foto te kiezen
-                        </p>
+                        <p className="text-sm font-bold text-text-primary">Foto toevoegen</p>
+                        <p className="text-xs text-text-muted mt-1">Klik om een foto te kiezen</p>
                       </div>
                     </>
                   )}
                 </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                />
               </div>
+
+              {/* Privacy toggle */}
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((prev) => ({ ...prev, isPrivate: !prev.isPrivate }))
+                }
+                className={cn(
+                  'w-full flex items-center justify-between p-4 rounded-2xl border transition-all',
+                  formData.isPrivate
+                    ? 'bg-surface-soft border-brand/30 text-brand'
+                    : 'bg-surface-soft/30 border-border-subtle text-text-muted'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Lock className="w-4 h-4" />
+                  <span className="text-sm font-bold">
+                    {formData.isPrivate ? 'Privé vangst' : 'Openbaar (voor vrienden)'}
+                  </span>
+                </div>
+                <div
+                  className={cn(
+                    'w-10 h-5 rounded-full relative transition-all',
+                    formData.isPrivate ? 'bg-brand' : 'bg-surface-soft border border-border-subtle'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                      formData.isPrivate ? 'translate-x-5' : 'translate-x-0.5'
+                    )}
+                  />
+                </div>
+              </button>
             </motion.div>
           )}
 
+          {/* ──────────────────────────────────────── STEP 2 — Maten */}
           {step === 2 && (
             <motion.div
               key="step2"
@@ -427,7 +563,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                     type="number"
                     value={formData.weight || ''}
                     onChange={(e) =>
-                      setFormData({ ...formData, weight: Number(e.target.value) })
+                      setFormData({ ...formData, weight: Number(e.target.value) || undefined })
                     }
                     placeholder="Bijv. 1250"
                     className="text-2xl font-bold h-16 bg-bg-main border-border-subtle focus:border-brand rounded-2xl px-6"
@@ -441,12 +577,27 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                     type="number"
                     value={formData.length || ''}
                     onChange={(e) =>
-                      setFormData({ ...formData, length: Number(e.target.value) })
+                      setFormData({ ...formData, length: Number(e.target.value) || undefined })
                     }
                     placeholder="Bijv. 45"
                     className="text-2xl font-bold h-16 bg-bg-main border-border-subtle focus:border-brand rounded-2xl px-6"
                   />
                 </div>
+              </div>
+
+              {/* Catch time */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-brand" /> Vangst tijd (optioneel)
+                </Label>
+                <Input
+                  type="time"
+                  value={typeof formData.catchTime === 'string' ? formData.catchTime : ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, catchTime: e.target.value })
+                  }
+                  className="h-14 rounded-2xl bg-bg-main border-border-subtle text-lg font-bold"
+                />
               </div>
 
               <div className="p-6 bg-brand/5 border border-brand/10 rounded-3xl flex items-center gap-6">
@@ -457,14 +608,17 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                   <p className="text-sm font-bold text-text-primary">XP Schatting</p>
                   <p className="text-xs text-text-secondary mt-0.5">
                     Je verdient ongeveer{' '}
-                    <span className="text-brand font-black">+35 XP</span> met deze
-                    vangst.
+                    <span className="text-brand font-black">
+                      +{loggingService.calculateXP(formData)} XP
+                    </span>{' '}
+                    met deze vangst.
                   </p>
                 </div>
               </div>
             </motion.div>
           )}
 
+          {/* ──────────────────────────────────────── STEP 3 — Details */}
           {step === 3 && (
             <motion.div
               key="step3"
@@ -502,38 +656,55 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Input
-                    label="Aas"
-                    value={formData.baitId}
+                    label="Aastype"
+                    value={formData.baitGeneral}
                     onChange={(e) =>
-                      setFormData({ ...formData, baitId: e.target.value })
+                      setFormData({ ...formData, baitGeneral: e.target.value })
                     }
-                    placeholder="Bijv. Shads 10cm"
+                    placeholder="Bijv. Kunstaas"
                     className="h-14 rounded-2xl bg-bg-main border-border-subtle"
                   />
                   <Input
-                    label="Techniek"
-                    value={formData.techniqueId}
+                    label="Aas specifiek"
+                    value={formData.baitSpecific}
                     onChange={(e) =>
-                      setFormData({ ...formData, techniqueId: e.target.value })
+                      setFormData({ ...formData, baitSpecific: e.target.value })
                     }
-                    placeholder="Bijv. Verticalen"
+                    placeholder="Bijv. Shad 10cm, Roze"
                     className="h-14 rounded-2xl bg-bg-main border-border-subtle"
                   />
                 </div>
 
+                <Input
+                  label="Techniek"
+                  value={formData.technique}
+                  onChange={(e) => setFormData({ ...formData, technique: e.target.value })}
+                  placeholder="Bijv. Verticalen, Werpend"
+                  className="h-14 rounded-2xl bg-bg-main border-border-subtle"
+                />
+
                 <Textarea
                   label="Notities"
                   value={formData.notes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, notes: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Hoe was de dril? Wat viel op?"
                   className="rounded-2xl bg-bg-main border-border-subtle p-4"
                 />
+
+                {/* Session link info */}
+                {activeSessionId && (
+                  <div className="flex items-center gap-3 p-4 bg-brand/5 border border-brand/10 rounded-2xl">
+                    <Zap className="w-4 h-4 text-brand flex-shrink-0" />
+                    <p className="text-xs font-bold text-brand">
+                      Wordt gekoppeld aan actieve sessie
+                    </p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
 
+          {/* ──────────────────────────────────────── STEP 4 — Omgeving */}
           {step === 4 && (
             <motion.div
               key="step4"
@@ -601,18 +772,60 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          water: {
-                            ...formData.water,
-                            depth: Number(e.target.value),
-                          },
+                          water: { ...formData.water, depth: Number(e.target.value) || undefined },
                         })
                       }
                       className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
                     />
                   </div>
+
+                  <Select
+                    value={formData.water?.flow}
+                    onValueChange={(val) =>
+                      setFormData({
+                        ...formData,
+                        water: { ...formData.water, flow: val as any },
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs">
+                      <SelectValue placeholder="Stroming" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Geen</SelectItem>
+                      <SelectItem value="slow">Langzaam</SelectItem>
+                      <SelectItem value="medium">Matig</SelectItem>
+                      <SelectItem value="fast">Snel</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
+              {/* Moon phase */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Moon className="w-4 h-4 text-brand" /> Maanfase (optioneel)
+                </Label>
+                <Select
+                  value={typeof formData.moonPhase === 'string' ? formData.moonPhase : ''}
+                  onValueChange={(val) => setFormData({ ...formData, moonPhase: val })}
+                >
+                  <SelectTrigger className="h-12 rounded-xl bg-bg-main border-border-subtle">
+                    <SelectValue placeholder="Kies maanfase..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Onbekend —</SelectItem>
+                    <SelectItem value="new">Nieuwe maan</SelectItem>
+                    <SelectItem value="crescent">Wassende maan</SelectItem>
+                    <SelectItem value="half">Halve maan</SelectItem>
+                    <SelectItem value="gibbous">Bijna vol</SelectItem>
+                    <SelectItem value="full">Volle maan</SelectItem>
+                    <SelectItem value="waning">Afnemende maan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Gear */}
               <div className="space-y-4">
                 <Label className="flex items-center gap-2">
                   <Wrench className="w-4 h-4 text-brand" /> Visgear (optioneel)
@@ -624,13 +837,9 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                       value={formData.gear?.setupId || ''}
                       onValueChange={(val) => {
                         if (!val) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            gear: { ...prev.gear, setupId: '' },
-                          }));
+                          setFormData((prev) => ({ ...prev, gear: { ...prev.gear, setupId: '' } }));
                           return;
                         }
-
                         const setup = userSetups.find((s) => s.id === val);
                         if (setup) {
                           setFormData((prev) => ({
@@ -661,9 +870,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
 
                     {formData.gear?.setupId &&
                       (() => {
-                        const setup = userSetups.find(
-                          (s) => s.id === formData.gear?.setupId
-                        );
+                        const setup = userSetups.find((s) => s.id === formData.gear?.setupId);
                         const parts = [
                           setup?.rodId && userGear.find((g) => g.id === setup.rodId),
                           setup?.reelId && userGear.find((g) => g.id === setup.reelId),
@@ -673,9 +880,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                           .map((g: any) => `${g.brand} ${g.name}`);
 
                         return parts.length > 0 ? (
-                          <p className="text-[11px] text-text-muted px-1">
-                            {parts.join(' · ')}
-                          </p>
+                          <p className="text-[11px] text-text-muted px-1">{parts.join(' · ')}</p>
                         ) : null;
                       })()}
                   </div>
@@ -684,10 +889,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                     <Select
                       value={formData.gear?.rodId || ''}
                       onValueChange={(val) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          gear: { ...prev.gear, rodId: val },
-                        }))
+                        setFormData((prev) => ({ ...prev, gear: { ...prev.gear, rodId: val } }))
                       }
                     >
                       <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs">
@@ -708,10 +910,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                     <Select
                       value={formData.gear?.reelId || ''}
                       onValueChange={(val) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          gear: { ...prev.gear, reelId: val },
-                        }))
+                        setFormData((prev) => ({ ...prev, gear: { ...prev.gear, reelId: val } }))
                       }
                     >
                       <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs">
@@ -732,10 +931,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                     <Select
                       value={formData.gear?.lureId || ''}
                       onValueChange={(val) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          gear: { ...prev.gear, lureId: val },
-                        }))
+                        setFormData((prev) => ({ ...prev, gear: { ...prev.gear, lureId: val } }))
                       }
                     >
                       <SelectTrigger className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs col-span-2">
@@ -757,8 +953,9 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                   <div className="p-4 bg-surface-soft/50 border border-border-subtle rounded-2xl flex items-center gap-3">
                     <Wrench className="w-4 h-4 text-text-muted flex-shrink-0" />
                     <p className="text-xs text-text-muted">
-                      Nog geen gear in <span className="text-brand font-semibold">Mijn Visgear</span>.
-                      Voeg gear toe om het hier te koppelen.
+                      Nog geen gear in{' '}
+                      <span className="text-brand font-semibold">Mijn Visgear</span>. Voeg gear toe
+                      om het hier te koppelen.
                     </p>
                   </div>
                 )}
@@ -766,6 +963,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
             </motion.div>
           )}
 
+          {/* ──────────────────────────────────────── STEP 5 — Review */}
           {step === 5 && (
             <motion.div
               key="step5"
@@ -791,17 +989,54 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                       Vissoort
                     </p>
                     <p className="text-sm font-bold text-text-primary truncate">
-                      {formData.species || 'Onbekend'}
+                      {formData.speciesGeneral || 'Onbekend'}
                     </p>
+                    {formData.speciesSpecific && (
+                      <p className="text-xs text-text-muted truncate mt-0.5">
+                        {formData.speciesSpecific}
+                      </p>
+                    )}
                   </div>
                   <div className="p-4 bg-bg-main rounded-2xl border border-border-subtle">
                     <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">
                       Maten
                     </p>
                     <p className="text-sm font-bold text-text-primary">
-                      {formData.length || '--'}cm • {formData.weight || '--'}g
+                      {formData.length || '--'}cm · {formData.weight || '--'}g
                     </p>
+                    {formData.catchTime && (
+                      <p className="text-xs text-text-muted mt-0.5">{formData.catchTime}</p>
+                    )}
                   </div>
+                  {formData.spotId && (
+                    <div className="p-4 bg-bg-main rounded-2xl border border-border-subtle">
+                      <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">
+                        Stek
+                      </p>
+                      <p className="text-sm font-bold text-text-primary truncate">
+                        {getSpotName(spotsList.find((s) => s.id === formData.spotId))}
+                      </p>
+                    </div>
+                  )}
+                  {formData.baitGeneral && (
+                    <div className="p-4 bg-bg-main rounded-2xl border border-border-subtle">
+                      <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1">
+                        Aas
+                      </p>
+                      <p className="text-sm font-bold text-text-primary truncate">
+                        {formData.baitSpecific || formData.baitGeneral}
+                      </p>
+                    </div>
+                  )}
+                  {currentMainImage && (
+                    <div className="col-span-2 rounded-2xl overflow-hidden h-32 border border-border-subtle">
+                      <img
+                        src={currentMainImage}
+                        alt="Vangst preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -826,7 +1061,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
       <div className="p-6 md:p-8 bg-surface-soft/40 border-t border-border-subtle flex items-center justify-between flex-shrink-0">
         <Button
           variant="ghost"
-          onClick={step === 1 ? onCancel : handleBack}
+          onClick={step === 1 ? handleCancel : handleBack}
           disabled={loading}
           className="text-text-muted hover:text-text-primary font-bold"
         >
@@ -850,6 +1085,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
             className="px-8 h-14 rounded-xl shadow-premium-accent font-bold"
             onClick={step === steps.length ? () => handleSubmit(false) : handleNext}
             isLoading={loading}
+            disabled={isUploading}
             icon={
               step === steps.length ? (
                 <Check className="w-5 h-5" />
@@ -858,7 +1094,7 @@ export const CatchForm: React.FC<CatchFormProps> = ({
               )
             }
           >
-            {step === steps.length ? 'Opslaan' : 'Volgende'}
+            {isUploading ? 'Foto uploaden...' : step === steps.length ? 'Opslaan' : 'Volgende'}
           </Button>
         </div>
       </div>

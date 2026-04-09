@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Play,
-  MapPin,
   Waves,
   ChevronRight,
   ChevronLeft,
@@ -12,11 +11,14 @@ import {
   History,
   Zap,
   Save,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import { Button } from './ui/Base';
 import { Input, Select, Textarea } from './ui/Inputs';
 import { motion, AnimatePresence } from 'motion/react';
 import { loggingService } from '../features/logging/services/loggingService';
+import { uploadPhoto } from '../lib/storageUtils';
 import { useAuth } from '../App';
 import { toast } from 'sonner';
 import { db } from '../lib/firebase';
@@ -60,6 +62,19 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
   const [step, setStep] = useState(1);
   const [spots, setSpots] = useState<Spot[]>([]);
   const [weather, setWeather] = useState<any>(null);
+  const [tempSessionId] = useState(() => crypto.randomUUID());
+
+  // Photo upload state
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string>('');
+  const [mainImage, setMainImage] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string>('');
+
+  const now = new Date();
+  const nowIso = now.toISOString().slice(0, 16);
+  const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -68,8 +83,8 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
     method: 'Kantvissen',
     targetSpecies: '',
     notes: '',
-    startTime: new Date().toISOString().slice(0, 16),
-    endTime: new Date().toISOString().slice(0, 16),
+    startTime: nowIso,
+    endTime: twoHoursLater,
     visibility: 'public' as 'public' | 'friends' | 'private',
     gearIds: [] as string[],
     participantIds: [] as string[],
@@ -134,7 +149,8 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
       const selectedSpot = spots.find((s) => s.id === formData.spotId);
       const spotName = getSpotTitle(selectedSpot);
 
-      const sessionData: Partial<Session> = {
+      const sessionData: Partial<Session> & Record<string, any> = {
+        id: tempSessionId, // ensures Storage path matches Firestore document ID
         /**
          * v2-first session fields
          */
@@ -163,9 +179,10 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
         visibility: formData.visibility,
         linkedGearIds: formData.gearIds,
         gearIds: formData.gearIds,
+        mainImage: mainImage || undefined,
         metadata: {
           method: formData.method,
-          waterType: (selectedSpot as any)?.waterType || 'Onbekend',
+          waterType: (selectedSpot as any)?.waterType || undefined,
           targetSpecies: formData.targetSpecies ? [formData.targetSpecies] : [],
         },
 
@@ -216,6 +233,30 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
       toast.error('Fout bij aanmaken van sessie.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile?.uid) return;
+
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const previewUrl = URL.createObjectURL(file);
+    previewUrlRef.current = previewUrl;
+    setPhotoPreview(previewUrl);
+    setPhotoFile(file);
+
+    setIsUploading(true);
+    try {
+      const url = await uploadPhoto(profile.uid, 'sessions', tempSessionId, file, 'main');
+      setMainImage(url);
+    } catch (err) {
+      console.error('Session photo upload failed:', err);
+      toast.error('Foto upload mislukt.');
+      setPhotoFile(null);
+      setPhotoPreview('');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -391,6 +432,39 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
                     </div>
                   </div>
                 )}
+
+                {/* Session photo */}
+                <div className="space-y-2 sm:space-y-3">
+                  <label className="text-[9px] sm:text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">
+                    Foto (optioneel)
+                  </label>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="relative h-28 sm:h-36 rounded-2xl border-2 border-dashed border-border-subtle bg-surface-soft/30 flex items-center justify-center cursor-pointer hover:border-accent/40 transition-all overflow-hidden group"
+                  >
+                    {isUploading && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                        <Loader2 className="w-6 h-6 text-accent animate-spin" />
+                      </div>
+                    )}
+                    {photoPreview ? (
+                      <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-text-muted group-hover:text-accent transition-colors">
+                        <Camera className="w-6 h-6" />
+                        <span className="text-xs font-bold">Foto toevoegen</span>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                  />
+                </div>
               </motion.div>
             )}
 
@@ -521,9 +595,9 @@ export const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) =
                     <p className="text-xs sm:text-sm text-text-secondary leading-relaxed font-medium">
                       Nodig vrienden uit om samen te loggen en XP te delen.
                     </p>
-                    <button className="mt-1 sm:mt-2 text-[10px] sm:text-xs font-bold text-water hover:underline">
-                      Vrienden toevoegen +
-                    </button>
+                    <p className="text-[9px] sm:text-[10px] text-water/60 mt-1">
+                      Na aanmaken kun je vrienden uitnodigen vanuit de sessie.
+                    </p>
                   </div>
                 </div>
               </motion.div>

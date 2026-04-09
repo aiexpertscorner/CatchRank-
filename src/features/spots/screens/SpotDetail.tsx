@@ -56,13 +56,21 @@ function computeInsights(catches: Catch[]): SpotInsights {
     return { bestHour: null, topBait: null, topTechnique: null, avgWeight: null, personalRecord: null, successRate: 0 };
   }
 
-  // Best hour
+  // Best hour — supports catchTime as HH:MM string, Firestore Timestamp, or fallback to session timestamp
   const hourCounts: Record<number, number> = {};
   catches.forEach(c => {
-    if (c.timestamp?.toDate) {
-      const h = c.timestamp.toDate().getHours();
-      hourCounts[h] = (hourCounts[h] || 0) + 1;
+    let h: number | null = null;
+    if (c.catchTime) {
+      if (typeof c.catchTime === 'string' && /^\d{1,2}:\d{2}$/.test(c.catchTime)) {
+        h = parseInt(c.catchTime.split(':')[0], 10);
+      } else if (typeof (c.catchTime as any)?.toDate === 'function') {
+        h = (c.catchTime as any).toDate().getHours();
+      }
     }
+    if (h === null && c.timestamp?.toDate) {
+      h = c.timestamp.toDate().getHours();
+    }
+    if (h !== null) hourCounts[h] = (hourCounts[h] || 0) + 1;
   });
   const bestHour = Object.keys(hourCounts).length > 0
     ? Number(Object.keys(hourCounts).reduce((a, b) => hourCounts[Number(a)] >= hourCounts[Number(b)] ? a : b))

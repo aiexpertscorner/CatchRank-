@@ -1,6 +1,7 @@
 import {
   collection,
   addDoc,
+  setDoc,
   updateDoc,
   doc,
   serverTimestamp,
@@ -112,42 +113,75 @@ const mapSpotLatLng = (data: Partial<Spot>) => {
 };
 
 export const loggingService = {
+  /**
+   * Save a quick catch with a pre-generated ID.
+   *
+   * @param userId     — authenticated user ID
+   * @param catchId    — pre-generated UUID (used as Firestore doc ID and Storage path)
+   * @param mainImage  — already-uploaded Firebase Storage URL, or undefined if no photo
+   * @param speciesGeneral — optional species already selected in quick-form
+   * @param spotId     — optional spot link
+   * @param location   — optional GPS coordinates (from navigator.geolocation)
+   */
   async quickCatch(
     userId: string,
-    photoURL: string,
+    catchId: string,
+    mainImage?: string,
+    speciesGeneral?: string,
     spotId?: string,
     location?: LatLng
   ): Promise<string> {
     const xpEarned = 10;
 
-    const catchData = {
+    const incompleteFields = [
+      !speciesGeneral ? 'speciesGeneral' : '',
+      'weight',
+      'length',
+      !spotId ? 'spotId' : '',
+      !mainImage ? 'mainImage' : '',
+    ].filter(Boolean);
+
+    const catchData: Record<string, any> = {
+      id: catchId,
       userId,
-      mainImage: photoURL,
-      photoURL,
+      mainImage: mainImage || null,
+      photoURL: mainImage || null,
       extraImages: [],
-      latitude: location?.lat,
-      longitude: location?.lng,
-      location: location ? { lat: location.lat, lng: location.lng } : undefined,
+      speciesGeneral: speciesGeneral || null,
+      species: speciesGeneral || null,
+      latitude: location?.lat ?? null,
+      longitude: location?.lng ?? null,
+      location: location ? { lat: location.lat, lng: location.lng } : null,
       spotId: spotId || null,
       timestamp: serverTimestamp(),
-      catchTime: serverTimestamp(),
+      catchTime: null,
       status: 'draft',
-      incompleteFields: ['speciesGeneral', 'weight', 'length', !spotId ? 'spotId' : '']
-        .filter(Boolean),
+      incompleteFields,
       xpEarned,
       schemaVersion: 2,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     };
 
-    const docRef = await addDoc(collection(db, COLLECTIONS.CATCHES), catchData);
-    await updateDoc(doc(db, COLLECTIONS.CATCHES, docRef.id), { id: docRef.id });
+    // Remove explicit nulls so Firestore fields stay clean
+    Object.keys(catchData).forEach((key) => {
+      if (catchData[key] === null) delete catchData[key];
+    });
+
+    await setDoc(doc(db, COLLECTIONS.CATCHES, catchId), catchData);
 
     xpService.addXpToUser(userId, xpEarned).catch((err) =>
       console.error('XP award failed (quickCatch):', err)
     );
 
-    return docRef.id;
+    return catchId;
   },
 
+  /**
+   * Create a catch. If data.id is provided it is used as the Firestore document ID
+   * (required when a photo was pre-uploaded to Storage using that ID as the entity ID).
+   * Otherwise a new UUID is generated client-side.
+   */
   async createCatch(userId: string, data: Partial<Catch>): Promise<string> {
     const incompleteFields = this.calculateIncompleteFields(data);
     const xpEarned = this.calculateXP(data);
@@ -235,8 +269,12 @@ export const loggingService = {
       if (catchData[key] === undefined) delete catchData[key];
     });
 
-    const docRef = await addDoc(collection(db, COLLECTIONS.CATCHES), catchData);
-    await updateDoc(doc(db, COLLECTIONS.CATCHES, docRef.id), { id: docRef.id });
+    // Use a pre-generated ID if provided (photo was already uploaded to Storage under this ID)
+    // Otherwise generate one client-side so no second write is needed for the `id` field.
+    const catchId = (data as any).id || crypto.randomUUID();
+    catchData.id = catchId;
+
+    await setDoc(doc(db, COLLECTIONS.CATCHES, catchId), catchData);
 
     if (status === 'complete' && xpEarned > 0) {
       xpService.addXpToUser(userId, xpEarned).catch((err) =>
@@ -245,7 +283,7 @@ export const loggingService = {
       bustStatsCache(userId);
     }
 
-    return docRef.id;
+    return catchId;
   },
 
   async updateCatch(catchId: string, data: Partial<Catch>, userId?: string): Promise<void> {
@@ -392,8 +430,9 @@ export const loggingService = {
       if (spotData[key] === undefined) delete spotData[key];
     });
 
-    const docRef = await addDoc(collection(db, COLLECTIONS.SPOTS), spotData);
-    return docRef.id;
+    const spotId = (data as any).id || crypto.randomUUID();
+    await setDoc(doc(db, COLLECTIONS.SPOTS, spotId), { ...spotData, id: spotId });
+    return spotId;
   },
 
   async updateSpot(spotId: string, data: Partial<Spot>): Promise<void> {
@@ -424,7 +463,7 @@ export const loggingService = {
           }
         : {}),
 
-      ...(data.targetSpecies !== undefined ? { targetSpecies: data.targetSpecies } : {}),
+      ...(data.targetSpecies !== undefined ? { targetSpecies: data.targetSpecies, species: data.targetSpecies } : {}),
       ...(data.techniques !== undefined ? { techniques: data.techniques } : {}),
       ...(data.amenities !== undefined ? { amenities: data.amenities } : {}),
 
@@ -434,6 +473,16 @@ export const loggingService = {
       ...(normalizeString(firstDefined(data.waterType, (data as any).water_type)) !== undefined
         ? { waterType: normalizeString(firstDefined(data.waterType, (data as any).water_type)) }
         : {}),
+      ...(normalizeString(firstDefined((data as any).waterSize, (data as any).water_size)) !== undefined
+        ? { waterSize: normalizeString(firstDefined((data as any).waterSize, (data as any).water_size)) }
+        : {}),
+      ...(normalizeString(firstDefined((data as any).spotSize, (data as any).spot_size)) !== undefined
+        ? { spotSize: normalizeString(firstDefined((data as any).spotSize, (data as any).spot_size)) }
+        : {}),
+      ...((data as any).nightFishingAllowed !== undefined
+        ? { nightFishingAllowed: (data as any).nightFishingAllowed }
+        : {}),
+      ...((data as any).radius !== undefined ? { radius: (data as any).radius } : {}),
 
       ...(firstDefined((data as any).mainImage, data.mainPhotoURL) !== undefined
         ? {
@@ -441,6 +490,7 @@ export const loggingService = {
             mainPhotoURL: firstDefined(data.mainPhotoURL, (data as any).mainImage),
           }
         : {}),
+      ...(data.extraImages !== undefined ? { extraImages: data.extraImages } : {}),
 
       updatedAt: serverTimestamp(),
     };
@@ -548,8 +598,12 @@ export const loggingService = {
       if (sessionData[key] === undefined) delete sessionData[key];
     });
 
-    const docRef = await addDoc(collection(db, COLLECTIONS.SESSIONS), sessionData);
-    return docRef.id;
+    // Use pre-generated ID if provided (photo was already uploaded to Storage under this ID)
+    const sessionId = (data as any).id || crypto.randomUUID();
+    sessionData.id = sessionId;
+
+    await setDoc(doc(db, COLLECTIONS.SESSIONS, sessionId), sessionData);
+    return sessionId;
   },
 
   async searchUsers(searchTerm: string): Promise<UserProfile[]> {
