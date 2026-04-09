@@ -23,8 +23,10 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
-import { Card, Button, Badge } from '../../../components/ui/Base';
-import { weatherService } from '../services/weatherService';
+import { Card } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
+import { Badge } from '../../../components/ui/Badge';
+import { weatherService } from '../../services/weather/weatherService';
 import { useAuth } from '../../../App';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
