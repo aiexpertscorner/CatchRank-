@@ -9,7 +9,7 @@ import {
   updateDoc,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { useAuth } from '../App';
 import { Session } from '../types';
 import { toast } from 'sonner';
@@ -65,39 +65,59 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     setLoading(true);
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
 
-    /**
-     * v2 truth:
-     * - collection: sessions_v2
-     * - active state: isActive === true
-     * - participant field: participantIds
-     */
-    const q = query(
-      collection(db, SESSIONS_COLLECTION),
-      where('participantIds', 'array-contains', profile.uid),
-      where('isActive', '==', true),
-      limit(1)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const sessionDoc = snapshot.docs[0];
-          setActiveSession({ id: sessionDoc.id, ...sessionDoc.data() } as Session);
-        } else {
-          setActiveSession(null);
+    // Ensure the Firestore auth token is ready before subscribing.
+    // Without this, the snapshot listener can fire before the Firebase
+    // auth token is propagated and throws "Missing or insufficient permissions".
+    const subscribe = async () => {
+      try {
+        if (auth.currentUser) {
+          await auth.currentUser.getIdToken();
         }
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Session listener error:', error);
-        setActiveSession(null);
-        setLoading(false);
+      } catch {
+        // Token fetch failed — proceed anyway; worst case the listener retries.
       }
-    );
 
-    return () => unsubscribe();
+      if (cancelled) return;
+
+      const q = query(
+        collection(db, SESSIONS_COLLECTION),
+        where('participantIds', 'array-contains', profile.uid),
+        where('isActive', '==', true),
+        limit(1)
+      );
+
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const sessionDoc = snapshot.docs[0];
+            setActiveSession({ id: sessionDoc.id, ...sessionDoc.data() } as Session);
+          } else {
+            setActiveSession(null);
+          }
+          setLoading(false);
+        },
+        (error) => {
+          // Only log unexpected errors — permission errors are usually transient
+          // (token not yet propagated) and resolve on next auth cycle.
+          if ((error as any)?.code !== 'permission-denied') {
+            console.error('Session listener error:', error);
+          }
+          setActiveSession(null);
+          setLoading(false);
+        }
+      );
+    };
+
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [profile?.uid]);
 
   const endActiveSession = async () => {
