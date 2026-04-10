@@ -82,27 +82,29 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (cancelled) return;
 
+      // Single-field array-contains query — uses automatic single-field index,
+      // no composite index required. isActive is filtered client-side to keep
+      // the query simple and avoid Firestore compound-query permission issues.
       const q = query(
         collection(db, SESSIONS_COLLECTION),
         where('participantIds', 'array-contains', profile.uid),
-        where('isActive', '==', true),
-        limit(1)
+        limit(5)
       );
 
       unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          if (!snapshot.empty) {
-            const sessionDoc = snapshot.docs[0];
-            setActiveSession({ id: sessionDoc.id, ...sessionDoc.data() } as Session);
+          const activeDoc = snapshot.docs.find((d) => d.data().isActive === true);
+          if (activeDoc) {
+            setActiveSession({ id: activeDoc.id, ...activeDoc.data() } as Session);
           } else {
             setActiveSession(null);
           }
           setLoading(false);
         },
         (error) => {
-          // Only log unexpected errors — permission errors are usually transient
-          // (token not yet propagated) and resolve on next auth cycle.
+          // Only log unexpected errors — permission-denied can be transient
+          // (Firestore auth token not yet propagated after sign-in).
           if ((error as any)?.code !== 'permission-denied') {
             console.error('Session listener error:', error);
           }
