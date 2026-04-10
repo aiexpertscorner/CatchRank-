@@ -65,7 +65,7 @@ export const LEVEL_CONFIG: LevelConfig[] = [
 export const MAX_LEVEL = LEVEL_CONFIG.length;
 
 /**
- * XP bonus by species rarity tier.
+ * XP bonus by species general category (rarity tier).
  * Maps common Dutch sport fish to an extra XP bonus on top of the catch base.
  */
 const SPECIES_XP_BONUS: Record<string, number> = {
@@ -82,11 +82,46 @@ const SPECIES_XP_BONUS: Record<string, number> = {
 };
 
 /**
- * Returns extra XP bonus based on species rarity.
+ * XP bonus for specific species variants (on top of general bonus).
+ * Rewards catching rare or notable variants of common species.
+ */
+const SPECIES_SPECIFIC_XP_BONUS: Record<string, number> = {
+  // Carp variants
+  'wilde karper': 8,
+  'spiegelkarper': 5,
+  'lederkarper': 7,
+  'grasskarper': 4,
+  'koikarper': 3,
+  // Pike-perch variants
+  'spiegelsnoekbaars': 5,
+  // Trout variants
+  'regenboogforel': 3,
+  'beekforel': 5,
+  'zeeforel': 8,
+  'meerforel': 6,
+  // Catfish
+  'europese meerval': 20,
+  'amerikaanse hondsvis': 5,
+  // Bass / other
+  'grote mond baars': 8,
+  'kleine mond baars': 6,
+  'zeebaars': 12,
+  // Pike
+  'snoek': 8,
+};
+
+/**
+ * Returns extra XP bonus based on species.
+ * Checks speciesSpecific first (more precise), falls through to speciesGeneral.
  * Case-insensitive match against Dutch common names.
  */
-export function getSpeciesXpBonus(speciesName: string): number {
-  const key = speciesName.toLowerCase().trim();
+export function getSpeciesXpBonus(speciesGeneral: string, speciesSpecific?: string): number {
+  if (speciesSpecific) {
+    const specificKey = speciesSpecific.toLowerCase().trim();
+    const specificBonus = SPECIES_SPECIFIC_XP_BONUS[specificKey];
+    if (specificBonus !== undefined) return specificBonus;
+  }
+  const key = speciesGeneral.toLowerCase().trim();
   return SPECIES_XP_BONUS[key] ?? 0;
 }
 

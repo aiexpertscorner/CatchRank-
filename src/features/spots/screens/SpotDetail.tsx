@@ -33,6 +33,7 @@ import { Spot, Catch, Session } from '../../../types';
 import { loggingService } from '../../logging/services/loggingService';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
+import { LazyImage } from '../../../components/ui/LazyImage';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { SpotModal } from '../../../components/SpotModal';
@@ -76,16 +77,22 @@ function computeInsights(catches: Catch[]): SpotInsights {
     ? Number(Object.keys(hourCounts).reduce((a, b) => hourCounts[Number(a)] >= hourCounts[Number(b)] ? a : b))
     : null;
 
-  // Top bait
+  // Top bait — prefer speciesSpecific bait over general
   const baitCounts: Record<string, number> = {};
-  catches.forEach(c => { if (c.bait) baitCounts[c.bait] = (baitCounts[c.bait] || 0) + 1; });
+  catches.forEach(c => {
+    const bait = (c as any).baitSpecific || (c as any).baitGeneral || c.bait;
+    if (bait) baitCounts[bait] = (baitCounts[bait] || 0) + 1;
+  });
   const topBait = Object.keys(baitCounts).length > 0
     ? Object.keys(baitCounts).reduce((a, b) => baitCounts[a] >= baitCounts[b] ? a : b)
     : null;
 
   // Top technique
   const techCounts: Record<string, number> = {};
-  catches.forEach(c => { if (c.technique) techCounts[c.technique] = (techCounts[c.technique] || 0) + 1; });
+  catches.forEach(c => {
+    const tech = c.technique || (c as any).techniqueId;
+    if (tech) techCounts[tech] = (techCounts[tech] || 0) + 1;
+  });
   const topTechnique = Object.keys(techCounts).length > 0
     ? Object.keys(techCounts).reduce((a, b) => techCounts[a] >= techCounts[b] ? a : b)
     : null;
@@ -349,11 +356,11 @@ export default function SpotDetail() {
 
         {/* Hero Section */}
         <section className="relative h-64 md:h-96 rounded-[2.5rem] overflow-hidden group">
-          <img
-            src={spot.mainPhotoURL || `https://picsum.photos/seed/${spot.id}/1920/1080`}
-            alt={spot.title || spot.name}
-            className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-            referrerPolicy="no-referrer"
+          <LazyImage
+            src={(spot as any).mainImage || spot.mainPhotoURL}
+            alt={spot.title || spot.name || 'Stek'}
+            wrapperClassName="w-full h-full group-hover:scale-105 transition-transform duration-1000"
+            objectFit="cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-bg-main via-bg-main/20 to-transparent" />
 
@@ -530,28 +537,27 @@ export default function SpotDetail() {
                     >
                       <div className="flex h-24">
                         <div className="w-24 h-full shrink-0 relative overflow-hidden bg-surface-soft">
-                          {c.photoURL ? (
-                            <img
-                              src={c.photoURL}
-                              alt={(c as any).speciesGeneral || c.species || ''}
-                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-text-muted/20">
-                              <Fish className="w-8 h-8" />
-                            </div>
-                          )}
+                          <LazyImage
+                            src={(c as any).mainImage || c.photoURL}
+                            alt={(c as any).speciesSpecific || (c as any).speciesGeneral || c.species || ''}
+                            wrapperClassName="w-full h-full"
+                            className="group-hover:scale-110 transition-transform duration-500"
+                          />
                         </div>
                         <div className="flex-1 p-4 flex flex-col justify-center">
-                          <h4 className="font-bold text-text-primary truncate">{(c as any).speciesGeneral || c.species || '–'}</h4>
+                          <h4 className="font-bold text-text-primary truncate">
+                            {(c as any).speciesSpecific || (c as any).speciesGeneral || c.species || '–'}
+                          </h4>
                           <div className="flex items-center gap-2 text-xs text-text-muted mt-1">
                             {c.length && <span>{c.length}cm</span>}
                             {c.weight && <span>{(c.weight / 1000).toFixed(2)}kg</span>}
                             <span>•</span>
                             <span>{format(c.timestamp?.toDate() || new Date(), 'd MMM', { locale: nl })}</span>
                           </div>
-                          {c.bait && (
-                            <div className="text-[9px] text-text-dim mt-1 font-bold uppercase tracking-wider truncate">{c.bait}</div>
+                          {((c as any).baitSpecific || (c as any).baitGeneral || c.bait) && (
+                            <div className="text-[9px] text-text-dim mt-1 font-bold uppercase tracking-wider truncate">
+                              {(c as any).baitSpecific || (c as any).baitGeneral || c.bait}
+                            </div>
                           )}
                         </div>
                       </div>

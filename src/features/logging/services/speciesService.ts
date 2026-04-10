@@ -1,4 +1,4 @@
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Species } from '../../../types';
 
@@ -55,5 +55,26 @@ export const speciesService = {
    */
   getCommonSpecies(): Species[] {
     return COMMON_SPECIES;
-  }
+  },
+
+  /**
+   * Fetch a single species by document ID.
+   * Returns undefined if not found.
+   */
+  async getSpeciesById(id: string): Promise<Species | undefined> {
+    try {
+      const snap = await getDoc(doc(db, 'species', id));
+      if (!snap.exists()) return undefined;
+      const data = snap.data();
+      return {
+        id: snap.id,
+        ...data,
+        name: data.name_nl ?? data.name ?? snap.id,
+        scientificName: data.name_latin ?? data.scientificName,
+        xpValue: data.xp_base ?? data.xpValue,
+      } as Species;
+    } catch {
+      return undefined;
+    }
+  },
 };

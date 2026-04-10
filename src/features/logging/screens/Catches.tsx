@@ -10,6 +10,7 @@ import {
   Trash2,
   Camera
 } from 'lucide-react';
+import { LazyImage } from '../../../components/ui/LazyImage';
 import { useAuth } from '../../../App';
 import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
@@ -299,21 +300,13 @@ export default function Catches() {
                       onClick={() => c.id && navigate(`/catches/${c.id}`)}
                     >
                       <div className="aspect-square relative overflow-hidden bg-surface-soft">
-                        {imageSrc ? (
-                          <img
-                            src={imageSrc}
-                            alt={species}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                            loading="lazy"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-text-muted/20">
-                            <Fish className="w-12 h-12" />
-                          </div>
-                        )}
+                        <LazyImage
+                          src={imageSrc}
+                          alt={species}
+                          wrapperClassName="w-full h-full"
+                          className="group-hover:scale-110 transition-transform duration-700"
+                          fallbackIconSize={48}
+                        />
 
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
 
@@ -391,21 +384,12 @@ export default function Catches() {
                       onClick={() => c.id && navigate(`/catches/${c.id}`)}
                     >
                       <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-soft flex-shrink-0 border border-border-subtle">
-                        {imageSrc ? (
-                          <img
-                            src={imageSrc}
-                            alt={species}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-text-muted/20">
-                            <Fish className="w-8 h-8" />
-                          </div>
-                        )}
+                        <LazyImage
+                          src={imageSrc}
+                          alt={species}
+                          wrapperClassName="w-full h-full"
+                          fallbackIconSize={32}
+                        />
                       </div>
 
                       <div className="flex-1 min-w-0">

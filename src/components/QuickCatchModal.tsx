@@ -39,6 +39,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [selectedSpecies, setSelectedSpecies] = useState<string>('');
+  const [speciesSpecific, setSpeciesSpecific] = useState<string>('');
   const [suggestedSpecies, setSuggestedSpecies] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -110,6 +111,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
         catchId,
         mainImageUrl,
         selectedSpecies || undefined,
+        speciesSpecific || undefined,
         sessionSpotId
       );
 
@@ -140,6 +142,7 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
     setPhotoFile(null);
     setPhotoPreview('');
     setSelectedSpecies('');
+    setSpeciesSpecific('');
     setLoading(false);
     setIsUploading(false);
     if (previewUrlRef.current) {
@@ -326,11 +329,11 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                     </div>
 
                     {/* Quick species chips */}
-                    {suggestedSpecies.length > 0 && (
-                      <div className="space-y-3">
-                        <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">
-                          Wat voor vis? (optioneel)
-                        </p>
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+                        Wat voor vis? (optioneel)
+                      </p>
+                      {suggestedSpecies.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                           {suggestedSpecies.map((s) => (
                             <button
@@ -346,8 +349,16 @@ export const QuickCatchModal: React.FC<QuickCatchModalProps> = ({
                             </button>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      )}
+                      {/* Species specific — optional variant */}
+                      <input
+                        type="text"
+                        value={speciesSpecific}
+                        onChange={(e) => setSpeciesSpecific(e.target.value)}
+                        placeholder="Specifieke variant bijv. Spiegelsnoekbaars (optioneel)"
+                        className="w-full bg-surface-soft border border-border-subtle rounded-xl px-3 py-2 text-xs text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-accent/60 transition-colors"
+                      />
+                    </div>
 
                     <div className="space-y-4 sm:space-y-5">
                       <div className="flex items-start gap-4 sm:gap-5 p-5 sm:p-6 bg-warning/5 border border-warning/10 rounded-[1.5rem] sm:rounded-[2rem]">

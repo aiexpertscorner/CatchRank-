@@ -53,6 +53,7 @@ import { Catch, Spot } from '../../../types';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { CatchForm } from '../../../components/CatchForm';
+import { LazyImage } from '../../../components/ui/LazyImage';
 
 type CatchWithMeta = Catch & {
   speciesGeneral?: string;
@@ -535,7 +536,7 @@ export default function CatchDetail() {
                           : 'border-border-subtle'
                       }`}
                     >
-                      <img src={img} alt={`Galerij ${index + 1}`} className="w-full h-full object-cover" />
+                      <LazyImage src={img} alt={`Galerij ${index + 1}`} className="rounded-2xl" wrapperClassName="w-full h-full" />
                     </button>
                   ))}
                 </div>
@@ -616,11 +617,33 @@ export default function CatchDetail() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   {keyLabel('Specifiek aas', baitName || '—')}
                   {keyLabel('Aasgroep', baitGroup || '—')}
-                  {keyLabel('Aas ID', catchData.baitId || '—')}
                   {keyLabel('Techniek', techniqueName || '—')}
-                  {keyLabel('Techniek ID', catchData.techniqueId || '—')}
                 </div>
               </Card>
+
+              {((catchData as any).gearSetupId || ((catchData as any).gearIds?.length ?? 0) > 0) && (
+                <Card className="rounded-[1.75rem] border border-border-subtle bg-surface-card p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Anchor className="w-4 h-4 text-accent" />
+                    <h3 className="text-xs font-black text-text-muted uppercase tracking-[0.2em]">
+                      Mijn Visgear
+                    </h3>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {keyLabel('Setup ID', (catchData as any).gearSetupId || '—')}
+                    {((catchData as any).gearIds?.length ?? 0) > 0 && (
+                      <div className="rounded-2xl border border-border-subtle bg-surface-soft px-3 py-3 sm:col-span-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-text-muted mb-1">
+                          Gekoppelde items
+                        </p>
+                        <p className="text-sm font-bold text-text-primary">
+                          {(catchData as any).gearIds.length} item(s)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
 
               {(catchData.notes || videoPath) && (
                 <Card className="rounded-[1.75rem] border border-border-subtle bg-surface-card p-5">
@@ -672,7 +695,7 @@ export default function CatchDetail() {
                         }}
                         className="aspect-square rounded-2xl overflow-hidden border border-border-subtle bg-surface-soft"
                       >
-                        <img src={img} alt={`Catch ${index + 1}`} className="w-full h-full object-cover" />
+                        <LazyImage src={img} alt={`Catch ${index + 1}`} wrapperClassName="w-full h-full" />
                       </button>
                     ))}
                   </div>
@@ -709,17 +732,7 @@ export default function CatchDetail() {
                           onClick={() => navigate(`/catches/${c.id}`)}
                           className="relative aspect-square rounded-[1.5rem] overflow-hidden border border-border-subtle bg-surface-card text-left"
                         >
-                          {relImage ? (
-                            <img
-                              src={relImage}
-                              alt={relSpecies}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-surface-soft">
-                              <Fish className="w-10 h-10 text-accent/25" />
-                            </div>
-                          )}
+                          <LazyImage src={relImage} alt={relSpecies} wrapperClassName="w-full h-full" fallbackIconSize={40} />
 
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
 

@@ -128,6 +128,7 @@ export const loggingService = {
     catchId: string,
     mainImage?: string,
     speciesGeneral?: string,
+    speciesSpecific?: string,
     spotId?: string,
     location?: LatLng
   ): Promise<string> {
@@ -148,6 +149,7 @@ export const loggingService = {
       photoURL: mainImage || null,
       extraImages: [],
       speciesGeneral: speciesGeneral || null,
+      speciesSpecific: speciesSpecific || null,
       species: speciesGeneral || null,
       latitude: location?.lat ?? null,
       longitude: location?.lng ?? null,
@@ -502,7 +504,8 @@ export const loggingService = {
     let xp = 25;
 
     const speciesGeneral = mapCatchSpeciesGeneral(data);
-    if (speciesGeneral) xp += getSpeciesXpBonus(speciesGeneral);
+    const speciesSpecific = mapCatchSpeciesSpecific(data);
+    if (speciesGeneral) xp += getSpeciesXpBonus(speciesGeneral, speciesSpecific ?? undefined);
 
     if (data.length && data.length > 50) xp += 15;
     if (data.weight && data.weight > 2000) xp += 20;
@@ -794,9 +797,10 @@ export const loggingService = {
       };
     }
 
+    // Prefer speciesSpecific when available, fall back to speciesGeneral
     const species = this.getTopN(
-      history.map((h: any) => h.speciesGeneral || h.species).filter(Boolean),
-      3
+      history.map((h: any) => h.speciesSpecific || h.speciesGeneral || h.species).filter(Boolean),
+      5
     );
 
     const spots = this.getTopN(

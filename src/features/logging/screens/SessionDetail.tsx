@@ -24,8 +24,9 @@ import { db } from '../../../lib/firebase';
 import { Session, Catch, Spot, UserProfile } from '../../../types';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Badge } from '../../../components/ui/Base';
+import { LazyImage } from '../../../components/ui/LazyImage';
 import { motion } from 'motion/react';
-import { format } from 'date-fns';
+import { format, differenceInMinutes } from 'date-fns';
 import { nl } from 'date-fns/locale';
 
 const COLLECTIONS = {
@@ -274,10 +275,10 @@ export default function SessionDetail() {
           {/* Session photo */}
           {(session as any).mainImage && (
             <div className="w-full h-40 overflow-hidden">
-              <img
+              <LazyImage
                 src={(session as any).mainImage}
                 alt="Sessie foto"
-                className="w-full h-full object-cover"
+                wrapperClassName="w-full h-full"
               />
             </div>
           )}
@@ -311,12 +312,20 @@ export default function SessionDetail() {
               </span>
             )}
 
-            {(session as any).durationMinutes > 0 && (
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5" />
-                {(session as any).durationMinutes} min
-              </span>
-            )}
+            {(() => {
+              const durationMin = (session as any).durationMinutes > 0
+                ? (session as any).durationMinutes
+                : (startedAt && endedAt ? differenceInMinutes(endedAt, startedAt) : 0);
+              if (durationMin <= 0) return null;
+              const h = Math.floor(durationMin / 60);
+              const m = durationMin % 60;
+              return (
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  {h > 0 ? `${h}u ${m}m` : `${m} min`}
+                </span>
+              );
+            })()}
 
             <span className="flex items-center gap-1.5">
               <Trophy className="w-3.5 h-3.5 text-accent" />
@@ -386,17 +395,7 @@ export default function SessionDetail() {
                     className="flex items-center gap-3 p-2.5 bg-surface-soft rounded-xl"
                   >
                     <div className="w-9 h-9 rounded-xl overflow-hidden bg-surface border border-border-subtle shrink-0">
-                      {p.photoURL ? (
-                        <img
-                          src={p.photoURL}
-                          alt={p.displayName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <User className="w-4 h-4 text-text-muted" />
-                        </div>
-                      )}
+                      <LazyImage src={p.photoURL} alt={p.displayName || 'Deelnemer'} wrapperClassName="w-full h-full" fallbackIconSize={16} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-text-primary truncate">
@@ -448,17 +447,7 @@ export default function SessionDetail() {
                     className="flex items-center gap-3 p-2.5 bg-surface-soft rounded-xl cursor-pointer hover:bg-surface-card transition-colors"
                   >
                     <div className="w-12 h-12 rounded-xl overflow-hidden bg-surface border border-border-subtle shrink-0">
-                      {getCatchImage(c) ? (
-                        <img
-                          src={getCatchImage(c)}
-                          alt={getCatchSpecies(c)}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Fish className="w-5 h-5 text-accent/40" />
-                        </div>
-                      )}
+                      <LazyImage src={getCatchImage(c)} alt={getCatchSpecies(c)} wrapperClassName="w-full h-full" fallbackIconSize={20} />
                     </div>
 
                     <div className="flex-1 min-w-0">
