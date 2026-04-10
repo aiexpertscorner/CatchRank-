@@ -1,29 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Fish } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { normalizeImageSrc } from '../../lib/imageUtils';
+import { useStorageUrl } from '../../hooks/useStorageUrl';
 
 interface LazyImageProps {
   src?: string | null;
   alt: string;
   className?: string;
-  /** Extra classes for the wrapper div */
   wrapperClassName?: string;
-  /** Fallback icon size (default 32) */
   fallbackIconSize?: number;
-  /** object-fit style (default 'cover') */
   objectFit?: 'cover' | 'contain' | 'fill' | 'none';
   onClick?: () => void;
 }
 
-/**
- * Lazy-loading image component for CatchRank.
- *
- * - Shows an animated skeleton while the image is loading
- * - Falls back to a fish placeholder on error or when src is empty
- * - Handles Firebase Storage URLs and legacy base64 strings via normalizeImageSrc()
- * - Uses native `loading="lazy"` + IntersectionObserver for viewport-aware loading
- */
 export const LazyImage: React.FC<LazyImageProps> = ({
   src,
   alt,
@@ -33,21 +22,20 @@ export const LazyImage: React.FC<LazyImageProps> = ({
   objectFit = 'cover',
   onClick,
 }) => {
-  const normalizedSrc = normalizeImageSrc(src);
+  const { url: resolvedSrc } = useStorageUrl(src);
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when src changes
   useEffect(() => {
     setIsLoaded(false);
     setHasError(false);
-  }, [normalizedSrc]);
+    setIsVisible(false);
+  }, [resolvedSrc]);
 
-  // IntersectionObserver for lazy loading — triggers image load when near viewport
   useEffect(() => {
-    if (!normalizedSrc) return;
+    if (!resolvedSrc) return;
 
     const el = wrapperRef.current;
     if (!el) return;
@@ -59,15 +47,15 @@ export const LazyImage: React.FC<LazyImageProps> = ({
           observer.disconnect();
         }
       },
-      { rootMargin: '200px' } // pre-load 200px before entering viewport
+      { rootMargin: '200px' }
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [normalizedSrc]);
+  }, [resolvedSrc]);
 
-  const showFallback = !normalizedSrc || hasError;
-  const showSkeleton = normalizedSrc && !hasError && !isLoaded;
+  const showFallback = !resolvedSrc || hasError;
+  const showSkeleton = resolvedSrc && !hasError && !isLoaded;
 
   return (
     <div
@@ -75,32 +63,30 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       className={cn('relative overflow-hidden bg-surface-soft', wrapperClassName)}
       onClick={onClick}
     >
-      {/* Skeleton shimmer while loading */}
       {showSkeleton && (
         <div className="absolute inset-0 animate-pulse bg-surface-soft" />
       )}
 
-      {/* Fallback — fish icon placeholder */}
       {showFallback && (
         <div className="absolute inset-0 flex items-center justify-center bg-surface-soft">
-          <Fish
-            size={fallbackIconSize}
-            className="text-gold/30"
-          />
+          <Fish size={fallbackIconSize} className="text-gold/30" />
         </div>
       )}
 
-      {/* Actual image — only rendered once visible */}
-      {normalizedSrc && isVisible && (
+      {resolvedSrc && isVisible && (
         <img
-          src={normalizedSrc}
+          src={resolvedSrc}
           alt={alt}
           loading="lazy"
           className={cn(
             'w-full h-full transition-opacity duration-300',
-            objectFit === 'cover' ? 'object-cover' :
-            objectFit === 'contain' ? 'object-contain' :
-            objectFit === 'fill' ? 'object-fill' : 'object-none',
+            objectFit === 'cover'
+              ? 'object-cover'
+              : objectFit === 'contain'
+              ? 'object-contain'
+              : objectFit === 'fill'
+              ? 'object-fill'
+              : 'object-none',
             isLoaded ? 'opacity-100' : 'opacity-0',
             className
           )}

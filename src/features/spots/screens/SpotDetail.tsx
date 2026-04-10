@@ -34,6 +34,7 @@ import { loggingService } from '../../logging/services/loggingService';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { LazyImage } from '../../../components/ui/LazyImage';
+import { resolveCatchImageSrc, resolveSpotImageSrc } from '../../../lib/catchUtils';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { SpotModal } from '../../../components/SpotModal';
@@ -357,7 +358,7 @@ export default function SpotDetail() {
         {/* Hero Section */}
         <section className="relative h-64 md:h-96 rounded-[2.5rem] overflow-hidden group">
           <LazyImage
-            src={(spot as any).mainImage || spot.mainPhotoURL}
+            src={resolveSpotImageSrc(spot as any)}
             alt={spot.title || spot.name || 'Stek'}
             wrapperClassName="w-full h-full group-hover:scale-105 transition-transform duration-1000"
             objectFit="cover"
@@ -538,7 +539,7 @@ export default function SpotDetail() {
                       <div className="flex h-24">
                         <div className="w-24 h-full shrink-0 relative overflow-hidden bg-surface-soft">
                           <LazyImage
-                            src={(c as any).mainImage || c.photoURL}
+                            src={resolveCatchImageSrc(c as any)}
                             alt={(c as any).speciesSpecific || (c as any).speciesGeneral || c.species || ''}
                             wrapperClassName="w-full h-full"
                             className="group-hover:scale-110 transition-transform duration-500"

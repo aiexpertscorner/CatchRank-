@@ -132,7 +132,11 @@ export const loggingService = {
     spotId?: string,
     location?: LatLng
   ): Promise<string> {
-    const xpEarned = 10;
+    const xpEarned = this.calculateXP({
+      speciesGeneral: speciesGeneral || '',
+      speciesSpecific: speciesSpecific || '',
+      mainImage: mainImage || '',
+    });
 
     const incompleteFields = [
       !speciesGeneral ? 'speciesGeneral' : '',

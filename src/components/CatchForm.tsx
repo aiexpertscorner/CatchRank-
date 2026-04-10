@@ -98,6 +98,8 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     length: undefined,
     catchTime: '',
     spotId: '',
+    spotName: (initialData as any).spotName || '',
+    sessionId: activeSessionId || (initialData as any).sessionId || '',
     baitGeneral: (initialData as any).baitGeneral || (initialData as any).bait || '',
     baitSpecific: (initialData as any).baitSpecific || '',
     technique: (initialData as any).technique || '',
@@ -109,6 +111,8 @@ export const CatchForm: React.FC<CatchFormProps> = ({
     water: {},
     gear: {},
     ...initialData,
+    // activeSessionId always wins over initialData to ensure correct session link
+    ...(activeSessionId ? { sessionId: activeSessionId } : {}),
   });
 
   const [speciesList, setSpeciesList] = useState<Species[]>([]);
@@ -254,6 +258,9 @@ export const CatchForm: React.FC<CatchFormProps> = ({
         spotName: selectedSpot ? getSpotName(selectedSpot) : formData.spotName,
         latitude: selectedSpot ? getSpotLat(selectedSpot) : formData.latitude,
         longitude: selectedSpot ? getSpotLng(selectedSpot) : formData.longitude,
+
+        // Atomically write sessionId so the catch is linked even if linkCatchToSession fails
+        sessionId: activeSessionId || (initialData as any).sessionId || undefined,
 
         // legacy compat
         species: formData.speciesGeneral || formData.species || '',
@@ -675,6 +682,31 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                   />
                 </div>
 
+                {suggestions && suggestions.baits.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] flex items-center gap-2">
+                      <Sparkles className="w-3 h-3 text-brand" /> Eerder gebruikt
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.baits.map((b) => (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, baitGeneral: b }))}
+                          className={cn(
+                            'px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
+                            formData.baitGeneral === b
+                              ? 'bg-brand text-bg-main border-brand shadow-premium-accent'
+                              : 'bg-surface-soft border-border-subtle text-text-secondary hover:border-brand/40'
+                          )}
+                        >
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <Input
                   label="Techniek"
                   value={formData.technique}
@@ -682,6 +714,31 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                   placeholder="Bijv. Verticalen, Werpend"
                   className="h-14 rounded-2xl bg-bg-main border-border-subtle"
                 />
+
+                {suggestions && suggestions.techniques.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] flex items-center gap-2">
+                      <Sparkles className="w-3 h-3 text-brand" /> Bekende technieken
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.techniques.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, technique: t }))}
+                          className={cn(
+                            'px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
+                            formData.technique === t
+                              ? 'bg-brand text-bg-main border-brand shadow-premium-accent'
+                              : 'bg-surface-soft border-border-subtle text-text-secondary hover:border-brand/40'
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <Textarea
                   label="Notities"
@@ -798,31 +855,59 @@ export const CatchForm: React.FC<CatchFormProps> = ({
                       <SelectItem value="fast">Snel</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  <Input
+                    type="number"
+                    placeholder="Watertemp. (°C)"
+                    value={formData.water?.temp || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        water: { ...formData.water, temp: Number(e.target.value) || undefined },
+                      })
+                    }
+                    className="h-12 rounded-xl bg-surface-soft border-border-subtle text-xs"
+                  />
                 </div>
               </div>
 
-              {/* Moon phase */}
+              {/* Moon phase icon picker */}
               <div className="space-y-3">
                 <Label className="flex items-center gap-2">
                   <Moon className="w-4 h-4 text-brand" /> Maanfase (optioneel)
                 </Label>
-                <Select
-                  value={typeof formData.moonPhase === 'string' ? formData.moonPhase : ''}
-                  onValueChange={(val) => setFormData({ ...formData, moonPhase: val })}
-                >
-                  <SelectTrigger className="h-12 rounded-xl bg-bg-main border-border-subtle">
-                    <SelectValue placeholder="Kies maanfase..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">— Onbekend —</SelectItem>
-                    <SelectItem value="new">Nieuwe maan</SelectItem>
-                    <SelectItem value="crescent">Wassende maan</SelectItem>
-                    <SelectItem value="half">Halve maan</SelectItem>
-                    <SelectItem value="gibbous">Bijna vol</SelectItem>
-                    <SelectItem value="full">Volle maan</SelectItem>
-                    <SelectItem value="waning">Afnemende maan</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'new', label: 'Nieuwe maan', icon: '🌑' },
+                    { value: 'crescent', label: 'Wassende maan', icon: '🌒' },
+                    { value: 'half', label: 'Halve maan', icon: '🌓' },
+                    { value: 'gibbous', label: 'Bijna vol', icon: '🌔' },
+                    { value: 'full', label: 'Volle maan', icon: '🌕' },
+                    { value: 'waning', label: 'Afnemend', icon: '🌖' },
+                  ].map((phase) => (
+                    <button
+                      key={phase.value}
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          moonPhase: prev.moonPhase === phase.value ? '' : phase.value,
+                        }))
+                      }
+                      className={cn(
+                        'flex flex-col items-center gap-1 p-3 rounded-2xl border transition-all',
+                        formData.moonPhase === phase.value
+                          ? 'bg-brand/10 border-brand text-brand'
+                          : 'bg-surface-soft border-border-subtle text-text-muted hover:border-brand/40'
+                      )}
+                    >
+                      <span className="text-2xl">{phase.icon}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wide leading-tight text-center">
+                        {phase.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Gear */}

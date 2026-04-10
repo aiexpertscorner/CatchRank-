@@ -8,11 +8,20 @@ import {
   List as ListIcon,
   Edit2,
   Trash2,
-  Camera
+  Camera,
 } from 'lucide-react';
 import { LazyImage } from '../../../components/ui/LazyImage';
+import { resolveCatchImageSrc, resolveCatchSpecies } from '../../../lib/catchUtils';
 import { useAuth } from '../../../App';
-import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  doc,
+  deleteDoc,
+} from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Catch } from '../../../types';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
@@ -24,23 +33,6 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { CatchForm } from '../../../components/CatchForm';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { storage } from '../../../lib/firebase';
-
-useEffect(() => {
-  async function testStorage() {
-    try {
-      const url = await getDownloadURL(
-        ref(storage, 'assets/images/vangsten/3.Foto.201626.jpg')
-      );
-      console.log('TEST STORAGE URL:', url);
-    } catch (error) {
-      console.error('TEST STORAGE FAILED:', error);
-    }
-  }
-
-  testStorage();
-}, []);
 
 type CatchWithMeta = Catch & {
   speciesSpecific?: string;
@@ -64,6 +56,8 @@ export default function Catches() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSpecies, setFilterSpecies] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'complete' | 'draft'>('all');
+  const [sortBy, setSortBy] = useState<'date' | 'weight' | 'length'>('date');
 
   const [isQuickCatchOpen, setIsQuickCatchOpen] = useState(false);
   const [isCatchFormOpen, setIsCatchFormOpen] = useState(false);
@@ -111,37 +105,9 @@ export default function Catches() {
     }
   };
 
-  const getCatchSpecies = (c: CatchWithMeta) => {
-    return c.speciesSpecific || c.species || c.speciesGeneral || 'Onbekende soort';
-  };
+  const getCatchSpecies = (c: CatchWithMeta) => resolveCatchSpecies(c as any);
 
-  const getCatchImage = (c: CatchWithMeta) => {
-    const raw = c.photoURL || c.mainImage || '';
-
-    if (!raw || typeof raw !== 'string') return '';
-
-    const trimmed = raw.trim();
-    if (!trimmed) return '';
-
-    // Externe URL / Firebase Storage URL
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
-
-    // Lokale public assets
-    // Firestore bewaart bv: "assets/images/vangsten/3.Foto.201626.jpg"
-    // Browser moet dan laden vanaf: "/assets/images/vangsten/3.Foto.201626.jpg"
-    if (trimmed.startsWith('assets/')) {
-      return `/${trimmed}`;
-    }
-
-    // Als er al een root path is
-    if (trimmed.startsWith('/assets/')) {
-      return trimmed;
-    }
-
-    return trimmed;
-  };
+  const getCatchImage = (c: CatchWithMeta) => resolveCatchImageSrc(c as any);
 
   const getCatchDate = (c: CatchWithMeta) => {
     try {
@@ -155,7 +121,8 @@ export default function Catches() {
         return c.timestamp;
       }
 
-      return null;
+      const parsed = new Date(c.timestamp);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
     } catch {
       return null;
     }
@@ -168,18 +135,14 @@ export default function Catches() {
 
   const speciesList = useMemo(() => {
     return Array.from(
-      new Set(
-        catches
-          .map((c) => getCatchSpecies(c))
-          .filter(Boolean)
-      )
+      new Set(catches.map((c) => getCatchSpecies(c)).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b, 'nl'));
   }, [catches]);
 
   const filteredCatches = useMemo(() => {
     const queryLower = searchQuery.trim().toLowerCase();
 
-    return catches.filter((c) => {
+    const filtered = catches.filter((c) => {
       const species = getCatchSpecies(c);
       const speciesLower = species.toLowerCase();
       const spotLower = c.spotName?.toLowerCase() || '';
@@ -189,12 +152,24 @@ export default function Catches() {
         speciesLower.includes(queryLower) ||
         spotLower.includes(queryLower);
 
-      const matchesSpecies =
-        filterSpecies === 'all' || species === filterSpecies;
+      const matchesSpecies = filterSpecies === 'all' || species === filterSpecies;
 
-      return matchesSearch && matchesSpecies;
+      const matchesStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'draft' && c.status === 'draft') ||
+        (filterStatus === 'complete' && c.status !== 'draft');
+
+      return matchesSearch && matchesSpecies && matchesStatus;
     });
-  }, [catches, searchQuery, filterSpecies]);
+
+    if (sortBy === 'weight') {
+      return [...filtered].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+    }
+    if (sortBy === 'length') {
+      return [...filtered].sort((a, b) => (b.length ?? 0) - (a.length ?? 0));
+    }
+    return filtered; // date desc — already ordered by Firestore query
+  }, [catches, searchQuery, filterSpecies, filterStatus, sortBy]);
 
   return (
     <PageLayout>
@@ -217,7 +192,7 @@ export default function Catches() {
                 setEditingCatch(null);
                 setIsCatchFormOpen(true);
               }}
-              className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+              className="rounded-xl h-11 px-5 sm:px-6 font-bold shadow-premium-accent"
             >
               Vangst Loggen
             </Button>
@@ -225,8 +200,8 @@ export default function Catches() {
         }
       />
 
-      <div className="space-y-6 pb-32">
-        <section className="flex flex-col md:flex-row gap-4 px-2 md:px-0">
+      <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-32">
+        <section className="flex flex-col lg:flex-row gap-3 px-2 md:px-0">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
@@ -234,7 +209,7 @@ export default function Catches() {
               placeholder="Zoek op soort of stek..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-surface-card border border-border-subtle rounded-xl pl-12 pr-4 py-3 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
+              className="w-full h-12 bg-surface-card border border-border-subtle rounded-xl pl-12 pr-4 text-sm text-text-primary focus:outline-none focus:border-brand transition-all"
             />
           </div>
 
@@ -242,7 +217,7 @@ export default function Catches() {
             <select
               value={filterSpecies}
               onChange={(e) => setFilterSpecies(e.target.value)}
-              className="bg-surface-card border border-border-subtle rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-brand"
+              className="flex-1 lg:flex-none min-w-0 lg:min-w-[160px] h-12 bg-surface-card border border-border-subtle rounded-xl px-4 text-sm text-text-primary focus:outline-none focus:border-brand"
             >
               <option value="all">Alle soorten</option>
               {speciesList.map((species) => (
@@ -252,10 +227,20 @@ export default function Catches() {
               ))}
             </select>
 
-            <div className="flex bg-surface-card border border-border-subtle rounded-xl p-1">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'date' | 'weight' | 'length')}
+              className="h-12 bg-surface-card border border-border-subtle rounded-xl px-3 text-sm text-text-primary focus:outline-none focus:border-brand shrink-0"
+            >
+              <option value="date">Datum</option>
+              <option value="weight">Gewicht</option>
+              <option value="length">Lengte</option>
+            </select>
+
+            <div className="flex bg-surface-card border border-border-subtle rounded-xl p-1 shrink-0">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg transition-all ${
+                className={`p-2.5 rounded-lg transition-all ${
                   viewMode === 'grid'
                     ? 'bg-brand text-bg-main'
                     : 'text-text-muted'
@@ -266,7 +251,7 @@ export default function Catches() {
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-all ${
+                className={`p-2.5 rounded-lg transition-all ${
                   viewMode === 'list'
                     ? 'bg-brand text-bg-main'
                     : 'text-text-muted'
@@ -279,8 +264,28 @@ export default function Catches() {
           </div>
         </section>
 
+        {/* Status filter chips */}
+        <div className="flex gap-2 px-2 md:px-0">
+          {(['all', 'complete', 'draft'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setFilterStatus(s)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                filterStatus === s
+                  ? 'bg-brand text-bg-main border-brand shadow-premium-accent'
+                  : 'bg-surface-card border-border-subtle text-text-muted hover:border-brand/30'
+              }`}
+            >
+              {s === 'all' ? 'Alle' : s === 'complete' ? 'Compleet' : 'Concept'}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-text-muted self-center font-medium">
+            {filteredCatches.length} {filteredCatches.length === 1 ? 'vangst' : 'vangsten'}
+          </span>
+        </div>
+
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {[...Array(8)].map((_, i) => (
               <div
                 key={i}
@@ -292,7 +297,7 @@ export default function Catches() {
           <div
             className={
               viewMode === 'grid'
-                ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
+                ? 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4'
                 : 'space-y-3'
             }
           >
@@ -305,9 +310,9 @@ export default function Catches() {
                 <motion.div
                   key={c.id}
                   layout
-                  initial={{ opacity: 0, scale: 0.95 }}
+                  initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.2 }}
+                  transition={{ duration: 0.18 }}
                 >
                   {viewMode === 'grid' ? (
                     <Card
@@ -316,18 +321,18 @@ export default function Catches() {
                       className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden h-full flex flex-col cursor-pointer"
                       onClick={() => c.id && navigate(`/catches/${c.id}`)}
                     >
-                      <div className="aspect-square relative overflow-hidden bg-surface-soft">
+                      <div className="aspect-[1/1] relative overflow-hidden bg-surface-soft">
                         <LazyImage
                           src={imageSrc}
                           alt={species}
                           wrapperClassName="w-full h-full"
                           className="group-hover:scale-110 transition-transform duration-700"
-                          fallbackIconSize={48}
+                          fallbackIconSize={42}
                         />
 
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-70 group-hover:opacity-85 transition-opacity" />
 
-                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           <div className="flex gap-1">
                             <button
                               onClick={(e) => {
@@ -358,20 +363,18 @@ export default function Catches() {
                             variant={c.status === 'draft' ? 'warning' : 'accent'}
                             className="text-[7px] py-0.5 px-1.5 font-black uppercase tracking-widest mb-1"
                           >
-                            {c.status === 'draft'
-                              ? 'Concept'
-                              : `+${c.xpEarned || 25} XP`}
+                            {c.status === 'draft' ? 'Concept' : `+${c.xpEarned || 25} XP`}
                           </Badge>
 
-                          <h4 className="text-base font-bold text-white tracking-tight line-clamp-2">
+                          <h4 className="text-sm sm:text-base font-bold text-white tracking-tight line-clamp-2">
                             {species}
                           </h4>
                         </div>
                       </div>
 
                       <div className="p-3 space-y-2">
-                        <div className="flex items-center justify-between text-[10px] font-bold text-text-secondary uppercase tracking-widest">
-                          <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-text-secondary uppercase tracking-widest gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
                             {c.length !== undefined && c.length !== null && (
                               <span>{c.length}cm</span>
                             )}
@@ -380,7 +383,7 @@ export default function Catches() {
                             )}
                           </div>
 
-                          <span className="text-text-muted">
+                          <span className="text-text-muted shrink-0">
                             {catchDate
                               ? format(catchDate, 'd MMM', { locale: nl })
                               : 'Zojuist'}
@@ -388,7 +391,7 @@ export default function Catches() {
                         </div>
 
                         {c.spotName && (
-                          <div className="flex items-center gap-1 text-[9px] text-text-dim truncate">
+                          <div className="flex items-center gap-1 text-[10px] text-text-dim truncate">
                             <MapPin className="w-3 h-3 flex-shrink-0" />
                             <span className="truncate">{c.spotName}</span>
                           </div>
@@ -397,21 +400,21 @@ export default function Catches() {
                     </Card>
                   ) : (
                     <Card
-                      className="p-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl group flex items-center gap-4 cursor-pointer"
+                      className="p-3.5 sm:p-4 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl group flex items-center gap-3 sm:gap-4 cursor-pointer"
                       onClick={() => c.id && navigate(`/catches/${c.id}`)}
                     >
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-soft flex-shrink-0 border border-border-subtle">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-surface-soft flex-shrink-0 border border-border-subtle">
                         <LazyImage
                           src={imageSrc}
                           alt={species}
                           wrapperClassName="w-full h-full"
-                          fallbackIconSize={32}
+                          fallbackIconSize={30}
                         />
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h4 className="text-base font-bold text-text-primary tracking-tight">
+                          <h4 className="text-sm sm:text-base font-bold text-text-primary tracking-tight">
                             {species}
                           </h4>
                           {c.status === 'draft' && (
@@ -424,7 +427,7 @@ export default function Catches() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs text-text-secondary flex-wrap">
+                        <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-text-secondary flex-wrap">
                           <span className="font-bold">
                             {c.length !== undefined && c.length !== null
                               ? `${c.length}cm`
@@ -439,7 +442,9 @@ export default function Catches() {
                           )}
 
                           <span className="text-text-dim">•</span>
-                          <span>{c.spotName || 'Geen stek'}</span>
+                          <span className="truncate max-w-[130px] sm:max-w-none">
+                            {c.spotName || 'Geen stek'}
+                          </span>
                           <span className="text-text-dim">•</span>
                           <span>
                             {catchDate
@@ -449,7 +454,7 @@ export default function Catches() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -480,7 +485,7 @@ export default function Catches() {
             })}
           </div>
         ) : (
-          <Card className="p-12 text-center border-dashed border border-border-subtle bg-surface-soft/20 rounded-2xl">
+          <Card className="p-10 sm:p-12 text-center border-dashed border border-border-subtle bg-surface-soft/20 rounded-2xl">
             <Fish className="w-12 h-12 text-brand/20 mx-auto mb-4" />
             <h3 className="text-xl font-bold mb-2 text-text-primary">
               Geen vangsten gevonden
@@ -521,9 +526,9 @@ export default function Catches() {
               }}
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, scale: 0.94, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              exit={{ opacity: 0, scale: 0.94, y: 20 }}
               className="relative w-full max-w-2xl"
             >
               <CatchForm

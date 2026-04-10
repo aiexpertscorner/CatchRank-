@@ -4,12 +4,8 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-/**
- * Firebase initialization.
- * Uses the (default) Firestore database for the dbfishing-web project.
- */
-
 const app = initializeApp(firebaseConfig);
+
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);

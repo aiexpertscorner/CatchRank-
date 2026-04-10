@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -54,6 +54,7 @@ import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { CatchForm } from '../../../components/CatchForm';
 import { LazyImage } from '../../../components/ui/LazyImage';
+import { repairCatchData } from '../services/catchDataRepair';
 
 type CatchWithMeta = Catch & {
   speciesGeneral?: string;
@@ -158,7 +159,9 @@ function getCatchSpeciesGroup(c?: CatchWithMeta | null): string {
 
 function getCatchImage(c?: CatchWithMeta | null): string {
   if (!c) return '';
-  return normalizeAssetPath(c.photoURL || c.mainImage || '');
+  // v2-first: mainImage is the canonical Storage URL; photoURL is legacy fallback
+  const raw = (c as any).mainImage || c.photoURL || (c as any).image || (c as any).imageUrl || '';
+  return normalizeAssetPath(raw);
 }
 
 function getExtraImages(c?: CatchWithMeta | null): string[] {
@@ -214,6 +217,7 @@ export default function CatchDetail() {
   const [loading, setLoading] = useState(true);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -233,6 +237,9 @@ export default function CatchDetail() {
 
         const data = { id: catchDoc.id, ...catchDoc.data() } as CatchWithMeta;
         setCatchData(data);
+
+        // Fire-and-forget: silently repair migrated catch data (spotName, stale sessionId)
+        repairCatchData({ id: data.id!, spotId: data.spotId, spotName: data.spotName, sessionId: (data as any).sessionId });
 
         const resolvedSpotId = data.spotId;
         const resolvedSpotName = data.spotName;
@@ -447,13 +454,34 @@ export default function CatchDetail() {
           <div className="overflow-hidden rounded-[2rem] border border-border-subtle bg-surface-card">
             <div className="relative">
               {galleryImages.length > 0 ? (
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-surface-soft">
+                <div
+                  className="relative aspect-[4/3] w-full overflow-hidden bg-surface-soft"
+                  onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+                  onTouchEnd={(e) => {
+                    if (touchStartX.current === null) return;
+                    const dx = e.changedTouches[0].clientX - touchStartX.current;
+                    touchStartX.current = null;
+                    if (Math.abs(dx) < 40) return;
+                    if (dx < 0) setActiveImage((i) => Math.min(i + 1, galleryImages.length - 1));
+                    else setActiveImage((i) => Math.max(i - 1, 0));
+                  }}
+                >
                   <img
                     src={galleryImages[Math.min(activeImage, galleryImages.length - 1)]}
                     alt={speciesName}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                  {galleryImages.length > 1 && (
+                    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
+                      {galleryImages.map((_, i) => (
+                        <span
+                          key={i}
+                          className={`block rounded-full transition-all ${i === activeImage ? 'w-4 h-1.5 bg-accent' : 'w-1.5 h-1.5 bg-white/50'}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="aspect-[4/3] w-full flex items-center justify-center bg-gradient-to-br from-surface-card to-surface-soft">
@@ -570,7 +598,18 @@ export default function CatchDetail() {
                 <Moon className="w-4 h-4" />
                 <span className="text-[10px] font-black uppercase tracking-[0.18em]">Maanfase</span>
               </div>
-              <p className="text-sm font-bold text-text-primary">{catchData.moonPhase || '—'}</p>
+              <p className="text-sm font-bold text-text-primary">
+                {catchData.moonPhase
+                  ? ({
+                      new: '🌑 Nieuwe maan',
+                      crescent: '🌒 Wassende maan',
+                      half: '🌓 Halve maan',
+                      gibbous: '🌔 Bijna vol',
+                      full: '🌕 Volle maan',
+                      waning: '🌖 Afnemende maan',
+                    } as Record<string, string>)[catchData.moonPhase] ?? catchData.moonPhase
+                  : '—'}
+              </p>
             </Card>
 
             <Card className="rounded-2xl border border-border-subtle bg-surface-card p-4">

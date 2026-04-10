@@ -25,6 +25,7 @@ import { Session, Catch, Spot, UserProfile } from '../../../types';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Badge } from '../../../components/ui/Base';
 import { LazyImage } from '../../../components/ui/LazyImage';
+import { resolveCatchImageSrc, resolveSessionImageSrc } from '../../../lib/catchUtils';
 import { motion } from 'motion/react';
 import { format, differenceInMinutes } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -124,8 +125,7 @@ const getSessionWeatherEnd = (session: Partial<Session>) =>
 const getSessionStats = (session: Partial<Session>) =>
   (session as any).stats || (session as any).statsSummary || {};
 
-const getCatchImage = (c: Partial<Catch>) =>
-  (c as any).mainImage || (c as any).photoURL || '';
+const getCatchImage = (c: Partial<Catch>) => resolveCatchImageSrc(c as any);
 
 const getCatchSpecies = (c: Partial<Catch>) =>
   (c as any).speciesSpecific || (c as any).speciesGeneral || (c as any).species || 'Onbekend';
@@ -273,10 +273,10 @@ export default function SessionDetail() {
         {/* Header Card */}
         <Card className="bg-surface-card border border-border-subtle rounded-2xl overflow-hidden">
           {/* Session photo */}
-          {(session as any).mainImage && (
+          {resolveSessionImageSrc(session as any) && (
             <div className="w-full h-40 overflow-hidden">
               <LazyImage
-                src={(session as any).mainImage}
+                src={resolveSessionImageSrc(session as any)}
                 alt="Sessie foto"
                 wrapperClassName="w-full h-full"
               />
