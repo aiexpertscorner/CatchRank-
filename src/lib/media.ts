@@ -22,9 +22,6 @@ export function normalizeMediaPath(path?: string | null): string {
   const trimmed = path.trim();
   if (!trimmed) return '';
 
-  // Local assets paths are NOT in Firebase Storage — return empty to show fallback
-  if (trimmed.startsWith('assets/') || trimmed.startsWith('/assets/')) return '';
-
   // Strip gs:// Storage URIs — support both bucket name formats
   if (trimmed.startsWith('gs://')) {
     const GS_PREFIXES = [

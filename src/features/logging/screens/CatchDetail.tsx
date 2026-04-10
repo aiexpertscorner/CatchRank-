@@ -54,6 +54,7 @@ import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { CatchForm } from '../../../components/CatchForm';
 import { LazyImage } from '../../../components/ui/LazyImage';
+import { normalizeMediaPath } from '../../../lib/media';
 import { repairCatchData } from '../services/catchDataRepair';
 
 type CatchWithMeta = Catch & {
@@ -118,18 +119,9 @@ function toDateSafe(value: any): Date | null {
 }
 
 function normalizeAssetPath(raw?: string | null): string {
-  if (!raw || typeof raw !== 'string') return '';
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-
-  if (trimmed.startsWith('/assets/')) return trimmed;
-  if (trimmed.startsWith('assets/')) return `/${trimmed}`;
-
-  return trimmed;
+  // Delegate entirely to the shared media normalizer.
+  // assets/ and images/ are Firebase Storage paths — NOT local web paths.
+  return normalizeMediaPath(raw);
 }
 
 function parseNumericString(value: any): string {
@@ -466,10 +458,11 @@ export default function CatchDetail() {
                     else setActiveImage((i) => Math.max(i - 1, 0));
                   }}
                 >
-                  <img
+                  <LazyImage
                     src={galleryImages[Math.min(activeImage, galleryImages.length - 1)]}
                     alt={speciesName}
-                    className="w-full h-full object-cover"
+                    className="rounded-none"
+                    wrapperClassName="w-full h-full"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                   {galleryImages.length > 1 && (
