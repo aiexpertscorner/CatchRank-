@@ -24,6 +24,23 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { CatchForm } from '../../../components/CatchForm';
+import { getDownloadURL, ref } from 'firebase/storage';
+import { storage } from '../../../lib/firebase';
+
+useEffect(() => {
+  async function testStorage() {
+    try {
+      const url = await getDownloadURL(
+        ref(storage, 'assets/images/vangsten/3.Foto.201626.jpg')
+      );
+      console.log('TEST STORAGE URL:', url);
+    } catch (error) {
+      console.error('TEST STORAGE FAILED:', error);
+    }
+  }
+
+  testStorage();
+}, []);
 
 type CatchWithMeta = Catch & {
   speciesSpecific?: string;
