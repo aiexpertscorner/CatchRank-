@@ -42,6 +42,52 @@ import { FEATURE_FLAGS } from './config/env';
 
 import { SessionProvider } from './contexts/SessionContext';
 
+/**
+ * normalizeUserProfile
+ *
+ * Bridges the gap between the old Flutter-migrated user schema and the
+ * current web app UserProfile schema. Safe to call on every login —
+ * only remaps fields that are in the old format, leaves everything else.
+ *
+ * Old → New mappings:
+ *   total_xp          → xp
+ *   catch_count        → stats.totalCatches
+ *   session_count      → stats.totalSessions
+ *   spot_count         → stats.totalSpots
+ *   favSpecies         → favoriteSpecies
+ *   isSetupComplete    → onboardingStatus: 'complete'
+ *   (missing uid)      → uid from auth
+ */
+function normalizeUserProfile(data: Record<string, any>, uid: string): UserProfile {
+  const xp = typeof data.xp === 'number' ? data.xp
+    : typeof data.total_xp === 'number' ? data.total_xp : 0;
+
+  const level = typeof data.level === 'number' ? data.level : 1;
+
+  const stats = data.stats ?? {
+    totalCatches: data.catch_count ?? 0,
+    totalSessions: data.session_count ?? 0,
+    totalSpots: data.spot_count ?? 0,
+    speciesCount: 0,
+  };
+
+  const favoriteSpecies: string[] = data.favoriteSpecies
+    ?? (data.favSpecies ? [data.favSpecies] : []);
+
+  const onboardingStatus = data.onboardingStatus
+    ?? (data.isSetupComplete ? 'complete' : 'welcome');
+
+  return {
+    ...data,
+    uid: data.uid || uid,
+    xp,
+    level,
+    stats,
+    favoriteSpecies,
+    onboardingStatus,
+  } as UserProfile;
+}
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -82,7 +128,7 @@ export default function App() {
         const userDoc = await getDoc(ref);
 
         if (userDoc.exists()) {
-          setProfile(userDoc.data() as UserProfile);
+          setProfile(normalizeUserProfile(userDoc.data(), firebaseUser.uid));
         } else {
           const newProfile: UserProfile = {
             uid: firebaseUser.uid,

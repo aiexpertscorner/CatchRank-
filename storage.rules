@@ -11,6 +11,12 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // Migrated user profile photos (flat path from Flutter app)
+    match /user_profiles/{filename} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     match /images/{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if false;
