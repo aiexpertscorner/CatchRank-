@@ -39,6 +39,7 @@ import Tools from './features/tools/screens/Tools';
 import AskDick from './features/tools/screens/AskDick';
 import WeatherForecast from './features/weather/screens/WeatherForecast';
 import { FEATURE_FLAGS } from './config/env';
+import MigrationPanel from './admin/MigrationPanel';
 
 import { SessionProvider } from './contexts/SessionContext';
 
@@ -327,6 +328,10 @@ export default function App() {
               )}
               <Route path="/tools/weather" element={<WeatherForecast />} />
               <Route path="/knowledge" element={<Knowledge />} />
+              {/* Admin-only — remove after migrations are complete */}
+              {user?.email === 'j.vandenbol@gmail.com' && (
+                <Route path="/admin/migrate" element={<MigrationPanel />} />
+              )}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
