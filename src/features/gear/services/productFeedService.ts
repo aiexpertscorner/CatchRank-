@@ -12,11 +12,6 @@ import {
   Timestamp,
   QueryConstraint,
 } from 'firebase/firestore';
-import { productFeedServicePatch } from './productFeedService.patch';
-
-export const productFeedService = {
-  ...productFeedServicePatch,
-};
 import { db } from '../../../lib/firebase';
 import {
   ProductCatalogItem,
@@ -35,8 +30,10 @@ import {
   PRODUCT_FEED_MAX_ITEMS_PER_SOURCE,
   FEATURE_FLAGS,
 } from '../../../config/env';
-
-
+import {
+  productFeedServicePatch,
+  PRODUCTS_CATALOG,
+} from './productFeedService.patch';
 
 /**
  * Product Feed Service — Mijn Visgear / Ontdekken
@@ -58,101 +55,12 @@ interface SessionCacheEntry<T> {
 
 const sessionCache = new Map<string, SessionCacheEntry<any>>();
 
-function fromCache<T>(key: string): T | null {
-  const entry = sessionCache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.fetchedAt > SESSION_TTL_MS) {
-    sessionCache.delete(key);
-    return null;
-  }
-  return entry.data as T;
-}
-
-function toCache<T>(key: string, data: T): void {
-  sessionCache.set(key, { data, fetchedAt: Date.now() });
-}
-
-export function clearProductCache(): void {
-  sessionCache.clear();
-}
-
-function safeString(value: unknown): string {
-  if (value == null) return '';
-  return String(value).trim();
-}
-
-function safeLower(value: unknown): string {
-  return safeString(value).toLowerCase();
-}
-
-function buildCacheKey(params: {
-  source?: ProductSource;
-  category?: string;
-  mainSection?: string;
-  subSubCategory?: string;
-  maxItems?: number;
-}) {
-  return [
-    'products',
-    params.source ?? 'all',
-    params.category ?? 'all',
-    params.mainSection ?? 'all',
-    params.subSubCategory ?? 'all',
-    params.maxItems ?? PRODUCT_FEED_MAX_ITEMS_PER_SOURCE,
-  ].join(':');
-}
-
-async function isCacheStale(source: ProductSource): Promise<boolean> {
-  const metaRef = doc(db, 'product_cache_meta', source);
-  const snap = await getDoc(metaRef);
-
-  if (!snap.exists()) return true;
-
-  const meta = snap.data() as ProductCacheMetadata;
-  if (!meta.isValid || !meta.lastFetched) return true;
-
-  const lastFetched =
-    meta.lastFetched instanceof Timestamp
-      ? meta.lastFetched.toDate().getTime()
-      : Date.now();
-
-  return Date.now() - lastFetched > PRODUCT_FEED_CACHE_TTL_MS;
-}
-
-async function updateCacheMeta(source: ProductSource, itemCount: number): Promise<void> {
-  await setDoc(doc(db, 'product_cache_meta', source), {
-    source,
-    lastFetched: serverTimestamp(),
-    itemCount,
-    isValid: true,
-  } as ProductCacheMetadata);
-}
-
-async function refreshFishinnFeed(): Promise<void> {
-  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) return;
-  try {
-    const response = await fetch('/api/gear/fishinn-feed', { method: 'POST' });
-    if (!response.ok) throw new Error(`Feed refresh failed: ${response.status}`);
-  } catch (err) {
-    console.error('[productFeedService] Fishinn feed refresh error:', err);
-  }
-}
-
-async function refreshBolFeed(): Promise<void> {
-  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) return;
-  try {
-    const response = await fetch('/api/gear/bol-feed', { method: 'POST' });
-    if (!response.ok) throw new Error(`Bol feed refresh failed: ${response.status}`);
-  } catch (err) {
-    console.error('[productFeedService] Bol feed refresh error:', err);
-  }
-}
-
 type GetProductsOptions = {
   source?: ProductSource;
   category?: string;
   mainSection?: string;
   subSubCategory?: string;
+  sectionId?: string;
   maxItems?: number;
 };
 
@@ -227,6 +135,98 @@ const CLUSTER_LABELS: Record<string, string> = {
   'detail:sleep_system': 'Sleep Systems',
 };
 
+function fromCache<T>(key: string): T | null {
+  const entry = sessionCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > SESSION_TTL_MS) {
+    sessionCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function toCache<T>(key: string, data: T): void {
+  sessionCache.set(key, { data, fetchedAt: Date.now() });
+}
+
+export function clearProductCache(): void {
+  sessionCache.clear();
+}
+
+function safeString(value: unknown): string {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function safeLower(value: unknown): string {
+  return safeString(value).toLowerCase();
+}
+
+function buildCacheKey(params: {
+  source?: ProductSource;
+  category?: string;
+  mainSection?: string;
+  subSubCategory?: string;
+  sectionId?: string;
+  maxItems?: number;
+}) {
+  return [
+    'products',
+    params.source ?? 'all',
+    params.category ?? 'all',
+    params.mainSection ?? 'all',
+    params.subSubCategory ?? 'all',
+    params.sectionId ?? 'all',
+    params.maxItems ?? PRODUCT_FEED_MAX_ITEMS_PER_SOURCE,
+  ].join(':');
+}
+
+async function isCacheStale(source: ProductSource): Promise<boolean> {
+  const metaRef = doc(db, 'product_cache_meta', source);
+  const snap = await getDoc(metaRef);
+
+  if (!snap.exists()) return true;
+
+  const meta = snap.data() as ProductCacheMetadata;
+  if (!meta.isValid || !meta.lastFetched) return true;
+
+  const lastFetched =
+    meta.lastFetched instanceof Timestamp
+      ? meta.lastFetched.toDate().getTime()
+      : Date.now();
+
+  return Date.now() - lastFetched > PRODUCT_FEED_CACHE_TTL_MS;
+}
+
+async function updateCacheMeta(source: ProductSource, itemCount: number): Promise<void> {
+  await setDoc(doc(db, 'product_cache_meta', source), {
+    source,
+    lastFetched: serverTimestamp(),
+    itemCount,
+    isValid: true,
+  } as ProductCacheMetadata);
+}
+
+async function refreshFishinnFeed(): Promise<void> {
+  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) return;
+  try {
+    const response = await fetch('/api/gear/fishinn-feed', { method: 'POST' });
+    if (!response.ok) throw new Error(`Feed refresh failed: ${response.status}`);
+  } catch (err) {
+    console.error('[productFeedService] Fishinn feed refresh error:', err);
+  }
+}
+
+async function refreshBolFeed(): Promise<void> {
+  if (!FEATURE_FLAGS.ENABLE_PRODUCT_FEED_REFRESH) return;
+  try {
+    const response = await fetch('/api/gear/bol-feed', { method: 'POST' });
+    if (!response.ok) throw new Error(`Bol feed refresh failed: ${response.status}`);
+  } catch (err) {
+    console.error('[productFeedService] Bol feed refresh error:', err);
+  }
+}
+
 function getClusterType(key: string): DerivedClusterType {
   if (key.startsWith('species:')) return 'species';
   if (key.startsWith('technique:')) return 'technique';
@@ -241,8 +241,6 @@ function getClusterLabel(key: string): string {
   return CLUSTER_LABELS[key] || key.replace(/^detail:/, '').replace(/^seed:/, '');
 }
 
-// Local inference functions removed — now imported from taxonomy.ts:
-// buildProductBlob, inferMainSection, inferSubSubCategory, inferDisciplines, enrichProductClient
 function enrichProduct(product: ProductCatalogItem): ProductCatalogItem {
   return enrichProductClient(product);
 }
@@ -253,6 +251,7 @@ export const productFeedService = {
     const category = options?.category;
     const mainSection = options?.mainSection;
     const subSubCategory = options?.subSubCategory;
+    const sectionId = options?.sectionId;
     const maxItems = options?.maxItems ?? PRODUCT_FEED_MAX_ITEMS_PER_SOURCE;
 
     const cacheKey = buildCacheKey({
@@ -260,6 +259,7 @@ export const productFeedService = {
       category,
       mainSection,
       subSubCategory,
+      sectionId,
       maxItems,
     });
 
@@ -270,8 +270,12 @@ export const productFeedService = {
 
     if (source) constraints.push(where('source', '==', source));
     if (category) constraints.push(where('category', '==', category));
-    if (mainSection) constraints.push(where('mainSection', '==', mainSection));
-    if (subSubCategory) constraints.push(where('subSubCategory', '==', subSubCategory));
+    if (sectionId) {
+      constraints.push(where('sectionId', '==', sectionId));
+    } else {
+      if (mainSection) constraints.push(where('mainSection', '==', mainSection));
+      if (subSubCategory) constraints.push(where('subSubCategory', '==', subSubCategory));
+    }
 
     constraints.push(orderBy('scores.composite', 'desc'));
     constraints.push(limit(maxItems));
@@ -279,23 +283,31 @@ export const productFeedService = {
     let products: ProductCatalogItem[];
 
     try {
-      const q = query(collection(db, 'products_catalog'), ...constraints);
+      const q = query(collection(db, PRODUCTS_CATALOG), ...constraints);
       const snap = await getDocs(q);
-      products = snap.docs.map((d) => enrichProduct({ id: d.id, ...d.data() } as ProductCatalogItem));
+      products = snap.docs.map((d) =>
+        enrichProduct({ id: d.id, ...d.data() } as ProductCatalogItem)
+      );
     } catch {
       const fallbackConstraints: QueryConstraint[] = [];
 
       if (source) fallbackConstraints.push(where('source', '==', source));
       if (category) fallbackConstraints.push(where('category', '==', category));
-      if (mainSection) fallbackConstraints.push(where('mainSection', '==', mainSection));
-      if (subSubCategory) fallbackConstraints.push(where('subSubCategory', '==', subSubCategory));
+      if (sectionId) {
+        fallbackConstraints.push(where('sectionId', '==', sectionId));
+      } else {
+        if (mainSection) fallbackConstraints.push(where('mainSection', '==', mainSection));
+        if (subSubCategory) fallbackConstraints.push(where('subSubCategory', '==', subSubCategory));
+      }
 
       fallbackConstraints.push(orderBy('cachedAt', 'desc'));
       fallbackConstraints.push(limit(maxItems));
 
-      const q = query(collection(db, 'products_catalog'), ...fallbackConstraints);
+      const q = query(collection(db, PRODUCTS_CATALOG), ...fallbackConstraints);
       const snap = await getDocs(q);
-      products = snap.docs.map((d) => enrichProduct({ id: d.id, ...d.data() } as ProductCatalogItem));
+      products = snap.docs.map((d) =>
+        enrichProduct({ id: d.id, ...d.data() } as ProductCatalogItem)
+      );
     }
 
     toCache(cacheKey, products);
@@ -436,6 +448,7 @@ export const productFeedService = {
       category?: string;
       mainSection?: string;
       subSubCategory?: string;
+      sectionId?: string;
       cluster?: string;
     }
   ): ProductCatalogItem[] {
@@ -446,20 +459,15 @@ export const productFeedService = {
       .filter((p) => {
         const blob = buildProductBlob(p);
 
-        const matchesKeyword =
-          !keyword || blob.includes(keyword);
-
-        const matchesSource =
-          !filters.source || p.source === filters.source;
-
-        const matchesCategory =
-          !filters.category || p.category === filters.category;
-
+        const matchesKeyword = !keyword || blob.includes(keyword);
+        const matchesSource = !filters.source || p.source === filters.source;
+        const matchesCategory = !filters.category || p.category === filters.category;
         const matchesMainSection =
           !filters.mainSection || safeString((p as any).mainSection) === filters.mainSection;
-
         const matchesSubSubCategory =
           !filters.subSubCategory || safeString((p as any).subSubCategory) === filters.subSubCategory;
+        const matchesSectionId =
+          !filters.sectionId || safeString((p as any).sectionId) === filters.sectionId;
 
         const matchesCluster =
           !filters.cluster ||
@@ -476,6 +484,7 @@ export const productFeedService = {
           matchesCategory &&
           matchesMainSection &&
           matchesSubSubCategory &&
+          matchesSectionId &&
           matchesCluster
         );
       });
@@ -491,7 +500,7 @@ export const productFeedService = {
       const docId = `${product.source}_${product.externalId}`;
       const enriched = enrichProduct(product as ProductCatalogItem);
 
-      await setDoc(doc(db, 'products_catalog', docId), {
+      await setDoc(doc(db, PRODUCTS_CATALOG, docId), {
         ...enriched,
         cachedAt: serverTimestamp(),
       });
@@ -507,6 +516,8 @@ export const productFeedService = {
 
   refreshFishinnFeed,
   refreshBolFeed,
+
+  ...productFeedServicePatch,
 };
 
 export function normalizeFishinnProduct(
@@ -516,7 +527,10 @@ export function normalizeFishinnProduct(
   const brand = raw.brand ?? raw.manufacturer ?? undefined;
   const description = raw.description ?? raw.shortDescription ?? undefined;
   const category = normalizeCategory(raw.category ?? raw.categoryName ?? '');
-  const blob = [name, brand, description, raw.category, raw.categoryName].filter(Boolean).join(' ').toLowerCase();
+  const blob = [name, brand, description, raw.category, raw.categoryName]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 
   return {
     externalId: String(raw.ID ?? raw.id ?? raw.productId ?? Math.random()),
@@ -545,7 +559,10 @@ export function normalizeBolProduct(
   const brand = raw.brand ?? undefined;
   const description = raw.shortDescription ?? raw.description ?? undefined;
   const category = normalizeCategory(raw.mainCategory ?? raw.category ?? '');
-  const blob = [name, brand, description, raw.mainCategory, raw.category].filter(Boolean).join(' ').toLowerCase();
+  const blob = [name, brand, description, raw.mainCategory, raw.category]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 
   return {
     externalId: String(raw.ean ?? raw.productId ?? raw.id ?? Math.random()),
@@ -567,11 +584,13 @@ export function normalizeBolProduct(
   } as Omit<ProductCatalogItem, 'id' | 'cachedAt'>;
 }
 
-function normalizeCategory(raw: string): string {
-  const lower = raw.toLowerCase();
+function normalizeCategory(raw?: string): string {
+  const lower = (raw ?? '').toLowerCase();
+
   if (lower.includes('hengel') || lower.includes('rod')) return 'rod';
   if (lower.includes('molen') || lower.includes('reel')) return 'reel';
   if (lower.includes('lijn') || lower.includes('line') || lower.includes('draad')) return 'line';
+
   if (
     lower.includes('kunstaas') ||
     lower.includes('lure') ||
@@ -580,7 +599,14 @@ function normalizeCategory(raw: string): string {
     lower.includes('jerkbait') ||
     lower.includes('spinner')
   ) return 'lure';
-  if (lower.includes('haak') || lower.includes('hook') || lower.includes('jighead') || lower.includes('jigkop')) return 'hook';
+
+  if (
+    lower.includes('haak') ||
+    lower.includes('hook') ||
+    lower.includes('jighead') ||
+    lower.includes('jigkop')
+  ) return 'hook';
+
   if (
     lower.includes('aas') ||
     lower.includes('bait') ||
@@ -590,6 +616,7 @@ function normalizeCategory(raw: string): string {
     lower.includes('pellet') ||
     lower.includes('grondvoer')
   ) return 'bait';
+
   return 'accessory';
 }
 
@@ -603,18 +630,69 @@ function inferTaxonomyFromBlob(blob: string): {
   const species: string[] = [];
   const technique: string[] = [];
 
-  if (lower.includes('karper') || lower.includes('carp') || lower.includes('boilie')) species.push('karper');
-  if (lower.includes('snoek') || lower.includes('pike')) species.push('snoek');
-  if (lower.includes('baars') || lower.includes('perch')) species.push('baars');
-  if (lower.includes('snoekbaars') || lower.includes('zander') || lower.includes('pikeperch')) species.push('zander');
-  if (lower.includes('forel') || lower.includes('trout')) species.push('forel');
-  if (lower.includes('witvis') || lower.includes('brasem') || lower.includes('voorn') || lower.includes('feeder')) species.push('witvis');
+  if (lower.includes('karper') || lower.includes('carp') || lower.includes('boilie')) {
+    species.push('karper');
+  }
+  if (lower.includes('snoek') || lower.includes('pike')) {
+    species.push('snoek');
+  }
+  if (lower.includes('baars') || lower.includes('perch')) {
+    species.push('baars');
+  }
+  if (lower.includes('snoekbaars') || lower.includes('zander') || lower.includes('pikeperch')) {
+    species.push('zander');
+  }
+  if (lower.includes('forel') || lower.includes('trout')) {
+    species.push('forel');
+  }
+  if (
+    lower.includes('witvis') ||
+    lower.includes('brasem') ||
+    lower.includes('voorn') ||
+    lower.includes('feeder')
+  ) {
+    species.push('witvis');
+  }
 
-  if (lower.includes('karper') || lower.includes('carp') || lower.includes('boilie') || lower.includes('bite alarm')) technique.push('karpervissen');
-  if (lower.includes('roofvis') || lower.includes('jerkbait') || lower.includes('shad') || lower.includes('dropshot') || lower.includes('kunstaas')) technique.push('roofvissen');
-  if (lower.includes('feeder') || lower.includes('method feeder') || lower.includes('grondvoer')) technique.push('feedervissen');
-  if (lower.includes('vliegvis') || lower.includes('fly rod') || lower.includes('vlieghengel')) technique.push('vliegvissen');
-  if (lower.includes('nachtvissen') || lower.includes('bivvy') || lower.includes('sleep system') || lower.includes('stretcher')) technique.push('nachtvissen');
+  if (
+    lower.includes('karper') ||
+    lower.includes('carp') ||
+    lower.includes('boilie') ||
+    lower.includes('bite alarm')
+  ) {
+    technique.push('karpervissen');
+  }
+  if (
+    lower.includes('roofvis') ||
+    lower.includes('jerkbait') ||
+    lower.includes('shad') ||
+    lower.includes('dropshot') ||
+    lower.includes('kunstaas')
+  ) {
+    technique.push('roofvissen');
+  }
+  if (
+    lower.includes('feeder') ||
+    lower.includes('method feeder') ||
+    lower.includes('grondvoer')
+  ) {
+    technique.push('feedervissen');
+  }
+  if (
+    lower.includes('vliegvis') ||
+    lower.includes('fly rod') ||
+    lower.includes('vlieghengel')
+  ) {
+    technique.push('vliegvissen');
+  }
+  if (
+    lower.includes('nachtvissen') ||
+    lower.includes('bivvy') ||
+    lower.includes('sleep system') ||
+    lower.includes('stretcher')
+  ) {
+    technique.push('nachtvissen');
+  }
 
   const skillLevel =
     lower.includes('starter') || lower.includes('beginner')
@@ -629,9 +707,6 @@ function inferTaxonomyFromBlob(blob: string): {
     skillLevel,
   };
 }
-
-// inferMainSectionFromBlob and inferSubSubCategoryFromBlob removed —
-// use inferMainSection / inferSubSubCategory from taxonomy.ts
 
 function buildSyntheticClustersFromBlob(blob: string, category: string): string[] {
   const taxonomy = inferTaxonomyFromBlob(blob);
