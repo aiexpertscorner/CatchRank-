@@ -12,6 +12,11 @@ import {
   Timestamp,
   QueryConstraint,
 } from 'firebase/firestore';
+import { productFeedServicePatch } from './productFeedService.patch';
+
+export const productFeedService = {
+  ...productFeedServicePatch,
+};
 import { db } from '../../../lib/firebase';
 import {
   ProductCatalogItem,
@@ -31,11 +36,13 @@ import {
   FEATURE_FLAGS,
 } from '../../../config/env';
 
+
+
 /**
  * Product Feed Service — Mijn Visgear / Ontdekken
  *
  * Architecture:
- * - Products live in `product_catalog`
+ * - Products live in `products_catalog`
  * - Clusters live in `product_clusters`
  * - Cache metadata in `product_cache_meta`
  * - Client reads ONLY from Firestore
@@ -272,7 +279,7 @@ export const productFeedService = {
     let products: ProductCatalogItem[];
 
     try {
-      const q = query(collection(db, 'product_catalog'), ...constraints);
+      const q = query(collection(db, 'products_catalog'), ...constraints);
       const snap = await getDocs(q);
       products = snap.docs.map((d) => enrichProduct({ id: d.id, ...d.data() } as ProductCatalogItem));
     } catch {
@@ -286,7 +293,7 @@ export const productFeedService = {
       fallbackConstraints.push(orderBy('cachedAt', 'desc'));
       fallbackConstraints.push(limit(maxItems));
 
-      const q = query(collection(db, 'product_catalog'), ...fallbackConstraints);
+      const q = query(collection(db, 'products_catalog'), ...fallbackConstraints);
       const snap = await getDocs(q);
       products = snap.docs.map((d) => enrichProduct({ id: d.id, ...d.data() } as ProductCatalogItem));
     }
@@ -484,7 +491,7 @@ export const productFeedService = {
       const docId = `${product.source}_${product.externalId}`;
       const enriched = enrichProduct(product as ProductCatalogItem);
 
-      await setDoc(doc(db, 'product_catalog', docId), {
+      await setDoc(doc(db, 'products_catalog', docId), {
         ...enriched,
         cachedAt: serverTimestamp(),
       });
