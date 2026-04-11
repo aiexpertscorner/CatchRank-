@@ -13,8 +13,8 @@ import {
   QueryConstraint,
 } from 'firebase/firestore';
 import { productFeedServicePatch } from './productFeedService.patch';
+
 export const productFeedService = {
-  ...bestaande methoden,
   ...productFeedServicePatch,
 };
 import { db } from '../../../lib/firebase';
