@@ -40,6 +40,7 @@ import { DashboardSkeleton } from '../../../components/ui/Skeleton';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { weatherService, WeatherData } from '../../weather/services/weatherService';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
+import WeatherForecast from './features/weather/screens/WeatherForecast';
 import { CatchForm } from '../../../components/CatchForm';
 import { SessionModal } from '../../../components/SessionModal';
 import { statsService, UserStats } from '../../../services/statsService';
