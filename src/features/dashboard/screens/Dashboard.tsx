@@ -911,7 +911,7 @@ export default function Dashboard() {
               ) : null}
 
               <button
-                onClick={() => navigate('/weather')}
+                onClick={() => navigate('/WeatherForecast')}
                 className="w-full rounded-2xl border border-brand/20 bg-brand/8 px-4 py-3.5 flex items-center justify-between text-left transition-all hover:bg-brand/12 active:scale-[0.99]"
               >
                 <div>
