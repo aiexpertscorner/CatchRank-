@@ -953,7 +953,7 @@ export default function Dashboard() {
 
                 return (
                   <Card
-                    key={c.id}
+                    key={catch.id}
                     padding="none"
                     hoverable
                     variant="premium"
