@@ -316,7 +316,7 @@ service cloud.firestore {
     }
 
     /* ------------------------------------------------------------------ */
-    /* User Setups                                                        */
+    /* User Setups (legacy)                                               */
     /* ------------------------------------------------------------------ */
     match /user_setups/{setupId} {
       allow read: if isAuthenticated() &&
@@ -334,7 +334,7 @@ service cloud.firestore {
     }
 
     /* ------------------------------------------------------------------ */
-    /* User Gear Setups V2 (discipline-aware, slot-based)                 */
+    /* User Gear Setups V2 (Setup Coach — discipline-aware, slot-based)  */
     /* ------------------------------------------------------------------ */
     match /user_gear_setups/{setupId} {
       allow read: if isAuthenticated() &&
@@ -352,7 +352,7 @@ service cloud.firestore {
     }
 
     /* ------------------------------------------------------------------ */
-    /* Product Catalog                                                    */
+    /* Product Catalog (legacy — old collection without 's')             */
     /* ------------------------------------------------------------------ */
     match /product_catalog/{productId} {
       allow read: if isAuthenticated();
@@ -362,6 +362,64 @@ service cloud.firestore {
     match /product_cache_meta/{metaId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Setup Coach — Product Catalog (new, with 's')                     */
+    /* ------------------------------------------------------------------ */
+    match /products_catalog/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /product_rule_mappings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /product_clusters/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Setup Coach — Gedeelde read-only data (templates, sections, reqs) */
+    /* ------------------------------------------------------------------ */
+    match /setup_templates/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /setup_sections/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /setup_requirements/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /gear_taxonomy/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Setup Coach — Gebruikersdata                                       */
+    /* ------------------------------------------------------------------ */
+    match /shopping_list/{docId} {
+      allow read, write: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    match /advice_outputs/{docId} {
+      allow read, write: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
     }
 
     /* ------------------------------------------------------------------ */
@@ -375,9 +433,7 @@ service cloud.firestore {
     /* ------------------------------------------------------------------ */
     /* Gear V2 — User Interactions (likes / saves / shares)              */
     /* ------------------------------------------------------------------ */
-
     match /gear_user_likes/{likeId} {
-      // likeId = userId_productId — owner-scoped
       allow read: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
 
@@ -391,7 +447,6 @@ service cloud.firestore {
     }
 
     match /gear_user_saves/{saveId} {
-      // saveId = userId_productId — owner-scoped
       allow read: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
 
@@ -409,7 +464,6 @@ service cloud.firestore {
     }
 
     match /gear_user_shares/{shareId} {
-      // Shares are append-only — analytics / tracking
       allow read: if isAdmin();
 
       allow create: if isAuthenticated() &&

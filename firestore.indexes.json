@@ -556,6 +556,41 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "products_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inStock", "order": "ASCENDING" },
+        { "fieldPath": "scores.composite", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sectionId", "order": "ASCENDING" },
+        { "fieldPath": "inStock", "order": "ASCENDING" },
+        { "fieldPath": "scores.composite", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mainSection", "order": "ASCENDING" },
+        { "fieldPath": "inStock", "order": "ASCENDING" },
+        { "fieldPath": "scores.composite", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "inStock", "order": "ASCENDING" },
+        { "fieldPath": "scores.composite", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
