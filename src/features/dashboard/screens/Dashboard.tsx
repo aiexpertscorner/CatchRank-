@@ -40,6 +40,7 @@ import { DashboardSkeleton } from '../../../components/ui/Skeleton';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { weatherService, WeatherData } from '../../weather/services/weatherService';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
+import WeatherForecast from './features/weather/screens/WeatherForecast';
 import { CatchForm } from '../../../components/CatchForm';
 import { SessionModal } from '../../../components/SessionModal';
 import { statsService, UserStats } from '../../../services/statsService';
@@ -911,7 +912,7 @@ export default function Dashboard() {
               ) : null}
 
               <button
-                onClick={() => navigate('/weather')}
+                onClick={() => navigate('/WeatherForecast')}
                 className="w-full rounded-2xl border border-brand/20 bg-brand/8 px-4 py-3.5 flex items-center justify-between text-left transition-all hover:bg-brand/12 active:scale-[0.99]"
               >
                 <div>
@@ -952,7 +953,7 @@ export default function Dashboard() {
 
                 return (
                   <Card
-                    key={c.id}
+                    key={(c as any).id}
                     padding="none"
                     hoverable
                     variant="premium"

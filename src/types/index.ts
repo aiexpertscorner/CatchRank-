@@ -775,3 +775,240 @@ export interface GearSetupV2 {
   createdAt: AnyTimestamp;
   updatedAt: AnyTimestamp;
 }
+
+/**
+ * gear-setup-types.ts
+ *
+ * New type definitions for the Setup Coach feature.
+ * ADD THESE to your existing types.ts file.
+ *
+ * Depends on existing: GearItem, GearSetupV2
+ */
+
+import { Timestamp, FieldValue } from 'firebase/firestore';
+
+/* ==========================================================================
+   TACKLEBOX ITEM
+   Extension of GearItem with Setup Coach fields.
+   Stored in user_gear (same collection, backward-compatible).
+   ========================================================================== */
+
+export type OwnershipStatus = 'own' | 'want' | 'reserve' | 'replace';
+export type ItemCondition   = 'goed' | 'redelijk' | 'vervangen';
+
+export interface TackleboxItem {
+  // ── Existing GearItem fields (keep as is) ────────────────────────────────
+  id: string;
+  userId: string;
+  name: string;
+  brand: string;
+  category: string;           // rod | reel | line | lure | hook | bait | accessory
+  model?: string;
+  description?: string;
+  photoURL?: string;
+  purchasePrice?: number;
+  isFavorite: boolean;
+  notes?: string;
+  linkedCatchIds: string[];
+  linkedSessionIds: string[];
+  linkedSetupIds: string[];
+  usageCount: number;
+  createdAt: Timestamp | FieldValue;
+  updatedAt: Timestamp | FieldValue;
+
+  // ── New Setup Coach fields ────────────────────────────────────────────────
+
+  /** What is the user's relationship with this item? */
+  ownershipStatus: OwnershipStatus;
+
+  /** Physical condition — only relevant when ownershipStatus = 'own' */
+  condition?: ItemCondition;
+
+  /**
+   * Which disciplines is this item used for?
+   * ['karper'], ['roofvis'], ['karper', 'nachtvissen'], etc.
+   */
+  disciplineTags: string[];
+
+  /**
+   * Which setup block (sectionId) does this item belong to?
+   * Maps to setup_sections.id — used by completeness engine.
+   * e.g. 'hookbaits', 'rods_reels', 'leaders_terminal'
+   */
+  sectionId?: string;
+
+  /**
+   * Specific role(s) within the section.
+   * Maps to setup_requirements.requirementKey.
+   * e.g. ['rod'] for a karperhengel, ['bite_alarm'] for a beetmelder.
+   * Multiple keys allowed: a multifunctional item can cover several requirements.
+   */
+  requirementKeys?: string[];
+}
+
+/* ==========================================================================
+   SETUP TEMPLATES
+   Read-only. Seeded via seed-setup-templates.mjs.
+   Collection: setup_templates
+   ========================================================================== */
+
+export type Discipline    = 'karper' | 'roofvis' | 'witvis' | 'nachtvissen';
+export type SessionType   =
+  | 'korte_nacht'
+  | 'weekender'
+  | 'struinen'
+  | 'polder_ondiep'
+  | 'vrij';
+
+export interface SetupTemplate {
+  id: string;
+  discipline: Discipline;
+  sessionType: SessionType;
+  title: string;
+  description: string;
+  skillLevel: string;
+  isDefault: boolean;
+  setupSectionIds: string[];
+  tags: string[];
+  estimatedItems: number;
+  updatedAt?: Timestamp | FieldValue;
+}
+
+/* ==========================================================================
+   SETUP SECTIONS
+   Canonical setup blocks. Collection: setup_sections
+   ========================================================================== */
+
+export interface SetupSection {
+  id: string;                  // 'rods_reels', 'hookbaits', etc.
+  label: string;               // Dutch display label
+  discipline: string[];        // which disciplines use this section
+  description?: string;
+  icon?: string;
+  sortOrder: number;
+}
+
+/* ==========================================================================
+   SETUP REQUIREMENTS
+   What's needed per template per section. Collection: setup_requirements
+   ========================================================================== */
+
+export type RequirementPriority = 'essential' | 'recommended' | 'optional';
+
+export interface SetupRequirement {
+  id: string;
+  templateId: string;
+  sectionId: string;
+  requirementKey: string;      // e.g. 'rod', 'bite_alarm', 'unhooking_mat'
+  label: string;               // Dutch display label
+  priority: RequirementPriority;
+  minQty: number;
+  recommendedQty: number;
+  rationale: string;
+  alternativesAllowed?: boolean;
+  updatedAt?: Timestamp | FieldValue;
+}
+
+/* ==========================================================================
+   COMPLETENESS RESULT
+   Output of completenessService.computeCompleteness()
+   ========================================================================== */
+
+export interface MissingItem {
+  requirementKey: string;
+  label: string;
+  sectionId: string;
+  priority: RequirementPriority;
+  rationale: string;
+}
+
+export interface CompletenessResult {
+  essentialsPct: number;       // 0–100
+  recommendedPct: number;      // 0–100
+  overallPct: number;          // weighted average
+
+  missingItems: MissingItem[]; // missing essential + recommended items
+  presentKeys: string[];       // requirementKeys that are covered
+
+  isSessionReady: boolean;     // true when essentialsPct === 100
+  totalRequirements: number;
+  coveredRequirements: number;
+}
+
+/* ==========================================================================
+   SESSION SETUP (V2 upgrade)
+   Extends GearSetupV2 with template and completeness data.
+   Collection: user_gear_setups
+   ========================================================================== */
+
+export interface SessionSetup {
+  // ── Existing GearSetupV2 fields ─────────────────────────────────────────
+  id: string;
+  userId: string;
+  name: string;
+  discipline: string;
+  notes?: string;
+  slots: any[];                // GearSetupSlot[] — keep existing
+  completeness: number;        // legacy 0–100 number (keep for backward compat)
+  createdAt: Timestamp | FieldValue;
+  updatedAt: Timestamp | FieldValue;
+
+  // ── New Setup Coach fields ────────────────────────────────────────────────
+
+  /** Which template this setup is based on (optional for free setups) */
+  templateId?: string;
+
+  /** Session type from the template */
+  sessionType?: SessionType;
+
+  /** Computed completeness per priority tier */
+  completenessDetail?: {
+    essentialsPct: number;
+    recommendedPct: number;
+    overallPct: number;
+  };
+
+  /** requirementKeys that are missing (updated when user saves setup) */
+  missingKeys?: string[];
+
+  /** Last time the user ran the sessiecheck */
+  lastCheckedAt?: Timestamp | FieldValue;
+}
+
+/* ==========================================================================
+   ADVICE TYPES
+   Used by adviceEngine.ts and AdviceForTodaySheet.tsx
+   ========================================================================== */
+
+export type WaterType        = 'meer' | 'polder' | 'rivier' | 'kanaal' | 'vijver';
+export type DepthBand        = 'ondiep' | 'middel' | 'diep';
+export type WaterClarity     = 'helder' | 'troebel' | 'groen';
+export type TemperatureBand  = 'koud' | 'gematigd' | 'warm';
+export type PressureTrend    = 'stabiel' | 'stijgend' | 'dalend';
+export type VegetationLevel  = 'geen' | 'licht' | 'zwaar';
+
+export interface AdviceContext {
+  discipline: 'karper' | 'roofvis';
+  waterType?: WaterType;
+  depthBand?: DepthBand;
+  clarity?: WaterClarity;
+  temperatureBand?: TemperatureBand;
+  pressureTrend?: PressureTrend;
+  vegetation?: VegetationLevel;
+}
+
+export interface AdviceRecommendation {
+  baitFamily?: string;
+  colorProfile?: string;
+  sizeBand?: string;
+  technique?: string;
+  explanation: string;          // Dutch, 1–3 sentences
+  alternativeNote?: string;     // What to try if primary doesn't work
+}
+
+export interface AdviceOutput {
+  context: AdviceContext;
+  primaryRecommendation: AdviceRecommendation;
+  productRuleKeys: string[];    // Keys into product_rule_mappings
+  tips?: string[];              // 1–3 practical tips
+}

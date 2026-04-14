@@ -326,7 +326,7 @@ export default function App() {
               {FEATURE_FLAGS.ENABLE_AI_ASSISTANT && (
                 <Route path="/tools/ask-dick" element={<AskDick />} />
               )}
-              <Route path="/tools/weather" element={<WeatherForecast />} />
+              <Route path="/WeatherForecast" element={<WeatherForecast />} />
               <Route path="/knowledge" element={<Knowledge />} />
               {/* Admin-only — remove after migrations are complete */}
               {user?.email === 'j.vandenbol@gmail.com' && (
