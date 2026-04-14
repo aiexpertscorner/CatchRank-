@@ -470,10 +470,3 @@ export const AdviceForTodaySheet: React.FC<AdviceForTodaySheetProps> = ({
     </>
   );
 };
-
-// Local label map to avoid circular import
-const BAIT_FAMILY_LABELS: Record<string, string> = {
-  popup: 'Pop-up', wafter: 'Wafter', boilie: 'Boilie',
-  shad: 'Shad', jerkbait: 'Jerkbait', spinner: 'Spinner',
-  plug: 'Plug / Crankbait', softbait: 'Softbait',
-};

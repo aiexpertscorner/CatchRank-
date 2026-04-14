@@ -108,7 +108,7 @@ const KARPER_RULES: AdviceRule[] = [
     tips: [
       'Voer elke 2–3 uur bij — warme karper eet meer.',
       'Zoek oksels van wier of rietranden — karper zoekt voedsel hier.',
-      'Vis 's avonds en 's ochtends vroeg — meest actief rondom schemering.',
+      'Vis \'s avonds en \'s ochtends vroeg — meest actief rondom schemering.',
     ],
   },
 
@@ -362,7 +362,7 @@ const ROOFVIS_RULES: AdviceRule[] = [
       technique:    'surface_topwater',
       explanation:
         'Helder en warm water: de meest spektaculaire snoekvisserij. Probeer een surface plug ' +
-        'of walker vroeg 's ochtends en laat 's avonds. Snoek jaagt actief op het oppervlak ' +
+        'of walker vroeg \'s ochtends en laat \'s avonds. Snoek jaagt actief op het oppervlak ' +
         'bij warm helder water. Vis rustig en laat het aas liggen na iedere trek.',
       alternativeNote: 'Als surface niet werkt: ondiepe crankbait of zwemmende shad.',
     },

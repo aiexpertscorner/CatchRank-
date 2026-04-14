@@ -512,7 +512,7 @@ export const DiscoverTab: React.FC<DiscoverTabProps> = ({
       {activeSectionId !== 'all' && !searchQuery && (
         <div className="flex items-center justify-between">
           <p className="text-sm font-bold text-text-primary">
-            {sectionLabel || SECTION_ENTRY_POINTS.find((s) => s.id === activeSectionId)?.label ?? activeSectionId}
+            {sectionLabel || (SECTION_ENTRY_POINTS.find((s) => s.id === activeSectionId)?.label ?? activeSectionId)}
           </p>
           <button
             onClick={() => handleSectionSelect('all')}

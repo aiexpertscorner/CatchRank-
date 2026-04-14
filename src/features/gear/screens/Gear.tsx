@@ -1,24 +1,16 @@
 /**
  * Gear.tsx — navigatie-shell (v2)
- *
  * Locatie: src/features/gear/screens/Gear.tsx
- *
- * Gebruikt BottomNav component met correcte safe area afhandeling.
- * Pagina-content krijgt pb-safe-nav zodat niets achter de nav verdwijnt.
  */
 
 import { useState } from 'react';
 import { Layers, Package, ShoppingBag } from 'lucide-react';
-import { PageLayout, PageHeader } from '../../../../components/layout/PageLayout';
-import { BottomNav, NavItem } from '../../../../components/ui/BottomNav';
+import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
+import { BottomNav, NavItem } from '../../../components/ui/BottomNav';
 import { GearProvider } from '../context/GearContext';
 import { SetupCoachScreen } from './SetupCoachScreen';
 import { TackleboxScreen } from './TackleboxScreen';
 import { DiscoverScreen } from './DiscoverScreen';
-
-/* ==========================================================================
-   Navigation config
-   ========================================================================== */
 
 type Screen = 'setup-coach' | 'tacklebox' | 'discover';
 
@@ -33,10 +25,6 @@ const SCREEN_TITLES: Record<Screen, { title: string; subtitle: string }> = {
   'tacklebox':   { title: 'Mijn Tacklebox', subtitle: 'Gear, favorieten en wishlist'        },
   'discover':    { title: 'Ontdekken',      subtitle: 'Vind passende producten'             },
 };
-
-/* ==========================================================================
-   Component
-   ========================================================================== */
 
 export default function Gear() {
   const [activeScreen, setActiveScreen] = useState<Screen>('setup-coach');
