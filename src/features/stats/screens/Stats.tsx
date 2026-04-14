@@ -81,7 +81,7 @@ export default function Stats() {
         }
       />
 
-      <div className="space-y-10 pb-32">
+      <div className="space-y-10 pb-nav-pad">
         {/* Key Metrics Grid */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4 px-2 md:px-0">
           <StatCard 

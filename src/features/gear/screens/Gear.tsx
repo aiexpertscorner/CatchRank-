@@ -1,20 +1,20 @@
 /**
  * Gear.tsx — navigatie-shell (v2)
  *
+ * Locatie: src/features/gear/screens/Gear.tsx
+ *
  * Gebruikt BottomNav component met correcte safe area afhandeling.
  * Pagina-content krijgt pb-safe-nav zodat niets achter de nav verdwijnt.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Layers, Package, ShoppingBag } from 'lucide-react';
-import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
-import { BottomNav, NavItem } from '../../../components/ui/BottomNav';
-import { cn } from '../../../lib/utils';
-
-import { GearProvider } from './context/GearContext';
-import { SetupCoachScreen } from './screens/SetupCoachScreen';
-import { TackleboxScreen } from './screens/TackleboxScreen';
-import { DiscoverScreen } from './screens/DiscoverScreen';
+import { PageLayout, PageHeader } from '../../../../components/layout/PageLayout';
+import { BottomNav, NavItem } from '../../../../components/ui/BottomNav';
+import { GearProvider } from '../context/GearContext';
+import { SetupCoachScreen } from './SetupCoachScreen';
+import { TackleboxScreen } from './TackleboxScreen';
+import { DiscoverScreen } from './DiscoverScreen';
 
 /* ==========================================================================
    Navigation config
@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
 const SCREEN_TITLES: Record<Screen, { title: string; subtitle: string }> = {
   'setup-coach': { title: 'Setup Coach',    subtitle: 'Sessie setups, checklist en advies' },
   'tacklebox':   { title: 'Mijn Tacklebox', subtitle: 'Gear, favorieten en wishlist'        },
-  'discover':    { title: 'Ontdekken',      subtitle: 'Vind passende producten'              },
+  'discover':    { title: 'Ontdekken',      subtitle: 'Vind passende producten'             },
 };
 
 /* ==========================================================================
@@ -47,14 +47,12 @@ export default function Gear() {
       <PageLayout>
         <PageHeader title={title} subtitle={subtitle} />
 
-        {/* Pagina-content: pb-safe-nav zorgt dat niets achter de nav verdwijnt */}
         <div className="px-2 md:px-0 pb-safe-nav">
           {activeScreen === 'setup-coach' && <SetupCoachScreen />}
           {activeScreen === 'tacklebox'   && <TackleboxScreen />}
           {activeScreen === 'discover'    && <DiscoverScreen />}
         </div>
 
-        {/* Bottom nav — hoogte wordt via JS doorgegeven als CSS custom property */}
         <BottomNav
           items={NAV_ITEMS}
           activeId={activeScreen}

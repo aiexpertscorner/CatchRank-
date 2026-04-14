@@ -172,7 +172,7 @@ export default function Sessions() {
         }
       />
 
-      <div className="space-y-6 md:space-y-8 pb-32">
+      <div className="space-y-6 md:space-y-8 pb-nav-pad">
         {/* Pending Invitations */}
         {pendingInvitations.length > 0 && profile && (
           <section className="px-2 md:px-0 space-y-4">

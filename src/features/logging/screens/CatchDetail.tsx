@@ -412,7 +412,7 @@ export default function CatchDetail() {
 
   return (
     <PageLayout>
-      <div className="max-w-4xl mx-auto pb-32">
+      <div className="max-w-4xl mx-auto pb-nav-pad">
         <div className="flex items-center justify-between mb-4 px-1">
           <button
             onClick={() => navigate(-1)}

@@ -320,7 +320,7 @@ export default function SpotDetail() {
 
   return (
     <PageLayout>
-      <div className="space-y-8 pb-32">
+      <div className="space-y-8 pb-nav-pad">
         {/* Navigation & Actions */}
         <div className="flex items-center justify-between px-2">
           <Button

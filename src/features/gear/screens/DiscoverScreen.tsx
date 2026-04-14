@@ -30,7 +30,7 @@ export function DiscoverScreen() {
   }, [loadInteractions]);
 
   return (
-    <div className="space-y-4 pb-32">
+    <div className="space-y-4 pb-nav-pad">
       <DiscoverTab
         userSetups={setupsV2}
         tackleboxItems={myGear as any}

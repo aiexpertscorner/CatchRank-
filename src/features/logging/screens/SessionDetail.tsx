@@ -258,7 +258,7 @@ export default function SessionDetail() {
 
   return (
     <PageLayout>
-      <div className="max-w-2xl mx-auto pb-32 space-y-3">
+      <div className="max-w-2xl mx-auto pb-nav-pad space-y-3">
         {/* Back Nav */}
         <div className="flex items-center justify-between mb-2 px-1">
           <button

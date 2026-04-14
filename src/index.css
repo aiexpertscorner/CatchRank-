@@ -154,3 +154,124 @@
   @apply bg-border-subtle rounded-full hover:bg-text-muted/30 transition-colors;
 }
 
+/*
+ * globals-additions.css
+ *
+ * Voeg deze regels toe aan je bestaande globals.css (of index.css).
+ *
+ * Ze definiëren:
+ *  1. CSS custom properties voor safe area insets
+ *  2. Utility classes voor bottom-nav-aware spacing
+ *  3. Modal/sheet max-height helpers
+ *  4. Viewport height fix voor mobile browsers (100dvh fallback)
+ */
+
+/* =========================================================================
+   1. Safe area custom properties
+   Zet op :root zodat je ze overal als var() kunt gebruiken.
+   ========================================================================= */
+
+:root {
+  --bottom-nav-height: 60px;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-top:    env(safe-area-inset-top,    0px);
+
+  /* Totale ruimte die de bottom nav plus safe area inneemt */
+  --nav-total-height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+
+  /* Max-height voor bottom sheets: volledig scherm minus nav en top bar */
+  --modal-max-height: calc(
+    100dvh
+    - var(--bottom-nav-height)
+    - var(--safe-area-bottom)
+    - var(--safe-area-top)
+  );
+
+  /* Ruimte onder scrollbare pagina-content */
+  --page-pb: calc(var(--nav-total-height) + 1rem);
+}
+
+/* =========================================================================
+   2. Utility classes
+   ========================================================================= */
+
+/* Pagina-content: zet dit op de buitenste div van elke pagina */
+.pb-nav {
+  padding-bottom: var(--page-pb);
+}
+
+/* Alternatief voor pb-32 in Tailwind — gebruik dit ipv pb-32 */
+.pb-safe-nav {
+  padding-bottom: var(--page-pb);
+}
+
+/* Bottom sheet / modal max-height */
+.modal-max-h {
+  max-height: var(--modal-max-height);
+}
+
+/* Modal die vanuit de bodem opstijgt — correct gepositioneerd */
+.sheet-bottom {
+  bottom: var(--nav-total-height);
+}
+
+/* Vaste footer binnenin een modal (knoppen bovenaan de nav) */
+.modal-footer-safe {
+  padding-bottom: max(var(--safe-area-bottom), 12px);
+}
+
+/* Bottom nav zelf */
+.bottom-nav-safe {
+  padding-bottom: var(--safe-area-bottom);
+  height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+}
+
+/* =========================================================================
+   3. Viewport height fix
+   100vh is op mobile browsers inclusief de adresbalk.
+   100dvh is de zichtbare viewport (dynamic viewport height).
+   Fallback voor browsers die dvh niet kennen.
+   ========================================================================= */
+
+.h-screen-safe {
+  height: 100vh; /* fallback */
+  height: 100dvh;
+}
+
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* =========================================================================
+   4. Scroll container die stopt boven de bottom nav
+   ========================================================================= */
+
+.scroll-above-nav {
+  overflow-y: auto;
+  /* Voeg onderin padding toe zodat content nooit achter nav verdwijnt */
+  padding-bottom: var(--page-pb);
+  /* Zorgt dat momentum scrolling soepel werkt op iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* =========================================================================
+   5. Tailwind extend toevoeging
+   Als je Tailwind v3 gebruikt, voeg dit toe aan tailwind.config.ts:
+
+   theme: {
+     extend: {
+       spacing: {
+         'nav': 'var(--nav-total-height)',
+         'nav-pad': 'var(--page-pb)',
+       },
+       maxHeight: {
+         'modal': 'var(--modal-max-height)',
+       },
+     }
+   }
+
+   Dan kun je gebruiken:
+     pb-nav-pad   → padding-bottom: var(--page-pb)
+     max-h-modal  → max-height: var(--modal-max-height)
+   ========================================================================= */

@@ -86,7 +86,7 @@ export default function WeatherForecast() {
         }
       />
 
-      <div className="space-y-8 pb-32">
+      <div className="space-y-8 pb-nav-pad">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-2 md:px-0">
             <div className="md:col-span-2 h-64 bg-surface-card animate-pulse rounded-[2.5rem]" />

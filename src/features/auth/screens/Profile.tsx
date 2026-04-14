@@ -104,7 +104,7 @@ export default function Profile() {
   if (loading) {
     return (
       <PageLayout>
-        <div className="max-w-5xl mx-auto space-y-6 pb-32">
+        <div className="max-w-5xl mx-auto space-y-6 pb-nav-pad">
           <Card className="h-[420px] rounded-[2rem] md:rounded-[2.5rem] bg-surface-card border-none animate-pulse" />
           <Card className="h-16 rounded-2xl bg-surface-card border border-border-subtle animate-pulse" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -118,7 +118,7 @@ export default function Profile() {
 
   return (
     <PageLayout>
-      <div className="max-w-5xl mx-auto space-y-8 pb-32">
+      <div className="max-w-5xl mx-auto space-y-8 pb-nav-pad">
         <section className="relative">
           <Card className="overflow-hidden rounded-[2rem] md:rounded-[2.5rem] border-none bg-surface-card shadow-premium">
             <div className="relative h-28 md:h-44 bg-gradient-to-r from-brand/20 via-brand/10 to-transparent">

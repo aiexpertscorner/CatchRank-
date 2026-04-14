@@ -200,7 +200,7 @@ export default function Catches() {
         }
       />
 
-      <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-32">
+      <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-nav-pad">
         <section className="flex flex-col lg:flex-row gap-3 px-2 md:px-0">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />

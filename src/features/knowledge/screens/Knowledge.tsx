@@ -69,7 +69,7 @@ export default function Knowledge() {
         }
       />
 
-      <div className="space-y-8 pb-32">
+      <div className="space-y-8 pb-nav-pad">
         {/* Search & Category Tabs */}
         <section className="space-y-6 px-2 md:px-0">
           <div className="relative">

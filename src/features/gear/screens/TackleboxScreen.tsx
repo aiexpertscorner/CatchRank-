@@ -286,7 +286,7 @@ export function TackleboxScreen() {
   ];
 
   return (
-    <div className="space-y-4 pb-32">
+    <div className="space-y-4 pb-nav-pad">
 
       {/* ── Top bar: sub-nav + add ─────────────────────────────────── */}
       <div className="flex items-center gap-2 px-2 md:px-0">

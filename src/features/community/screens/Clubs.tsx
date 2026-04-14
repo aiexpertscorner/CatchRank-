@@ -57,7 +57,7 @@ export default function Clubs() {
         }
       />
 
-      <div className="space-y-8 pb-32">
+      <div className="space-y-8 pb-nav-pad">
         {/* Tab Navigation */}
         <div className="flex items-center gap-1 bg-surface-card p-1 rounded-2xl border border-border-subtle overflow-x-auto no-scrollbar mx-2 md:mx-0">
           {tabs.map((tab) => (

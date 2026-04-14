@@ -97,7 +97,7 @@ export default function Tools() {
         subtitle="Slimme hulpmiddelen voor aan de waterkant"
       />
 
-      <div className="space-y-10 pb-32">
+      <div className="space-y-10 pb-nav-pad">
         {/* Featured AI Tool */}
         <section className="px-2 md:px-0">
           <Link to="/tools/ask-dick">

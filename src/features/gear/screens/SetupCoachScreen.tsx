@@ -96,7 +96,7 @@ export function SetupCoachScreen() {
   }, []);
 
   return (
-    <div className="space-y-4 pb-32">
+    <div className="space-y-4 pb-nav-pad">
       {/* Header CTAs */}
       <div className="flex gap-2 px-2 md:px-0">
         <Button

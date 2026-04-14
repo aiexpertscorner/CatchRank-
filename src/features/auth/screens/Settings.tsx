@@ -229,7 +229,7 @@ export default function Settings() {
     <PageLayout>
       <PageHeader title="Instellingen" subtitle="Beheer je account en voorkeuren" />
 
-      <div className="max-w-4xl mx-auto space-y-8 pb-32">
+      <div className="max-w-4xl mx-auto space-y-8 pb-nav-pad">
         {/* Account */}
         <section className="space-y-4">
           <div className="flex items-center gap-2 px-4">

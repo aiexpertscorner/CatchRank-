@@ -122,7 +122,7 @@ export default function Spots() {
         }
       />
 
-      <div className="space-y-6 pb-32">
+      <div className="space-y-6 pb-nav-pad">
         {/* Search & View Toggle */}
         <section className="flex flex-col gap-3 px-2 md:px-0">
           <div className="flex gap-2">
