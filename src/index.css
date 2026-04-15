@@ -145,6 +145,11 @@
 .text-balance { text-wrap: balance; }
 .text-pretty { text-wrap: pretty; }
 
+/* Bottom-nav-aware padding — used in AppShell, PageLayout, scroll containers */
+.pb-nav-pad { padding-bottom: var(--page-pb); }
+.pt-nav-pad { padding-top: var(--page-pb); }
+.mb-nav-pad { margin-bottom: var(--page-pb); }
+
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 8px;
@@ -183,6 +188,9 @@
   /* Totale ruimte die de bottom nav plus safe area inneemt */
   --nav-total-height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
 
+  /* Hoeveel de centrale FAB uitsteekt boven de bottom nav */
+  --fab-protrusion: 20px;
+
   /* Max-height voor bottom sheets: volledig scherm minus nav en top bar */
   --modal-max-height: calc(
     100dvh
@@ -191,8 +199,8 @@
     - var(--safe-area-top)
   );
 
-  /* Ruimte onder scrollbare pagina-content */
-  --page-pb: calc(var(--nav-total-height) + 1rem);
+  /* Ruimte onder scrollbare pagina-content — incl. FAB protrusion + buffer */
+  --page-pb: calc(var(--nav-total-height) + var(--fab-protrusion) + 0.75rem);
 }
 
 /* =========================================================================

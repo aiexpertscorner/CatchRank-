@@ -57,10 +57,10 @@ async function runXpBackfillIfNeeded(
   if (sessionStorage.getItem(backfillKey(userId))) return;
   sessionStorage.setItem(backfillKey(userId), '1');
 
-  // Catches that are complete and have no xpEarned set
+  // Catches that are not drafts and have no xpEarned set (includes migrated records without status)
   const needsXp = catches.filter(
     (c) =>
-      c.status === 'complete' &&
+      c.status !== 'draft' &&
       (c.xpEarned === undefined || c.xpEarned === null || c.xpEarned === 0)
   );
 
@@ -209,7 +209,8 @@ export function useDashboardData(userId: string | undefined): DashboardData {
         const all = snap.docs.map(
           (d) => ({ id: d.id, ...d.data() } as Catch)
         );
-        setRecentCatches(all.filter((c) => c.status === 'complete').slice(0, 6));
+        // Accept records that are not explicitly drafts — migrated records may have no status field
+        setRecentCatches(all.filter((c) => c.status !== 'draft').slice(0, 6));
         setIncompleteCatches(all.filter((c) => c.status === 'draft').slice(0, 2));
 
         // Load secondary data once after first catch snapshot

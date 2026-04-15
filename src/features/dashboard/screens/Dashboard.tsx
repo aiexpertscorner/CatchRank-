@@ -140,7 +140,7 @@ export default function Dashboard() {
           catches={recentCatches}
           sessions={recentSessions}
           spots={favoriteSpots}
-          onCatchClick={openEditCatch}
+          onCatchClick={(c: Catch) => navigate(`/catches/${(c as any).id}`)}
           onSessionClick={(s: Session) => navigate(`/sessions/${(s as any).id}`)}
           onSpotClick={(s: Spot) => navigate(`/spots/${s.id}`)}
           onViewAllCatches={() => navigate('/catches')}
