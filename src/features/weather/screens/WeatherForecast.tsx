@@ -23,9 +23,6 @@ import {
   Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
-import { Card, Button, Badge } from '../../../components/ui/Base';
-import { weatherService, WeatherData } from '../services/weatherService';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -37,6 +34,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+
+import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
+import { Card, Button, Badge } from '../../../components/ui/Base';
+import { weatherService, WeatherData } from '../services/weatherService';
 
 const DEFAULT_LOCATION = localStorage.getItem('weatherLocation') || 'Utrecht';
 const GEO_STORAGE_KEY = 'weatherGeo';
@@ -299,10 +300,7 @@ function safeReadGeo(): StoredGeo | null {
     const raw = localStorage.getItem(GEO_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (
-      typeof parsed?.lat === 'number' &&
-      typeof parsed?.lon === 'number'
-    ) {
+    if (typeof parsed?.lat === 'number' && typeof parsed?.lon === 'number') {
       return parsed;
     }
     return null;
@@ -313,7 +311,7 @@ function safeReadGeo(): StoredGeo | null {
 
 function ScoreRing({
   score,
-  size = 88,
+  size = 94,
   stroke = 9,
 }: {
   score: number;
@@ -351,7 +349,7 @@ function ScoreRing({
       </svg>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-black text-text-primary leading-none">{score}</span>
+        <span className="text-[22px] font-black text-text-primary leading-none">{score}</span>
         <span className={`text-[9px] font-black uppercase tracking-wider ${meta.text}`}>vis</span>
       </div>
     </div>
@@ -368,7 +366,7 @@ function StatPill({
   value: string;
 }) {
   return (
-    <div className="rounded-xl bg-surface-soft border border-border-subtle px-2.5 py-2 min-w-0">
+    <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5 min-w-0">
       <div className="flex items-center gap-1.5 mb-1">
         <Icon className="w-3 h-3 text-brand shrink-0" />
         <span className="text-[8px] font-black uppercase tracking-widest text-text-muted truncate">
@@ -491,7 +489,7 @@ function WindyEmbed({
 }) {
   const windyOverlay = overlay === 'rain' ? 'rain' : overlay === 'radar' ? 'radar' : 'wind';
 
-  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&width=650&height=700&zoom=8&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=true&metricWind=default&metricTemp=default&radarRange=-1`;
+  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&width=650&height=760&zoom=8&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=true&metricWind=default&metricTemp=default&radarRange=-1`;
 
   return (
     <Card className="p-0 border border-border-subtle bg-surface-card rounded-[28px] overflow-hidden">
@@ -510,7 +508,7 @@ function WindyEmbed({
 
       <div className="px-4 pb-4">
         <div className="rounded-[24px] overflow-hidden border border-border-subtle bg-black">
-          <div className="aspect-[16/12] sm:aspect-[16/10]">
+          <div className="aspect-[16/12] sm:aspect-[16/10] min-h-[360px]">
             <iframe
               title="Windy live weather map"
               src={src}
@@ -544,7 +542,7 @@ function SimplePressureCard({ pressure }: { pressure: number }) {
 
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
-          <p className="text-[44px] font-black text-text-primary leading-none">{pressure}</p>
+          <p className="text-[40px] font-black text-text-primary leading-none">{pressure}</p>
           <p className="text-xs text-text-muted mt-1">hPa · {label}</p>
         </div>
 
@@ -594,7 +592,7 @@ function SimpleUvCard({ uv }: { uv: number }) {
 
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
-          <p className="text-[44px] font-black text-text-primary leading-none">{uv}</p>
+          <p className="text-[40px] font-black text-text-primary leading-none">{uv}</p>
           <p className="text-xs text-text-muted mt-1">
             {uv <= 2
               ? 'Geen bescherming nodig'
@@ -691,7 +689,7 @@ function WindDirectionCompact({
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mb-1">
             Richting
           </p>
-          <p className="text-[36px] font-black text-text-primary leading-none mb-3">
+          <p className="text-[34px] font-black text-text-primary leading-none mb-3">
             {dir?.toUpperCase() || '--'}
           </p>
 
@@ -763,7 +761,7 @@ function MoonSunCard({
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mb-1">
             Maanfase
           </p>
-          <p className="text-[28px] font-black text-text-primary leading-tight truncate">{phase}</p>
+          <p className="text-[26px] font-black text-text-primary leading-tight truncate">{phase}</p>
           <p className="text-sm text-text-muted">{illumination}% verlicht</p>
         </div>
       </div>
@@ -962,26 +960,10 @@ export default function WeatherForecast() {
 
   const liveSummary = weather
     ? [
-        {
-          icon: Wind,
-          label: 'Wind',
-          value: `${Math.round(weather.current.wind_kph)} km/u`,
-        },
-        {
-          icon: Compass,
-          label: 'Richting',
-          value: weather.current.wind_dir?.toUpperCase() || '--',
-        },
-        {
-          icon: Gauge,
-          label: 'Druk',
-          value: `${weather.current.pressure_mb} hPa`,
-        },
-        {
-          icon: Droplets,
-          label: 'Vocht',
-          value: `${weather.current.humidity}%`,
-        },
+        { icon: Wind, label: 'Wind', value: `${Math.round(weather.current.wind_kph)} km/u` },
+        { icon: Compass, label: 'Richting', value: weather.current.wind_dir?.toUpperCase() || '--' },
+        { icon: Gauge, label: 'Druk', value: `${weather.current.pressure_mb} hPa` },
+        { icon: Droplets, label: 'Vocht', value: `${weather.current.humidity}%` },
       ]
     : [];
 
@@ -1029,7 +1011,7 @@ export default function WeatherForecast() {
 
         {loading && (
           <div className="space-y-3 animate-pulse">
-            {[230, 470, 180, 180, 160, 160, 220].map((height, idx) => (
+            {[230, 500, 200, 190, 160, 160, 220].map((height, idx) => (
               <div key={idx} style={{ height }} className="bg-surface-card/60 rounded-[28px]" />
             ))}
           </div>
@@ -1056,7 +1038,6 @@ export default function WeatherForecast() {
               transition={{ duration: 0.28 }}
               className="space-y-3"
             >
-              {/* HERO */}
               <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px] relative overflow-hidden">
                 <div
                   className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl -mr-16 -mt-16 opacity-50 pointer-events-none"
@@ -1122,12 +1103,7 @@ export default function WeatherForecast() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3">
                     {liveSummary.map((item) => (
-                      <StatPill
-                        key={item.label}
-                        icon={item.icon}
-                        label={item.label}
-                        value={item.value}
-                      />
+                      <StatPill key={item.label} icon={item.icon} label={item.label} value={item.value} />
                     ))}
                   </div>
 
@@ -1143,7 +1119,6 @@ export default function WeatherForecast() {
                 </div>
               </Card>
 
-              {/* LIVE MAP FIRST */}
               <div className="space-y-2">
                 <SectionHeader
                   icon={Waves}
@@ -1159,7 +1134,6 @@ export default function WeatherForecast() {
                 />
               </div>
 
-              {/* TRENDS HIGHER */}
               <div className="grid grid-cols-1 gap-3">
                 {pressureChartData.length > 1 && (
                   <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
@@ -1173,7 +1147,7 @@ export default function WeatherForecast() {
                       <RangeToggle value={chartRange} onChange={setChartRange} />
                     </div>
 
-                    <ResponsiveContainer width="100%" height={170}>
+                    <ResponsiveContainer width="100%" height={180}>
                       <AreaChart data={pressureChartData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
                         <defs>
                           <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1268,7 +1242,6 @@ export default function WeatherForecast() {
                 )}
               </div>
 
-              {/* KOMENDE UREN */}
               <div>
                 <SectionHeader
                   icon={Zap}
@@ -1327,7 +1300,6 @@ export default function WeatherForecast() {
                 </Card>
               </div>
 
-              {/* QUICK LIVE DATA + BEST WINDOWS */}
               <div className="grid grid-cols-2 gap-3">
                 <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
                   <SectionHeader icon={Anchor} title="Live samenvatting" />
@@ -1383,20 +1355,17 @@ export default function WeatherForecast() {
                 </Card>
               </div>
 
-              {/* PRESSURE + UV */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <SimplePressureCard pressure={weather.current.pressure_mb} />
                 <SimpleUvCard uv={weather.current.uv} />
               </div>
 
-              {/* WIND */}
               <WindDirectionCompact
                 dir={weather.current.wind_dir}
                 speed={weather.current.wind_kph}
                 gusts={weather.current.gust_kph}
               />
 
-              {/* MOON + SUN */}
               <MoonSunCard
                 phase={today?.astro?.moon_phase ?? '--'}
                 illumination={today?.astro?.moon_illumination ?? 0}
@@ -1406,7 +1375,6 @@ export default function WeatherForecast() {
                 sunset={today?.astro?.sunset ?? '--'}
               />
 
-              {/* 3 DAY */}
               <div>
                 <SectionHeader
                   icon={Cloud}
@@ -1477,7 +1445,6 @@ export default function WeatherForecast() {
                 </div>
               </div>
 
-              {/* ANALYSE */}
               <div>
                 <SectionHeader icon={Anchor} title="Vissers analyse" />
                 <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
