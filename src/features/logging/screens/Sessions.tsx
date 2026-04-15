@@ -8,11 +8,14 @@ import {
   ChevronRight,
   History,
   Users,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { LazyImage } from '../../../components/ui/LazyImage';
+import { resolveSessionImageSrc } from '../../../lib/catchUtils';
 import { Session } from '../../../types';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
 import { Card, Button } from '../../../components/ui/Base';
@@ -42,12 +45,21 @@ const getSessionStart = (session: Partial<Session>) =>
   (session as any).startTime || (session as any).startedAt || null;
 
 const getSessionCatchCount = (session: Partial<Session>) =>
-  (session as any).linkedCatchIds?.length || 0;
+  (session as any).stats?.totalFish ||
+  (session as any).stats?.totalCatches ||
+  (session as any).statsSummary?.totalCatches ||
+  (session as any).linkedCatchIds?.length ||
+  0;
 
 const getSessionXp = (session: Partial<Session>) =>
   (session as any).stats?.totalXp ||
   (session as any).statsSummary?.totalXp ||
   0;
+
+const getSessionSpotName = (session: Partial<Session>) =>
+  (session as any).spotName ||
+  (session as any).locationName ||
+  '';
 
 const isSessionPaused = (session: Partial<Session>) =>
   (session as any).status === 'paused';
@@ -283,68 +295,65 @@ export default function Sessions() {
                       const start = getSessionStart(s);
                       const startDate =
                         start?.toDate?.() ?? (start ? new Date(start) : null);
+                      const imgSrc = resolveSessionImageSrc(s as any);
+                      const spotName = getSessionSpotName(s);
 
                       return (
                         <Card
                           key={s.id}
-                          className="p-4 md:p-6 border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-xl md:rounded-2xl group cursor-pointer overflow-hidden relative"
+                          padding="none"
+                          className="border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl group cursor-pointer overflow-hidden"
                           onClick={() => s.id && navigate(`/sessions/${s.id}`)}
                         >
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
-                            <div className="flex items-center gap-3 md:gap-4">
-                              <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg md:rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-105 transition-transform duration-500">
-                                <History className="w-6 h-6 md:w-7 md:h-7" />
-                              </div>
-                              <div>
-                                <h4 className="text-lg md:text-xl font-bold text-text-primary tracking-tight group-hover:text-brand transition-colors">
-                                  {getSessionName(s)}
-                                </h4>
-                                <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-text-muted font-medium mt-0.5 md:mt-1">
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                                    {startDate
-                                      ? format(startDate, 'd MMM yyyy', { locale: nl })
-                                      : 'Onbekend'}
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <Clock className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                                    {startDate
-                                      ? format(startDate, 'HH:mm', { locale: nl })
-                                      : '--:--'}
-                                  </span>
+                          <div className="flex items-center gap-0">
+                            {/* Thumbnail */}
+                            <div className="w-20 h-20 shrink-0 overflow-hidden bg-surface-soft border-r border-border-subtle">
+                              {imgSrc ? (
+                                <LazyImage
+                                  src={imgSrc}
+                                  alt={getSessionName(s)}
+                                  wrapperClassName="w-full h-full"
+                                  fallbackIconSize={22}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-brand/5">
+                                  <History className="w-7 h-7 text-brand/40" />
                                 </div>
-                              </div>
+                              )}
                             </div>
 
-                            <div className="flex items-center justify-between md:justify-end gap-6 md:gap-8 border-t md:border-t-0 border-border-subtle/50 pt-3 md:pt-0">
-                              <div className="text-center md:text-right">
-                                <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest mb-0.5 md:mb-1">
-                                  Vangsten
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 px-3.5 py-3">
+                              <p className="text-[13px] font-bold text-text-primary truncate group-hover:text-brand transition-colors leading-tight">
+                                {getSessionName(s)}
+                              </p>
+                              {spotName && (
+                                <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-text-muted mt-0.5 truncate">
+                                  <MapPin className="w-2.5 h-2.5 shrink-0" />
+                                  {spotName}
                                 </p>
-                                <div className="flex items-center justify-center md:justify-end gap-1.5">
-                                  <Fish className="w-3 h-3 md:w-3.5 md:h-3.5 text-brand" />
-                                  <span className="text-base md:text-lg font-bold text-text-primary">
-                                    {getSessionCatchCount(s)}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="text-center md:text-right">
-                                <p className="text-[8px] md:text-[9px] font-black text-text-muted uppercase tracking-widest mb-0.5 md:mb-1">
-                                  XP
-                                </p>
-                                <div className="flex items-center justify-center md:justify-end gap-1.5">
-                                  <Zap className="w-3 h-3 md:w-3.5 md:h-3.5 text-brand" />
-                                  <span className="text-base md:text-lg font-bold text-text-primary">
+                              )}
+                              <div className="flex items-center gap-3 mt-1.5 text-[10px] font-medium text-text-secondary">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {startDate
+                                    ? format(startDate, 'd MMM yyyy', { locale: nl })
+                                    : 'Onbekend'}
+                                </span>
+                                <span className="flex items-center gap-1 text-brand font-bold">
+                                  <Fish className="w-3 h-3" />
+                                  {getSessionCatchCount(s)}
+                                </span>
+                                {getSessionXp(s) > 0 && (
+                                  <span className="flex items-center gap-0.5 text-brand font-bold">
+                                    <Zap className="w-3 h-3" />
                                     +{getSessionXp(s)}
                                   </span>
-                                </div>
-                              </div>
-
-                              <div className="hidden md:block pl-4 border-l border-border-subtle">
-                                <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" />
+                                )}
                               </div>
                             </div>
+
+                            <ChevronRight className="w-4 h-4 text-text-muted shrink-0 mr-3.5 group-hover:text-brand transition-colors" />
                           </div>
                         </Card>
                       );

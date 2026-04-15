@@ -20,6 +20,7 @@ import {
   getSessionCatchCount,
   getSessionSpotName,
   getSessionStatus,
+  getSessionImage,
   getSpotName,
   getSpotWaterType,
   getSpotCatchCount,
@@ -102,6 +103,7 @@ function SessionRow({ s, onClick }: { s: Session; onClick: () => void }) {
   const isLive = status === 'live' || status === 'active' || (s as any).isActive;
   const start = getSessionStartDate(s);
   const end = (s as any)?.endTime || (s as any)?.endedAt;
+  const imgSrc = getSessionImage(s);
 
   return (
     <Card
@@ -112,11 +114,23 @@ function SessionRow({ s, onClick }: { s: Session; onClick: () => void }) {
       onClick={onClick}
     >
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0">
-          {isLive ? (
-            <div className="w-2.5 h-2.5 rounded-full bg-brand animate-pulse" />
+        {/* Thumbnail or fallback icon */}
+        <div className="w-12 h-12 rounded-2xl overflow-hidden border border-border-subtle bg-surface-soft shrink-0">
+          {imgSrc ? (
+            <LazyImage
+              src={imgSrc}
+              alt={getSessionName(s)}
+              wrapperClassName="w-full h-full"
+              fallbackIconSize={18}
+            />
           ) : (
-            <History className="w-4.5 h-4.5 text-brand" />
+            <div className="w-full h-full bg-brand/10 border border-brand/20 flex items-center justify-center">
+              {isLive ? (
+                <div className="w-2.5 h-2.5 rounded-full bg-brand animate-pulse" />
+              ) : (
+                <History className="w-4.5 h-4.5 text-brand" />
+              )}
+            </div>
           )}
         </div>
 

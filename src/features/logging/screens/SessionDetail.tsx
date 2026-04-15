@@ -272,14 +272,18 @@ export default function SessionDetail() {
 
         {/* Header Card */}
         <Card className="bg-surface-card border border-border-subtle rounded-2xl overflow-hidden">
-          {/* Session photo */}
-          {resolveSessionImageSrc(session as any) && (
-            <div className="w-full h-40 overflow-hidden">
+          {/* Session photo — hero */}
+          {resolveSessionImageSrc(session as any) ? (
+            <div className="w-full h-52 overflow-hidden">
               <LazyImage
                 src={resolveSessionImageSrc(session as any)}
                 alt="Sessie foto"
                 wrapperClassName="w-full h-full"
               />
+            </div>
+          ) : (
+            <div className="w-full h-28 bg-brand/5 flex items-center justify-center border-b border-border-subtle">
+              <History className="w-10 h-10 text-brand/20" />
             </div>
           )}
           <div className="p-5">

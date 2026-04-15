@@ -72,6 +72,9 @@ const LOCAL_PATH_MAP: { prefix: string; localFolder: string }[] = [
   { prefix: 'images/stekken',    localFolder: 'assets/images/spots' },
   { prefix: 'images/thumbnails', localFolder: 'assets/images/sessions' },
 
+  // Alternative Flutter migration path prefix ('Sessies_Images/' instead of 'images/sessions/')
+  { prefix: 'Sessies_Images',    localFolder: 'assets/images/sessions' },
+
   // Already-normalised paths that include 'assets/images/'
   { prefix: 'assets/images/sessions', localFolder: 'assets/images/sessions' },
   { prefix: 'assets/images/vangsten', localFolder: 'assets/images/vangsten' },

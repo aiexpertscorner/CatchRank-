@@ -59,9 +59,18 @@ export function getSessionEndDate(s: Partial<Session> | null | undefined): Date 
 
 export function getSessionCatchCount(s: Partial<Session> | null | undefined): number {
   return (
+    (s as any)?.stats?.totalFish ||
     (s as any)?.stats?.totalCatches ||
     (s as any)?.statsSummary?.totalCatches ||
     (s as any)?.linkedCatchIds?.length ||
+    0
+  );
+}
+
+export function getSessionXp(s: Partial<Session> | null | undefined): number {
+  return (
+    (s as any)?.stats?.totalXp ||
+    (s as any)?.statsSummary?.totalXp ||
     0
   );
 }
