@@ -46,7 +46,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({ children, className }) =
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className={cn("w-full max-w-7xl mx-auto pb-safe md:pb-10", className)}
+      className={cn("w-full max-w-7xl mx-auto pb-nav-pad md:pb-10", className)}
     >
       {children}
     </motion.div>

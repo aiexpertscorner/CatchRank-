@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -61,8 +61,22 @@ function NavItem({ icon: Icon, label, path }: { icon: React.ElementType; label: 
 }
 
 export const BottomNav: React.FC = () => {
+  // Set --nav-total-height CSS variable based on actual rendered height
+  // so BottomSheet and other overlays can position themselves correctly.
+  useEffect(() => {
+    const el = document.getElementById('bottom-nav-root');
+    if (!el) return;
+    const update = () => {
+      const h = el.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--nav-total-height', `${h}px`);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface/95 backdrop-blur-3xl border-t border-border-subtle px-2 flex items-center justify-around z-50 pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.15)]">
+    <nav id="bottom-nav-root" className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface/95 backdrop-blur-3xl border-t border-border-subtle px-2 flex items-center justify-around z-40 pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.15)]">
       {/* Left Items */}
       <div className="flex-1 flex justify-around pr-6">
         {leftNavItems.map((item) => (

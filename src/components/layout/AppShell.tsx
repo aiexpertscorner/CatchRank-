@@ -54,7 +54,7 @@ export const AppShell: React.FC = () => {
         />
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto pb-28 md:pb-10">
+        <main className="flex-1 overflow-y-auto pb-nav-pad md:pb-10">
           <div className="page-container p-4 md:p-8 lg:p-10">
             <Outlet />
           </div>

@@ -136,9 +136,9 @@ function BottomSheetRoot({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — z-[41] sits just above nav (z-40) so it dims the nav when a sheet opens */}
           <motion.div
-            className="fixed inset-0 bg-black/75 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm z-41"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
