@@ -326,7 +326,9 @@ export default function App() {
               {FEATURE_FLAGS.ENABLE_AI_ASSISTANT && (
                 <Route path="/tools/ask-dick" element={<AskDick />} />
               )}
+              {/* Keep old capitalized path as redirect alias for any bookmarked links */}
               <Route path="/WeatherForecast" element={<WeatherForecast />} />
+              <Route path="/weather-forecast" element={<WeatherForecast />} />
               <Route path="/knowledge" element={<Knowledge />} />
               {/* Admin-only — remove after migrations are complete */}
               {user?.email === 'j.vandenbol@gmail.com' && (
