@@ -6,20 +6,17 @@ import {
   CloudRain,
   Compass,
   Droplets,
-  Expand,
   Eye,
   Fish,
   Gauge,
   LocateFixed,
   MapPin,
-  Minimize,
   Moon,
   RefreshCw,
   Search,
   Sun,
   Thermometer,
   TrendingDown,
-  TrendingUp,
   Waves,
   Wind,
   Zap,
@@ -33,16 +30,17 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  Cell,
 } from 'recharts';
 
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
 import { Card, Button, Badge } from '../../../components/ui/Base';
 import { weatherService, WeatherData } from '../services/weatherService';
+import { getFishingForecastAdvice } from '../services/weatherForecastAdviceEngine';
 
 const DEFAULT_LOCATION = localStorage.getItem('weatherLocation') || 'Utrecht';
 const GEO_STORAGE_KEY = 'weatherGeo';
@@ -50,6 +48,7 @@ const GEO_MODE_KEY = 'weatherGeoMode';
 
 type ChartRange = '8u' | '12u' | '24u' | '48u';
 type MapOverlay = 'wind' | 'radar' | 'rain';
+type FishingDiscipline = 'karper' | 'roofvis';
 
 const RANGE_HOURS: Record<ChartRange, number> = {
   '8u': 8,
@@ -63,43 +62,64 @@ type StoredGeo = {
   lon: number;
 };
 
-function calcFishScore(
-  temp: number,
-  pressure: number,
-  windKph: number,
-  rainChance: number,
-  uv: number,
-  moonPhase: string
-): number {
-  let s = 50;
+function fmtHour(time: string) {
+  try {
+    return new Intl.DateTimeFormat('nl-NL', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(time));
+  } catch {
+    return time;
+  }
+}
 
-  if (temp >= 12 && temp <= 20) s += 10;
-  else if (temp >= 8 && temp < 12) s += 4;
-  else if (temp > 20 && temp <= 26) s += 3;
-  else if (temp < 5) s -= 14;
-  else if (temp > 28) s -= 8;
+function fmtDayLong(date: string) {
+  try {
+    return new Intl.DateTimeFormat('nl-NL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+    }).format(new Date(date));
+  } catch {
+    return date;
+  }
+}
 
-  if (pressure < 1000) s += 14;
-  else if (pressure < 1010) s += 8;
-  else if (pressure < 1015) s += 2;
-  else if (pressure > 1025) s -= 5;
+function toUnixSecondsFromWeatherApiTime(time: string) {
+  return Math.floor(new Date(time).getTime() / 1000);
+}
 
-  if (windKph < 8) s += 8;
-  else if (windKph < 18) s += 4;
-  else if (windKph > 30) s -= 15;
-  else if (windKph > 45) s -= 22;
+function parseAstroToUnix(baseDate: string, value?: string): number | undefined {
+  if (!value || !baseDate) return undefined;
 
-  if (rainChance > 40 && rainChance < 70 && windKph < 22) s += 8;
-  else if (rainChance > 80) s -= 5;
+  const match = value.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return undefined;
 
-  if (uv >= 7) s -= 5;
-  else if (uv <= 2) s += 3;
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  const meridiem = match[3].toUpperCase();
 
-  const mp = (moonPhase || '').toLowerCase();
-  if (mp.includes('full')) s += 8;
-  else if (mp.includes('new')) s += 6;
+  if (meridiem === 'PM' && hour !== 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
 
-  return Math.max(5, Math.min(95, s));
+  const date = new Date(baseDate);
+  date.setHours(hour, minute, 0, 0);
+  return Math.floor(date.getTime() / 1000);
+}
+
+function moonPhaseStringToNumber(phase?: string): number | undefined {
+  const p = (phase || '').toLowerCase();
+
+  if (p.includes('new')) return 0;
+  if (p.includes('waxing crescent')) return 0.125;
+  if (p.includes('first quarter')) return 0.25;
+  if (p.includes('waxing gibbous')) return 0.375;
+  if (p.includes('full')) return 0.5;
+  if (p.includes('waning gibbous')) return 0.625;
+  if (p.includes('last quarter')) return 0.75;
+  if (p.includes('waning crescent')) return 0.875;
+
+  return 0.5;
 }
 
 function getScoreMeta(score: number) {
@@ -126,7 +146,7 @@ function getScoreMeta(score: number) {
   if (score < 58) {
     return {
       label: 'Normaal',
-      sub: 'Gemiddelde condities',
+      sub: 'Gemiddeld',
       color: '#eab308',
       text: 'text-yellow-400',
       soft: 'bg-yellow-500/10',
@@ -145,7 +165,7 @@ function getScoreMeta(score: number) {
   }
   return {
     label: 'Top',
-    sub: 'Sterke viskansen',
+    sub: 'Sterke kansen',
     color: '#10b981',
     text: 'text-emerald-400',
     soft: 'bg-emerald-500/10',
@@ -153,120 +173,12 @@ function getScoreMeta(score: number) {
   };
 }
 
-function getFishAdvice(
-  temp: number,
-  pressure: number,
-  windKph: number,
-  rainChance: number,
-  uv: number,
-  moonPhase: string
-): string {
-  const mp = (moonPhase || '').toLowerCase();
-
-  if (mp.includes('full') || mp.includes('new')) {
-    return 'Maanstand werkt mee. Focus extra op overgangsmomenten en schemeruren.';
-  }
-  if (pressure < 1005 && windKph < 22) {
-    return 'Lagere druk en beheersbare wind geven vaak actiever aasgedrag.';
-  }
-  if (windKph > 30) {
-    return 'Harde wind maakt stekkeuze belangrijk. Zoek luwtes, taluds en beschutte zones.';
-  }
-  if (temp < 6) {
-    return 'Koude omstandigheden vragen om trager vissen, compacter aas en stabiele dieptes.';
-  }
-  if (rainChance > 50 && rainChance < 75 && windKph < 20) {
-    return 'Een naderend front kan vis in beweging zetten. Let op windkant en ondiepere zones.';
-  }
-  if (uv >= 7) {
-    return 'Hoge UV maakt ochtend, avond, schaduw en dieper water interessanter.';
-  }
-  if (temp >= 14 && temp <= 20 && windKph < 18) {
-    return 'Sterke basiscondities voor actieve vis. Goed moment om mobiel en scherp te vissen.';
-  }
-
-  return 'Neutrale omstandigheden. Laat stekkeuze, timing en presentatie de doorslag geven.';
-}
-
-function fmtHour(time: string) {
-  try {
-    return new Intl.DateTimeFormat('nl-NL', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(time));
-  } catch {
-    return time;
-  }
-}
-
-function fmtDayLong(date: string) {
-  try {
-    return new Intl.DateTimeFormat('nl-NL', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'short',
-    }).format(new Date(date));
-  } catch {
-    return date;
-  }
-}
-
-function getAllForecastHours(weather: WeatherData | null): any[] {
-  if (!weather?.forecast?.forecastday) return [];
-  return (weather.forecast.forecastday as any[]).flatMap((day) => day.hour ?? []);
-}
-
-function getNextHours(weather: WeatherData | null, count: number): any[] {
-  const all = getAllForecastHours(weather);
-  const now = Date.now();
-
-  return all
-    .filter((h: any) => new Date(h.time).getTime() >= now - 30 * 60 * 1000)
-    .slice(0, count);
-}
-
-function getHoursForRange(weather: WeatherData | null, rangeH: number): any[] {
-  const all = getAllForecastHours(weather);
-  const now = Date.now();
-  const end = now + rangeH * 60 * 60 * 1000;
-
-  return all.filter((h: any) => {
-    const t = new Date(h.time).getTime();
-    return t >= now - 60 * 60 * 1000 && t <= end;
-  });
-}
-
-function getBestFishingWindows(weather: WeatherData | null) {
-  const all = getAllForecastHours(weather);
-  const now = Date.now();
-
-  return all
-    .filter((h: any) => {
-      const t = new Date(h.time).getTime();
-      return t >= now - 60 * 60 * 1000 && t <= now + 24 * 60 * 60 * 1000;
-    })
-    .map((h: any) => {
-      const score = calcFishScore(
-        h.temp_c ?? 0,
-        h.pressure_mb ?? weather?.current?.pressure_mb ?? 1013,
-        h.wind_kph ?? 0,
-        h.chance_of_rain ?? 0,
-        h.uv ?? weather?.current?.uv ?? 0,
-        weather?.forecast?.forecastday?.[0]?.astro?.moon_phase ?? ''
-      );
-
-      return {
-        time: h.time,
-        hour: fmtHour(h.time),
-        score,
-        temp: Math.round(h.temp_c ?? 0),
-        wind: Math.round(h.wind_kph ?? 0),
-        rain: Math.round(h.chance_of_rain ?? 0),
-      };
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+function getFishBarColor(score: number) {
+  if (score < 25) return '#ef4444';
+  if (score < 42) return '#f97316';
+  if (score < 58) return '#eab308';
+  if (score < 76) return '#22c55e';
+  return '#10b981';
 }
 
 function getWindLabel(speed: number) {
@@ -315,81 +227,29 @@ function safeReadGeo(): StoredGeo | null {
   }
 }
 
-function getFishBarColor(score: number) {
-  if (score < 25) return '#ef4444';
-  if (score < 42) return '#f97316';
-  if (score < 58) return '#eab308';
-  if (score < 76) return '#22c55e';
-  return '#10b981';
+function getAllForecastHours(weather: WeatherData | null): any[] {
+  if (!weather?.forecast?.forecastday) return [];
+  return (weather.forecast.forecastday as any[]).flatMap((day) => day.hour ?? []);
 }
 
-function ScoreRing({
-  score,
-  size = 94,
-  stroke = 9,
-}: {
-  score: number;
-  size?: number;
-  stroke?: number;
-}) {
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const pct = Math.max(0, Math.min(100, score));
-  const dashoffset = circumference - (pct / 100) * circumference;
-  const meta = getScoreMeta(score);
+function getNextHours(weather: WeatherData | null, count: number): any[] {
+  const all = getAllForecastHours(weather);
+  const now = Date.now();
 
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="transparent"
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={stroke}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="transparent"
-          stroke={meta.color}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashoffset}
-        />
-      </svg>
-
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[22px] font-black text-text-primary leading-none">{score}</span>
-        <span className={`text-[9px] font-black uppercase tracking-wider ${meta.text}`}>vis</span>
-      </div>
-    </div>
-  );
+  return all
+    .filter((h: any) => new Date(h.time).getTime() >= now - 30 * 60 * 1000)
+    .slice(0, count);
 }
 
-function StatPill({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5 min-w-0">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className="w-3 h-3 text-brand shrink-0" />
-        <span className="text-[8px] font-black uppercase tracking-widest text-text-muted truncate">
-          {label}
-        </span>
-      </div>
-      <p className="text-sm font-black text-text-primary leading-none truncate">{value}</p>
-    </div>
-  );
+function getHoursForRange(weather: WeatherData | null, rangeH: number): any[] {
+  const all = getAllForecastHours(weather);
+  const now = Date.now();
+  const end = now + rangeH * 60 * 60 * 1000;
+
+  return all.filter((h: any) => {
+    const t = new Date(h.time).getTime();
+    return t >= now - 60 * 60 * 1000 && t <= end;
+  });
 }
 
 function SectionHeader({
@@ -457,6 +317,33 @@ function RangeToggle({
   );
 }
 
+function DisciplineToggle({
+  value,
+  onChange,
+}: {
+  value: FishingDiscipline;
+  onChange: (v: FishingDiscipline) => void;
+}) {
+  return (
+    <div className="flex bg-surface-soft rounded-xl p-1 gap-1">
+      {(['karper', 'roofvis'] as FishingDiscipline[]).map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => onChange(item)}
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
+            value === item
+              ? 'bg-brand/20 text-brand border border-brand/25'
+              : 'text-text-muted'
+          }`}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function MapOverlayToggle({
   value,
   onChange,
@@ -490,31 +377,72 @@ function MapOverlayToggle({
   );
 }
 
-function WindyFrame({
-  lat,
-  lon,
-  overlay,
-  fullScreen,
+function ScoreRing({
+  score,
+  size = 88,
+  stroke = 9,
 }: {
-  lat: number;
-  lon: number;
-  overlay: MapOverlay;
-  fullScreen?: boolean;
+  score: number;
+  size?: number;
+  stroke?: number;
 }) {
-  const windyOverlay = overlay === 'rain' ? 'rain' : overlay === 'radar' ? 'radar' : 'wind';
-
-  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=${fullScreen ? 9 : 8}&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=false&metricWind=default&metricTemp=default&radarRange=-1`;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = Math.max(0, Math.min(100, score));
+  const dashoffset = circumference - (pct / 100) * circumference;
+  const meta = getScoreMeta(score);
 
   return (
-    <iframe
-      title="Windy live weather map"
-      src={src}
-      width="100%"
-      height="100%"
-      style={{ border: 0 }}
-      loading="lazy"
-      allowFullScreen
-    />
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke={meta.color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashoffset}
+        />
+      </svg>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[20px] font-black text-text-primary leading-none">{score}</span>
+        <span className={`text-[8px] font-black uppercase tracking-wider ${meta.text}`}>vis</span>
+      </div>
+    </div>
+  );
+}
+
+function StatPill({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5 min-w-0">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className="w-3 h-3 text-brand shrink-0" />
+        <span className="text-[8px] font-black uppercase tracking-widest text-text-muted truncate">
+          {label}
+        </span>
+      </div>
+      <p className="text-sm font-black text-text-primary leading-none truncate">{value}</p>
+    </div>
   );
 }
 
@@ -523,37 +451,35 @@ function WindyMapCard({
   lon,
   overlay,
   onOverlayChange,
-  onToggleFullscreen,
-  isFullscreen,
 }: {
   lat: number;
   lon: number;
   overlay: MapOverlay;
   onOverlayChange: (overlay: MapOverlay) => void;
-  onToggleFullscreen: () => void;
-  isFullscreen: boolean;
 }) {
+  const windyOverlay = overlay === 'rain' ? 'rain' : overlay === 'radar' ? 'radar' : 'wind';
+
+  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=8&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=true&metricWind=default&metricTemp=default&radarRange=-1`;
+
   return (
     <Card className="p-0 border border-border-subtle bg-surface-card rounded-[28px] overflow-hidden">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
         <MapOverlayToggle value={overlay} onChange={onOverlayChange} />
-        <button
-          type="button"
-          onClick={onToggleFullscreen}
-          className="h-10 w-10 rounded-xl border border-border-subtle bg-surface-soft flex items-center justify-center shrink-0"
-        >
-          {isFullscreen ? (
-            <Minimize className="w-4 h-4 text-text-primary" />
-          ) : (
-            <Expand className="w-4 h-4 text-text-primary" />
-          )}
-        </button>
+        <Badge>Live</Badge>
       </div>
 
       <div className="px-4 pb-4">
         <div className="rounded-[24px] overflow-hidden border border-border-subtle bg-black">
-          <div className="aspect-[16/12] sm:aspect-[16/10] min-h-[380px]">
-            <WindyFrame lat={lat} lon={lon} overlay={overlay} />
+          <div className="aspect-[16/10] min-h-[250px] max-h-[320px]">
+            <iframe
+              title="Windy live weather map"
+              src={src}
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              loading="lazy"
+              allowFullScreen
+            />
           </div>
         </div>
       </div>
@@ -561,65 +487,13 @@ function WindyMapCard({
   );
 }
 
-function FullscreenMapModal({
-  open,
-  onClose,
-  lat,
-  lon,
-  overlay,
-  onOverlayChange,
-}: {
-  open: boolean;
-  onClose: () => void;
-  lat: number;
-  lon: number;
-  overlay: MapOverlay;
-  onOverlayChange: (overlay: MapOverlay) => void;
-}) {
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm p-3">
-      <div className="h-full w-full rounded-[28px] border border-white/10 bg-[#090d14] overflow-hidden flex flex-col">
-        <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
-          <MapOverlayToggle value={overlay} onChange={onOverlayChange} />
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 w-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center shrink-0"
-          >
-            <Minimize className="w-4 h-4 text-white" />
-          </button>
-        </div>
-
-        <div className="flex-1 px-3 pb-3">
-          <div className="h-full w-full rounded-[24px] overflow-hidden border border-white/10 bg-black">
-            <WindyFrame lat={lat} lon={lon} overlay={overlay} fullScreen />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function FishScoreBarChart({ data }: { data: any[] }) {
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={200}>
       <BarChart data={data} margin={{ top: 10, right: 6, left: -18, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
-        <XAxis
-          dataKey="time"
-          tick={{ fill: '#64748b', fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          interval={0}
-        />
-        <YAxis
-          tick={{ fill: '#64748b', fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          domain={[0, 100]}
-        />
+        <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
         <Tooltip content={<ChartTip />} />
         <Bar dataKey="Score" name="Score" radius={[8, 8, 0, 0]}>
           {data.map((entry, index) => (
@@ -633,22 +507,11 @@ function FishScoreBarChart({ data }: { data: any[] }) {
 
 function RainBarChart({ data }: { data: any[] }) {
   return (
-    <ResponsiveContainer width="100%" height={190}>
+    <ResponsiveContainer width="100%" height={170}>
       <BarChart data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
-        <XAxis
-          dataKey="time"
-          tick={{ fill: '#64748b', fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          interval={0}
-        />
-        <YAxis
-          tick={{ fill: '#64748b', fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          domain={[0, 100]}
-        />
+        <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
         <Tooltip content={<ChartTip />} />
         <Bar dataKey="Regen" name="Regen" fill="#38bdf8" radius={[8, 8, 0, 0]} />
       </BarChart>
@@ -658,22 +521,16 @@ function RainBarChart({ data }: { data: any[] }) {
 
 function TempAreaChart({ data }: { data: any[] }) {
   return (
-    <ResponsiveContainer width="100%" height={190}>
+    <ResponsiveContainer width="100%" height={170}>
       <AreaChart data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
         <defs>
-          <linearGradient id="tempGradV2" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="tempGradMobile" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F4C20D" stopOpacity={0.28} />
             <stop offset="100%" stopColor="#F4C20D" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
-        <XAxis
-          dataKey="time"
-          tick={{ fill: '#64748b', fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          interval={0}
-        />
+        <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
         <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
         <Tooltip content={<ChartTip />} />
         <Area
@@ -681,8 +538,8 @@ function TempAreaChart({ data }: { data: any[] }) {
           dataKey="Temp"
           name="Temp"
           stroke="#F4C20D"
-          strokeWidth={2.4}
-          fill="url(#tempGradV2)"
+          strokeWidth={2.3}
+          fill="url(#tempGradMobile)"
           dot={false}
           unit="°C"
         />
@@ -693,22 +550,16 @@ function TempAreaChart({ data }: { data: any[] }) {
 
 function PressureAreaChart({ data }: { data: any[] }) {
   return (
-    <ResponsiveContainer width="100%" height={190}>
+    <ResponsiveContainer width="100%" height={170}>
       <AreaChart data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
         <defs>
-          <linearGradient id="pressureGradV2" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="pressureGradMobile" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#84cc16" stopOpacity={0.25} />
             <stop offset="100%" stopColor="#84cc16" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
-        <XAxis
-          dataKey="time"
-          tick={{ fill: '#64748b', fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          interval={0}
-        />
+        <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
         <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} domain={['dataMin - 1', 'dataMax + 1']} />
         <Tooltip content={<ChartTip />} />
         <Area
@@ -716,8 +567,8 @@ function PressureAreaChart({ data }: { data: any[] }) {
           dataKey="Druk"
           name="Druk"
           stroke="#84cc16"
-          strokeWidth={2.2}
-          fill="url(#pressureGradV2)"
+          strokeWidth={2.1}
+          fill="url(#pressureGradMobile)"
           dot={false}
           unit=" hPa"
         />
@@ -736,14 +587,12 @@ function SimplePressureCard({ pressure }: { pressure: number }) {
     <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
       <div className="flex items-center gap-2 mb-3">
         <Gauge className="w-4 h-4 text-brand" />
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">
-          Luchtdruk
-        </p>
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">Luchtdruk</p>
       </div>
 
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
-          <p className="text-[40px] font-black text-text-primary leading-none">{pressure}</p>
+          <p className="text-[34px] font-black text-text-primary leading-none">{pressure}</p>
           <p className="text-xs text-text-muted mt-1">hPa · {label}</p>
         </div>
 
@@ -754,7 +603,7 @@ function SimplePressureCard({ pressure }: { pressure: number }) {
               : 'bg-slate-500/10 text-slate-300 border-slate-500/20'
           }`}
         >
-          {goodZone ? 'Relatief gunstig' : 'Minder gunstig'}
+          {goodZone ? 'Gunstiger' : 'Minder gunstig'}
         </div>
       </div>
 
@@ -768,12 +617,6 @@ function SimplePressureCard({ pressure }: { pressure: number }) {
           }}
         />
       </div>
-
-      <div className="flex justify-between mt-2 text-[10px] text-text-dim">
-        <span>975</span>
-        <span>1013</span>
-        <span>1045</span>
-      </div>
     </Card>
   );
 }
@@ -786,23 +629,13 @@ function SimpleUvCard({ uv }: { uv: number }) {
     <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
       <div className="flex items-center gap-2 mb-3">
         <Sun className="w-4 h-4 text-brand" />
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">
-          UV Index
-        </p>
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">UV Index</p>
       </div>
 
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
-          <p className="text-[40px] font-black text-text-primary leading-none">{uv}</p>
-          <p className="text-xs text-text-muted mt-1">
-            {uv <= 2
-              ? 'Geen bescherming nodig'
-              : uv <= 5
-              ? 'Zonnebrand slim'
-              : uv <= 7
-              ? 'Bescherming nodig'
-              : 'Schaduw aanbevelen'}
-          </p>
+          <p className="text-[34px] font-black text-text-primary leading-none">{uv}</p>
+          <p className="text-xs text-text-muted mt-1">{label}</p>
         </div>
 
         <div className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">
@@ -819,12 +652,6 @@ function SimpleUvCard({ uv }: { uv: number }) {
               'linear-gradient(90deg, #22c55e 0%, #84cc16 20%, #eab308 40%, #f97316 62%, #ef4444 82%, #7c3aed 100%)',
           }}
         />
-      </div>
-
-      <div className="flex justify-between mt-2 text-[10px] text-text-dim">
-        <span>0</span>
-        <span>5</span>
-        <span>11+</span>
       </div>
     </Card>
   );
@@ -865,60 +692,40 @@ function WindDirectionCompact({
       <SectionHeader icon={Compass} title="Wind & richting" />
 
       <div className="flex items-center gap-4">
-        <div className="relative w-24 h-24 shrink-0 rounded-full border border-border-subtle bg-surface-soft flex items-center justify-center">
-          <div className="absolute inset-2 rounded-full border border-white/5" />
-          <span className="absolute top-2 text-[10px] text-brand font-black">N</span>
-          <span className="absolute bottom-2 text-[10px] text-text-dim font-black">S</span>
-          <span className="absolute left-2 text-[10px] text-text-dim font-black">W</span>
-          <span className="absolute right-2 text-[10px] text-text-dim font-black">E</span>
-
+        <div className="relative w-20 h-20 shrink-0 rounded-full border border-border-subtle bg-surface-soft flex items-center justify-center">
           <div
-            className="absolute w-1 h-9 rounded-full bg-white origin-bottom"
+            className="absolute w-1 h-7 rounded-full bg-white origin-bottom"
             style={{
-              transform: `translateY(-8px) rotate(${rotation}deg)`,
+              transform: `translateY(-6px) rotate(${rotation}deg)`,
               boxShadow: '0 0 10px rgba(255,255,255,0.15)',
             }}
           />
-
-          <div className="w-10 h-10 rounded-full bg-black/30 border border-white/10 flex flex-col items-center justify-center">
-            <span className="text-[13px] font-black text-white leading-none">{Math.round(speed)}</span>
-            <span className="text-[7px] text-text-muted leading-none mt-0.5">km/u</span>
+          <div className="w-9 h-9 rounded-full bg-black/30 border border-white/10 flex flex-col items-center justify-center">
+            <span className="text-[12px] font-black text-white leading-none">{Math.round(speed)}</span>
           </div>
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mb-1">
-            Richting
-          </p>
-          <p className="text-[34px] font-black text-text-primary leading-none mb-3">
-            {dir?.toUpperCase() || '--'}
-          </p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mb-1">Richting</p>
+          <p className="text-[30px] font-black text-text-primary leading-none mb-3">{dir?.toUpperCase() || '--'}</p>
 
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">
-                Wind
-              </p>
-              <p className="text-lg font-black text-text-primary leading-none">
+              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">Wind</p>
+              <p className="text-base font-black text-text-primary leading-none">
                 {Math.round(speed)}
                 <span className="text-[10px] text-text-muted ml-1">km/u</span>
               </p>
             </div>
 
             <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">
-                Stoten
-              </p>
-              <p className="text-lg font-black text-text-primary leading-none">
+              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">Stoten</p>
+              <p className="text-base font-black text-text-primary leading-none">
                 {Math.round(gusts)}
                 <span className="text-[10px] text-text-muted ml-1">km/u</span>
               </p>
             </div>
           </div>
-
-          <p className="text-[11px] text-text-muted mt-3">
-            {getWindLabel(speed)} — {speed < 20 ? 'goed mobiel visbaar' : 'meer drift en controleverlies'}
-          </p>
         </div>
       </div>
     </Card>
@@ -947,22 +754,18 @@ function MoonSunCard({
       <SectionHeader icon={Moon} title="Maanfase & zon" />
 
       <div className="flex items-center gap-4 mb-4">
-        <div className="relative w-16 h-16 shrink-0 rounded-full overflow-hidden border border-white/10 bg-slate-200">
+        <div className="relative w-14 h-14 shrink-0 rounded-full overflow-hidden border border-white/10 bg-slate-200">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,#ffffff_0%,#d8dee8_40%,#8b95a7_100%)]" />
           {style === 'new' && <div className="absolute inset-0 bg-[#08101a]" />}
           {style === 'half' && <div className="absolute inset-y-0 right-0 w-1/2 bg-[#08101a]" />}
           {style === 'waxing' && <div className="absolute inset-y-0 right-0 w-2/3 rounded-l-full bg-[#08101a]" />}
           {style === 'waning' && <div className="absolute inset-y-0 left-0 w-2/3 rounded-r-full bg-[#08101a]" />}
-          {style === 'full' && (
-            <div className="absolute inset-0 shadow-[0_0_18px_rgba(255,255,255,0.24)]" />
-          )}
+          {style === 'full' && <div className="absolute inset-0 shadow-[0_0_18px_rgba(255,255,255,0.24)]" />}
         </div>
 
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mb-1">
-            Maanfase
-          </p>
-          <p className="text-[26px] font-black text-text-primary leading-tight truncate">{phase}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted mb-1">Maanfase</p>
+          <p className="text-[22px] font-black text-text-primary leading-tight truncate">{phase}</p>
           <p className="text-sm text-text-muted">{illumination}% verlicht</p>
         </div>
       </div>
@@ -977,16 +780,50 @@ function MoonSunCard({
           <div key={label} className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
             <div className="flex items-center gap-1.5 mb-1">
               <Icon className="w-3 h-3 text-brand shrink-0" />
-              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">
-                {label}
-              </p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted">{label}</p>
             </div>
-            <p className="text-base font-black text-text-primary leading-none">{value || '--'}</p>
+            <p className="text-sm font-black text-text-primary leading-none">{value || '--'}</p>
           </div>
         ))}
       </div>
     </Card>
   );
+}
+
+function buildForecastEngineInput(weather: WeatherData, discipline: FishingDiscipline) {
+  const hourly = getAllForecastHours(weather).map((h: any) => ({
+    dt: toUnixSecondsFromWeatherApiTime(h.time),
+    temp: h.temp_c ?? 0,
+    feels_like: h.feelslike_c ?? h.temp_c ?? 0,
+    pressure: h.pressure_mb ?? weather.current.pressure_mb ?? 1013,
+    humidity: h.humidity ?? weather.current.humidity ?? 0,
+    dew_point: h.dewpoint_c ?? undefined,
+    uvi: h.uv ?? weather.current.uv ?? 0,
+    clouds: h.cloud ?? weather.current.cloud ?? 0,
+    visibility: h.vis_km != null ? h.vis_km * 1000 : weather.current.vis_km * 1000,
+    wind_speed: h.wind_kph != null ? h.wind_kph / 3.6 : weather.current.wind_kph / 3.6,
+    wind_gust: h.gust_kph != null ? h.gust_kph / 3.6 : weather.current.gust_kph / 3.6,
+    wind_deg: h.wind_degree ?? weather.current.wind_degree ?? 0,
+    pop: h.chance_of_rain != null ? h.chance_of_rain / 100 : 0,
+    rain: { '1h': h.precip_mm ?? 0 },
+    weather: [{ main: h.condition?.text ?? '' }],
+  }));
+
+  const daily = (weather.forecast?.forecastday ?? []).map((d: any) => ({
+    dt: Math.floor(new Date(d.date).getTime() / 1000),
+    moon_phase: moonPhaseStringToNumber(d.astro?.moon_phase),
+    sunrise: parseAstroToUnix(d.date, d.astro?.sunrise),
+    sunset: parseAstroToUnix(d.date, d.astro?.sunset),
+    moonrise: parseAstroToUnix(d.date, d.astro?.moonrise),
+    moonset: parseAstroToUnix(d.date, d.astro?.moonset),
+  }));
+
+  return {
+    discipline,
+    hourly,
+    daily,
+    month: new Date().getMonth() + 1,
+  };
 }
 
 export default function WeatherForecast() {
@@ -998,9 +835,9 @@ export default function WeatherForecast() {
   const [searchValue, setSearchValue] = useState(DEFAULT_LOCATION);
   const [chartRange, setChartRange] = useState<ChartRange>('12u');
   const [mapOverlay, setMapOverlay] = useState<MapOverlay>('radar');
+  const [discipline, setDiscipline] = useState<FishingDiscipline>('karper');
   const [usingGeolocation, setUsingGeolocation] = useState(localStorage.getItem(GEO_MODE_KEY) === '1');
   const [geoLoading, setGeoLoading] = useState(false);
-  const [mapFullscreen, setMapFullscreen] = useState(false);
   const initialLoadRef = useRef(false);
 
   const fetchWeatherForLocation = async (query: string) => {
@@ -1100,33 +937,36 @@ export default function WeatherForecast() {
   const today = weather?.forecast?.forecastday?.[0];
   const nextFiveHours = useMemo(() => getNextHours(weather, 5), [weather]);
   const chartHours = useMemo(() => getHoursForRange(weather, RANGE_HOURS[chartRange]), [weather, chartRange]);
-  const bestWindows = useMemo(() => getBestFishingWindows(weather), [weather]);
 
-  const fishScore = useMemo(() => {
-    if (!weather) return 50;
-    return calcFishScore(
-      weather.current.temp_c,
-      weather.current.pressure_mb,
-      weather.current.wind_kph,
-      today?.day?.daily_chance_of_rain ?? 0,
-      weather.current.uv,
-      today?.astro?.moon_phase ?? ''
-    );
-  }, [weather, today]);
+  const engineInput = useMemo(() => {
+    if (!weather) return null;
+    return buildForecastEngineInput(weather, discipline);
+  }, [weather, discipline]);
 
+  const forecastAdvice = useMemo(() => {
+    if (!engineInput) return null;
+    try {
+      return getFishingForecastAdvice(engineInput, { limitHours: 48 });
+    } catch {
+      return null;
+    }
+  }, [engineInput]);
+
+  const engineNow = forecastAdvice?.bestNow ?? forecastAdvice?.hourlyScores?.[0];
+  const fishScore = engineNow?.score ?? 50;
   const scoreMeta = getScoreMeta(fishScore);
 
-  const fishAdvice = useMemo(() => {
-    if (!weather) return '';
-    return getFishAdvice(
-      weather.current.temp_c,
-      weather.current.pressure_mb,
-      weather.current.wind_kph,
-      today?.day?.daily_chance_of_rain ?? 0,
-      weather.current.uv,
-      today?.astro?.moon_phase ?? ''
-    );
-  }, [weather, today]);
+  const fishChartData = useMemo(() => {
+    return (forecastAdvice?.hourlyScores ?? [])
+      .slice(0, RANGE_HOURS[chartRange])
+      .map((h: any) => ({
+        time: new Date(h.dt * 1000).toLocaleTimeString('nl-NL', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        Score: h.score,
+      }));
+  }, [forecastAdvice, chartRange]);
 
   const pressureChartData = useMemo(() => {
     return chartHours.map((h: any) => ({
@@ -1149,19 +989,10 @@ export default function WeatherForecast() {
     }));
   }, [chartHours]);
 
-  const fishChartData = useMemo(() => {
-    return chartHours.map((h: any) => ({
-      time: fmtHour(h.time),
-      Score: calcFishScore(
-        h.temp_c ?? 0,
-        h.pressure_mb ?? weather?.current?.pressure_mb ?? 1013,
-        h.wind_kph ?? 0,
-        h.chance_of_rain ?? 0,
-        h.uv ?? weather?.current?.uv ?? 0,
-        today?.astro?.moon_phase ?? ''
-      ),
-    }));
-  }, [chartHours, today, weather]);
+  const topWindows = forecastAdvice?.topWindows ?? [];
+  const parameterHighlights = forecastAdvice?.parameterHighlights?.slice(0, 4) ?? [];
+  const sessionAdvice = forecastAdvice?.sessionAdvice?.slice(0, 5) ?? [];
+  const bestHours = forecastAdvice?.bestHours?.slice(0, 3) ?? [];
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1193,7 +1024,7 @@ export default function WeatherForecast() {
     <PageLayout>
       <PageHeader
         title="Weer & Visadvies"
-        subtitle="Live kaarten, trends en visrelevante condities"
+        subtitle="Live forecast, kaarten en slimme vissersoutput"
         actions={
           <form onSubmit={handleSearch} className="relative w-full md:w-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" />
@@ -1231,9 +1062,11 @@ export default function WeatherForecast() {
           </Button>
         </div>
 
+        <DisciplineToggle value={discipline} onChange={setDiscipline} />
+
         {loading && (
           <div className="space-y-3 animate-pulse">
-            {[230, 500, 260, 220, 220, 220, 160, 220].map((height, idx) => (
+            {[220, 360, 220, 170, 170, 170, 150, 210].map((height, idx) => (
               <div key={idx} style={{ height }} className="bg-surface-card/60 rounded-[28px]" />
             ))}
           </div>
@@ -1243,9 +1076,7 @@ export default function WeatherForecast() {
           <Card className="p-10 text-center border border-dashed border-border-subtle bg-surface-soft/10 rounded-[28px]">
             <Cloud className="w-10 h-10 text-brand/15 mx-auto mb-4" />
             <p className="text-base font-bold text-text-primary mb-1.5">Geen weerdata beschikbaar</p>
-            <p className="text-sm text-text-secondary mb-5">
-              Controleer je verbinding of probeer een andere locatie.
-            </p>
+            <p className="text-sm text-text-secondary mb-5">Controleer je verbinding of probeer een andere locatie.</p>
             <Button onClick={resetToDefault}>Herstel locatie</Button>
           </Card>
         )}
@@ -1253,7 +1084,7 @@ export default function WeatherForecast() {
         {!loading && weather && (
           <AnimatePresence mode="wait">
             <motion.div
-              key={`${weather.location.name}-${location}`}
+              key={`${weather.location.name}-${location}-${discipline}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
@@ -1278,7 +1109,7 @@ export default function WeatherForecast() {
                         </p>
                       </div>
 
-                      <h2 className="text-[24px] sm:text-[28px] font-black text-text-primary leading-tight truncate">
+                      <h2 className="text-[24px] font-black text-text-primary leading-tight truncate">
                         {weather.location.name}
                       </h2>
 
@@ -1288,6 +1119,7 @@ export default function WeatherForecast() {
 
                       <div className="mt-2 flex items-center gap-2 flex-wrap">
                         <Badge>{weather.current.condition.text}</Badge>
+                        <Badge>{discipline}</Badge>
                         <Badge>{scoreMeta.label}</Badge>
                       </div>
                     </div>
@@ -1306,20 +1138,16 @@ export default function WeatherForecast() {
                       </div>
 
                       <div className="flex items-end gap-2">
-                        <span className="text-[64px] sm:text-[72px] font-black text-text-primary tracking-tighter leading-none">
+                        <span className="text-[58px] font-black text-text-primary tracking-tighter leading-none">
                           {Math.round(weather.current.temp_c)}
                         </span>
-                        <span className="text-[28px] font-black text-brand mb-2">°C</span>
+                        <span className="text-[24px] font-black text-brand mb-2">°C</span>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-text-muted">
-                        Gevoel
-                      </p>
-                      <p className="text-base font-black text-text-primary">
-                        {Math.round(weather.current.feelslike_c)}°
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-text-muted">Gevoel</p>
+                      <p className="text-base font-black text-text-primary">{Math.round(weather.current.feelslike_c)}°</p>
                     </div>
                   </div>
 
@@ -1332,11 +1160,14 @@ export default function WeatherForecast() {
                   <div className={`rounded-2xl border px-3.5 py-3 ${scoreMeta.soft} ${scoreMeta.border}`}>
                     <div className="flex items-center gap-2 mb-1.5">
                       <Fish className={`w-4 h-4 ${scoreMeta.text}`} />
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
-                        Visadvies nu
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Slim advies nu</p>
                     </div>
-                    <p className="text-sm text-text-secondary leading-relaxed">{fishAdvice}</p>
+                    <p className="text-sm text-text-secondary leading-relaxed">
+                      {forecastAdvice?.overallSummary || 'Forecast analyse wordt opgebouwd.'}
+                    </p>
+                    {engineNow?.primaryAdvice?.[0] && (
+                      <p className="text-[12px] text-text-primary font-semibold mt-2">{engineNow.primaryAdvice[0]}</p>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -1345,28 +1176,95 @@ export default function WeatherForecast() {
                 <SectionHeader
                   icon={Waves}
                   title="Live kaart"
-                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Radar default</span>}
+                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Compact mobiel</span>}
                 />
                 <WindyMapCard
                   lat={weather.location.lat}
                   lon={weather.location.lon}
                   overlay={mapOverlay}
                   onOverlayChange={setMapOverlay}
-                  onToggleFullscreen={() => setMapFullscreen(true)}
-                  isFullscreen={false}
                 />
               </div>
 
               <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
-                <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                   <SectionHeader icon={Fish} title="Visscore per uur" />
                   <RangeToggle value={chartRange} onChange={setChartRange} />
                 </div>
                 <FishScoreBarChart data={fishChartData} />
                 <p className="text-[11px] text-text-muted mt-2">
-                  Groen = sterkere uren. Geel = gemiddeld. Rood/oranje = minder gunstige momenten.
+                  Groen = sterkere uren. Geel = gemiddeld. Oranje/rood = lastiger.
                 </p>
               </Card>
+
+              <div className="grid grid-cols-1 gap-3">
+                <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                  <SectionHeader
+                    icon={Zap}
+                    title="Beste planvensters"
+                    right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Planning</span>}
+                  />
+                  <div className="space-y-2.5">
+                    {topWindows.length ? (
+                      topWindows.map((window: any, index: number) => {
+                        const start = new Date(window.startDt * 1000);
+                        const end = new Date(window.endDt * 1000);
+                        const meta = getScoreMeta(window.avgScore);
+
+                        return (
+                          <div key={index} className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                            <div className="flex items-center justify-between gap-3 mb-1">
+                              <p className="text-sm font-black text-text-primary">
+                                {start.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} –{' '}
+                                {end.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              <span
+                                className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-wider"
+                                style={{
+                                  color: meta.color,
+                                  background: `${meta.color}18`,
+                                  border: `1px solid ${meta.color}30`,
+                                }}
+                              >
+                                {window.avgScore}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-text-muted">
+                              Mooie aaneengesloten uren om gericht te plannen, verkassen of juist langer te blijven zitten.
+                            </p>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                        <p className="text-sm text-text-muted">
+                          Geen uitgesproken blokken gevonden. Focus dan op losse beste uren en flexibel vissen.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                  <SectionHeader
+                    icon={Anchor}
+                    title="Waarom nu goed of lastig"
+                    right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Drivers</span>}
+                  />
+                  <div className="space-y-2.5">
+                    {(engineNow?.reasons ?? []).slice(0, 4).map((reason: string, index: number) => (
+                      <div key={index} className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                        <p className="text-sm text-text-secondary leading-relaxed">{reason}</p>
+                      </div>
+                    ))}
+                    {!engineNow?.reasons?.length && (
+                      <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                        <p className="text-sm text-text-muted">Nog geen specifieke drivers beschikbaar.</p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </div>
 
               <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
                 <SectionHeader
@@ -1375,9 +1273,6 @@ export default function WeatherForecast() {
                   right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{chartRange}</span>}
                 />
                 <RainBarChart data={rainChartData} />
-                <p className="text-[11px] text-text-muted mt-2">
-                  Snelle barview om buien en kans op regen in de komende uren te zien.
-                </p>
               </Card>
 
               <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
@@ -1396,9 +1291,6 @@ export default function WeatherForecast() {
                   right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{chartRange}</span>}
                 />
                 <PressureAreaChart data={pressureChartData} />
-                <p className="text-[11px] text-text-muted mt-2">
-                  Dalende druk = vaker activerende vis. Stijgende druk = vaker rustiger gedrag.
-                </p>
               </Card>
 
               <div>
@@ -1410,22 +1302,17 @@ export default function WeatherForecast() {
                 <Card className="p-3 border border-border-subtle bg-surface-card rounded-[28px] overflow-hidden">
                   <div className="grid grid-cols-5 gap-2">
                     {nextFiveHours.map((hour: any, idx: number) => {
-                      const hourScore = calcFishScore(
-                        hour.temp_c ?? 0,
-                        hour.pressure_mb ?? weather.current.pressure_mb,
-                        hour.wind_kph ?? 0,
-                        hour.chance_of_rain ?? 0,
-                        hour.uv ?? weather.current.uv,
-                        today?.astro?.moon_phase ?? ''
-                      );
+                      const matchingEngineHour =
+                        forecastAdvice?.hourlyScores?.find(
+                          (item: any) => item.dt === toUnixSecondsFromWeatherApiTime(hour.time)
+                        ) ?? null;
+                      const score = matchingEngineHour?.score ?? 50;
 
                       return (
                         <div
                           key={`${hour.time}-${idx}`}
                           className={`rounded-2xl border px-2 py-3 text-center min-w-0 ${
-                            idx === 0
-                              ? 'bg-brand/10 border-brand/25'
-                              : 'bg-surface-soft border-border-subtle'
+                            idx === 0 ? 'bg-brand/10 border-brand/25' : 'bg-surface-soft border-border-subtle'
                           }`}
                         >
                           <p className={`text-[10px] font-black uppercase tracking-wider mb-2 ${idx === 0 ? 'text-brand' : 'text-text-muted'}`}>
@@ -1434,9 +1321,7 @@ export default function WeatherForecast() {
 
                           <img src={hour.condition?.icon} alt="" className="w-8 h-8 mx-auto mb-1" />
 
-                          <p className="text-xl font-black text-text-primary leading-none">
-                            {Math.round(hour.temp_c)}°
-                          </p>
+                          <p className="text-lg font-black text-text-primary leading-none">{Math.round(hour.temp_c)}°</p>
 
                           <div className="mt-2 space-y-1">
                             <div className="flex items-center justify-center gap-1 text-[10px] text-sky-400">
@@ -1450,7 +1335,7 @@ export default function WeatherForecast() {
                           </div>
 
                           <div className="mt-2 inline-flex px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/15">
-                            <span className="text-[10px] font-black text-emerald-400">{hourScore}</span>
+                            <span className="text-[10px] font-black text-emerald-400">{score}</span>
                           </div>
                         </div>
                       );
@@ -1459,57 +1344,61 @@ export default function WeatherForecast() {
                 </Card>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
-                  <SectionHeader icon={Anchor} title="Live samenvatting" />
+                  <SectionHeader
+                    icon={Fish}
+                    title="Sessieadvies"
+                    right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Engine</span>}
+                  />
                   <div className="space-y-2.5">
-                    <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-                      <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">Windbeeld</p>
-                      <p className="text-lg font-black text-text-primary">{getWindLabel(weather.current.wind_kph)}</p>
-                      <p className="text-[10px] text-text-muted">{Math.round(weather.current.wind_kph)} km/u</p>
-                    </div>
-
-                    <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-                      <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">Drukstatus</p>
-                      <p className="text-lg font-black text-text-primary">{getPressureLabel(weather.current.pressure_mb)}</p>
-                      <p className="text-[10px] text-text-muted">{weather.current.pressure_mb} hPa</p>
-                    </div>
-
-                    <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-                      <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">Zicht</p>
-                      <p className="text-lg font-black text-text-primary">{Math.round(weather.current.vis_km)} km</p>
-                      <p className="text-[10px] text-text-muted">Actuele zichtconditie</p>
-                    </div>
+                    {sessionAdvice.length ? (
+                      sessionAdvice.map((tip: string, index: number) => (
+                        <div key={index} className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                          <p className="text-sm text-text-secondary leading-relaxed">{tip}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                        <p className="text-sm text-text-muted">Nog geen sessieadvies beschikbaar.</p>
+                      </div>
+                    )}
                   </div>
                 </Card>
 
                 <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
-                  <SectionHeader icon={Fish} title="Beste uren" />
+                  <SectionHeader
+                    icon={Gauge}
+                    title="Top parameters"
+                    right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Belangrijkste invloeden</span>}
+                  />
                   <div className="space-y-2.5">
-                    {bestWindows.map((item, index) => {
-                      const meta = getScoreMeta(item.score);
-
-                      return (
-                        <div key={`${item.time}-${index}`} className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <p className="text-sm font-black text-text-primary">{item.hour}</p>
+                    {parameterHighlights.length ? (
+                      parameterHighlights.map((item: any, index: number) => (
+                        <div key={index} className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                          <div className="flex items-center justify-between gap-3 mb-1.5">
+                            <p className="text-sm font-black text-text-primary">{item.label}</p>
                             <span
-                              className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-wider"
-                              style={{
-                                color: meta.color,
-                                background: `${meta.color}18`,
-                                border: `1px solid ${meta.color}30`,
-                              }}
+                              className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
+                                item.scoreImpact >= 3
+                                  ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                  : item.scoreImpact <= -3
+                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                  : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                              }`}
                             >
-                              {item.score}
+                              {item.valueLabel}
                             </span>
                           </div>
-                          <p className="text-[10px] text-text-muted">
-                            {item.temp}°C · {item.wind} km/u · {item.rain}% regen
-                          </p>
+                          <p className="text-[11px] text-text-secondary leading-relaxed">{item.summary}</p>
+                          {item.tips?.[0] && <p className="text-[11px] text-text-muted mt-1.5">{item.tips[0]}</p>}
                         </div>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      <div className="rounded-2xl bg-surface-soft border border-border-subtle px-3.5 py-3">
+                        <p className="text-sm text-text-muted">Nog geen parameter-highlights beschikbaar.</p>
+                      </div>
+                    )}
                   </div>
                 </Card>
               </div>
@@ -1542,16 +1431,24 @@ export default function WeatherForecast() {
                 />
                 <div className="space-y-2.5">
                   {weather.forecast.forecastday.map((day, idx) => {
-                    const dayScore = calcFishScore(
-                      day.day.avgtemp_c,
-                      weather.current.pressure_mb,
-                      day.day.maxwind_kph * 0.6,
-                      day.day.daily_chance_of_rain,
-                      day.day.uv,
-                      day.astro?.moon_phase ?? ''
-                    );
+                    const dayStart = Math.floor(new Date(day.date).getTime() / 1000);
+                    const dayHourScores =
+                      forecastAdvice?.hourlyScores?.filter((item: any) => {
+                        const d = new Date(item.dt * 1000);
+                        const dateOnly = new Date(dayStart * 1000);
+                        return (
+                          d.getFullYear() === dateOnly.getFullYear() &&
+                          d.getMonth() === dateOnly.getMonth() &&
+                          d.getDate() === dateOnly.getDate()
+                        );
+                      }) ?? [];
 
-                    const meta = getScoreMeta(dayScore);
+                    const dayAvg =
+                      dayHourScores.length > 0
+                        ? Math.round(dayHourScores.reduce((sum: number, item: any) => sum + item.score, 0) / dayHourScores.length)
+                        : 50;
+
+                    const meta = getScoreMeta(dayAvg);
 
                     return (
                       <Card key={day.date} className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
@@ -1575,7 +1472,7 @@ export default function WeatherForecast() {
                                 color: meta.color,
                               }}
                             >
-                              <span className="text-[15px] font-black leading-none">{dayScore}</span>
+                              <span className="text-[15px] font-black leading-none">{dayAvg}</span>
                               <span className="text-[7px] leading-none mt-0.5">vis</span>
                             </div>
                           </div>
@@ -1591,12 +1488,8 @@ export default function WeatherForecast() {
                             { label: 'UV', value: String(day.day.uv) },
                           ].map((item) => (
                             <div key={item.label} className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
-                              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">
-                                {item.label}
-                              </p>
-                              <p className="text-[12px] font-black text-text-primary leading-tight">
-                                {item.value}
-                              </p>
+                              <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">{item.label}</p>
+                              <p className="text-[12px] font-black text-text-primary leading-tight">{item.value}</p>
                             </div>
                           ))}
                         </div>
@@ -1607,81 +1500,56 @@ export default function WeatherForecast() {
               </div>
 
               <div>
-                <SectionHeader icon={Anchor} title="Vissers analyse" />
-                <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
-                  <div className="space-y-3">
-                    {[
-                      {
-                        icon: Gauge,
-                        title: 'Luchtdruk',
-                        text:
-                          weather.current.pressure_mb < 1000
-                            ? 'Opvallend lage druk. Vaak interessanter voor actiever aasgedrag.'
-                            : weather.current.pressure_mb < 1013
-                            ? 'Redelijk gunstige druk. Overgangen en aaswissels kunnen goed werken.'
-                            : 'Hogere druk. Vis vaker subtieler en strakker op stekkeuze.',
-                      },
-                      {
-                        icon: Wind,
-                        title: 'Wind',
-                        text:
-                          weather.current.wind_kph < 12
-                            ? 'Rustige wind. Nauwkeuriger vissen en subtiel presenteren is makkelijker.'
-                            : weather.current.wind_kph < 22
-                            ? 'Prima mobiele viscondities. Windkant en actieve zones blijven interessant.'
-                            : 'Meer drift en controleverlies. Zoek beschutte oevers en stabiele zones.',
-                      },
-                      {
-                        icon: CloudRain,
-                        title: 'Front & regen',
-                        text:
-                          (today?.day?.daily_chance_of_rain ?? 0) > 55
-                            ? 'Grotere regenkans kan vis in beweging zetten, zeker rond drukverandering.'
-                            : 'Beperkte regenkans. Gebruik vooral druk, licht en wind als leidraad.',
-                      },
-                      {
-                        icon: Sun,
-                        title: 'Licht',
-                        text:
-                          weather.current.uv <= 2
-                            ? 'Laag UV. Vis durft vaak vrijer en hoger in de kolom te komen.'
-                            : weather.current.uv <= 5
-                            ? 'Matig UV. Prima balans tussen zicht en activiteit.'
-                            : 'Hoger UV. Ochtend, avond, schaduw en dieper water worden interessanter.',
-                      },
-                    ].map(({ icon: Icon, title, text }) => (
-                      <div key={title} className="rounded-2xl bg-surface-soft border border-border-subtle p-3">
-                        <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-brand/10 border border-brand/15 flex items-center justify-center shrink-0">
-                            <Icon className="w-4 h-4 text-brand" />
+                <SectionHeader icon={Anchor} title="Beste uren vandaag" />
+                <div className="space-y-2.5">
+                  {bestHours.length ? (
+                    bestHours.map((hour: any, index: number) => {
+                      const meta = getScoreMeta(hour.score);
+                      return (
+                        <Card key={index} className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                          <div className="flex items-center justify-between gap-3 mb-2">
+                            <div>
+                              <p className="text-sm font-black text-text-primary">
+                                {new Date(hour.dt * 1000).toLocaleTimeString('nl-NL', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                              <p className="text-[11px] text-text-muted">
+                                Confidence {Math.round((hour.confidence ?? 0.7) * 100)}%
+                              </p>
+                            </div>
+                            <span
+                              className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                              style={{
+                                color: meta.color,
+                                background: `${meta.color}18`,
+                                border: `1px solid ${meta.color}30`,
+                              }}
+                            >
+                              {hour.score}
+                            </span>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-text-muted mb-1">
-                              {title}
+
+                          {hour.primaryAdvice?.slice(0, 2).map((tip: string, i: number) => (
+                            <p key={i} className="text-sm text-text-secondary leading-relaxed mb-1">
+                              {tip}
                             </p>
-                            <p className="text-sm text-text-secondary leading-relaxed">{text}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
+                          ))}
+                        </Card>
+                      );
+                    })
+                  ) : (
+                    <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                      <p className="text-sm text-text-muted">Nog geen uitgesproken beste uren gevonden.</p>
+                    </Card>
+                  )}
+                </div>
               </div>
             </motion.div>
           </AnimatePresence>
         )}
       </div>
-
-      {weather && (
-        <FullscreenMapModal
-          open={mapFullscreen}
-          onClose={() => setMapFullscreen(false)}
-          lat={weather.location.lat}
-          lon={weather.location.lon}
-          overlay={mapOverlay}
-          onOverlayChange={setMapOverlay}
-        />
-      )}
     </PageLayout>
   );
 }
