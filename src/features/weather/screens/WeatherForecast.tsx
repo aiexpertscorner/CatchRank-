@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Cloud, Sun, Wind, Thermometer, Droplets, Search, MapPin,
   Clock, Moon, Compass, Gauge, Eye, ArrowLeft, CloudRain, RefreshCw,
-  TrendingDown, TrendingUp, Anchor,
+  TrendingDown, TrendingUp, Anchor, ExternalLink, Fish,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
@@ -18,6 +18,7 @@ const DEFAULT_LOCATION = localStorage.getItem('weatherLocation') || 'Utrecht';
 
 type ChartRange = '8u' | '12u' | '24u';
 const RANGE_HOURS: Record<ChartRange, number> = { '8u': 8, '12u': 12, '24u': 24 };
+type WindyLayer = 'wind' | 'rain' | 'waves';
 
 // ─────────────────────────────────────────────
 // FISH ACTIVITY SCORE
@@ -102,6 +103,44 @@ function fmtHour(time: string) {
 function fmtDayLong(date: string) {
   try { return new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' }).format(new Date(date)); }
   catch { return date; }
+}
+
+function fmtShortDateTime(localtime: string) {
+  if (!localtime) return '--';
+  try {
+    return new Intl.DateTimeFormat('nl-NL', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(localtime));
+  } catch {
+    return localtime;
+  }
+}
+
+function getWindyEmbedUrl(lat: number, lon: number, overlay: WindyLayer): string {
+  const ov = overlay === 'rain' ? 'rain' : overlay === 'waves' ? 'waves' : 'wind';
+  return `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&width=100%25&height=420&zoom=8&level=surface&overlay=${ov}&product=ecmwf&menu=&message=true&marker=true&calendar=now&pressure=true&type=map&location=coordinates&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1`;
+}
+
+function getFishingWindows(sunrise: string, sunset: string) {
+  const sr = parseAstroTime(sunrise);
+  const ss = parseAstroTime(sunset);
+  if (!sr || !ss) return ['Vroege ochtend', 'Laatste licht'];
+
+  const toHHMM = (m: number) => {
+    const safe = ((m % 1440) + 1440) % 1440;
+    const h = Math.floor(safe / 60);
+    const mm = safe % 60;
+    return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  };
+
+  return [
+    `${toHHMM(sr - 90)}–${toHHMM(sr + 75)} (ochtendschemer)`,
+    `${toHHMM(ss - 90)}–${toHHMM(ss + 60)} (avondschemer)`,
+  ];
 }
 
 function getHourlyScroll(weather: WeatherData | null): any[] {
@@ -580,6 +619,7 @@ export default function WeatherForecast() {
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [searchValue, setSearchValue] = useState(DEFAULT_LOCATION);
   const [chartRange, setChartRange] = useState<ChartRange>('8u');
+  const [windyLayer, setWindyLayer] = useState<WindyLayer>('wind');
 
   useEffect(() => {
     setLoading(true);
@@ -622,6 +662,20 @@ export default function WeatherForecast() {
     })),
     [chartHours]);
 
+  const pressureDelta = useMemo(() => {
+    if (chartHours.length < 2) return 0;
+    const first = chartHours[0]?.pressure_mb ?? weather?.current?.pressure_mb ?? 0;
+    const last = chartHours[chartHours.length - 1]?.pressure_mb ?? first;
+    return +(last - first).toFixed(1);
+  }, [chartHours, weather?.current?.pressure_mb]);
+
+  const gustSpread = weather ? Math.max(0, Math.round(weather.current.gust_kph - weather.current.wind_kph)) : 0;
+  const biteWindows = getFishingWindows(today?.astro?.sunrise ?? '', today?.astro?.sunset ?? '');
+  const localtime = ((weather?.location as any)?.localtime ?? '') as string;
+  const windyUrl = weather
+    ? getWindyEmbedUrl(weather.location.lat, weather.location.lon, windyLayer)
+    : '';
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const next = searchValue.trim();
@@ -658,7 +712,7 @@ export default function WeatherForecast() {
         }
       />
 
-      <div className="space-y-3 pb-28">
+      <div className="space-y-2.5 pb-24">
         {/* Nav */}
         <div className="flex items-center gap-2.5">
           <Button variant="secondary" onClick={() => navigate('/')} className="h-9 rounded-xl px-3.5 text-sm">
@@ -695,17 +749,63 @@ export default function WeatherForecast() {
             <motion.div key={location}
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }} transition={{ duration: 0.28 }}
-              className="space-y-3">
+              className="space-y-2.5">
+
+              {/* ── 0. WINDY LIVE MAP ── */}
+              <Card className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-black uppercase tracking-[0.2em] text-brand leading-none mb-0.5">Live visweer kaart</p>
+                    <p className="text-xs text-text-muted truncate">Windy · {weather.location.name} · {fmtShortDateTime(localtime)}</p>
+                  </div>
+                  <a
+                    href={`https://www.windy.com/${weather.location.lat}/${weather.location.lon}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-[10px] font-black uppercase tracking-wide text-brand inline-flex items-center gap-1 hover:text-brand/80"
+                  >
+                    Open <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <div className="flex items-center gap-1 mb-2 overflow-x-auto">
+                  {([
+                    { key: 'wind', label: 'Wind' },
+                    { key: 'rain', label: 'Regenradar' },
+                    { key: 'waves', label: 'Golven' },
+                  ] as { key: WindyLayer; label: string }[]).map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setWindyLayer(opt.key)}
+                      className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide border whitespace-nowrap ${
+                        windyLayer === opt.key
+                          ? 'bg-brand/20 border-brand/35 text-brand'
+                          : 'bg-surface-soft border-border-subtle text-text-muted'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="rounded-xl overflow-hidden border border-border-subtle bg-surface-soft/30">
+                  <iframe
+                    title="Windy live weerkaart"
+                    src={windyUrl}
+                    className="w-full h-[44vh] min-h-[260px] max-h-[420px]"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+              </Card>
 
               {/* ── 1. HERO ── */}
-              <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl relative overflow-hidden">
+              <Card className="p-3 border border-border-subtle bg-surface-card rounded-2xl relative overflow-hidden">
                 {/* Ambient bg glow */}
                 <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl -mr-20 -mt-20 opacity-50 pointer-events-none"
                   style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.06) 0%, transparent 70%)' }} />
 
                 <div className="relative z-10">
                   {/* Location */}
-                  <div className="flex items-start justify-between gap-3 mb-3.5">
+                  <div className="flex items-start justify-between gap-2.5 mb-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/15 flex items-center justify-center shrink-0">
                         <MapPin className="w-3.5 h-3.5 text-brand" />
@@ -724,9 +824,9 @@ export default function WeatherForecast() {
                   </div>
 
                   {/* Temp + condition */}
-                  <div className="flex items-end gap-3 mb-3.5">
+                  <div className="flex items-end gap-2.5 mb-2.5">
                     <div className="flex items-start leading-none">
-                      <span className="text-[64px] font-black text-text-primary tracking-tighter leading-none">
+                      <span className="text-[56px] font-black text-text-primary tracking-tighter leading-none">
                         {Math.round(weather.current.temp_c)}
                       </span>
                       <span className="text-[28px] font-black text-brand mt-2.5">°C</span>
@@ -741,14 +841,14 @@ export default function WeatherForecast() {
                   </div>
 
                   {/* 4-stat grid */}
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-4 gap-1">
                     {[
                       { icon: Wind,     label: 'Wind',    val: `${Math.round(weather.current.wind_kph)}` },
                       { icon: Compass,  label: 'Richting', val: weather.current.wind_dir?.toUpperCase() ?? '--' },
                       { icon: Gauge,    label: 'Druk',    val: `${weather.current.pressure_mb}` },
                       { icon: Droplets, label: 'Vocht',   val: `${weather.current.humidity}%` },
                     ].map(({ icon: Icon, label, val }) => (
-                      <div key={label} className="rounded-xl bg-surface-soft border border-border-subtle p-2 text-center">
+                      <div key={label} className="rounded-xl bg-surface-soft border border-border-subtle p-1.5 text-center">
                         <Icon className="w-3.5 h-3.5 text-brand mx-auto mb-1" />
                         <p className="text-[7.5px] font-black uppercase tracking-widest text-text-muted leading-none mb-0.5">{label}</p>
                         <p className="text-[11px] font-black text-text-primary leading-none">{val}</p>
@@ -759,12 +859,12 @@ export default function WeatherForecast() {
               </Card>
 
               {/* ── 2. FISH ACTIVITY SCORE ── */}
-              <div className={`rounded-2xl border p-4 relative overflow-hidden ${scoreMeta.bg} ${scoreMeta.border}`}>
+              <div className={`rounded-2xl border p-3 relative overflow-hidden ${scoreMeta.bg} ${scoreMeta.border}`}>
                 <div className="absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl -mr-16 -mt-16 opacity-15 pointer-events-none"
                   style={{ background: scoreMeta.color }} />
                 <div className="relative z-10">
                   {/* Header row */}
-                  <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center gap-2.5 mb-3">
                     <div className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0"
                       style={{ background: `${scoreMeta.color}18`, borderColor: `${scoreMeta.color}35` }}>
                       <Anchor className="w-5 h-5" style={{ color: scoreMeta.color }} />
@@ -787,7 +887,7 @@ export default function WeatherForecast() {
                   <FishActivityBar score={fishScore} />
 
                   {/* Advice */}
-                  <div className="mt-5 rounded-xl bg-surface-soft/30 border border-white/5 p-3">
+                  <div className="mt-2 rounded-xl bg-surface-soft/30 border border-white/5 p-2.5">
                     <p className="text-[11.5px] text-text-secondary leading-relaxed">{fishAdvice}</p>
                   </div>
 
@@ -798,12 +898,33 @@ export default function WeatherForecast() {
                 </div>
               </div>
 
+              {/* ── 2b. EXTRA FISH RELEVANCE ── */}
+              <Card className="p-3 border border-border-subtle bg-surface-card rounded-2xl">
+                <SectionHeader icon={Fish} title="Vis vensters & triggers" />
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="rounded-xl bg-surface-soft border border-border-subtle p-2">
+                    <p className="text-[7.5px] font-black uppercase tracking-widest text-text-muted mb-0.5">Beste momenten</p>
+                    <p className="text-[11px] font-bold text-text-primary leading-snug">{biteWindows[0]}</p>
+                    <p className="text-[11px] text-text-secondary leading-snug mt-0.5">{biteWindows[1]}</p>
+                  </div>
+                  <div className="rounded-xl bg-surface-soft border border-border-subtle p-2">
+                    <p className="text-[7.5px] font-black uppercase tracking-widest text-text-muted mb-0.5">Trend trigger</p>
+                    <p className={`text-sm font-black ${pressureDelta < -1 ? 'text-green-400' : pressureDelta > 1 ? 'text-red-400' : 'text-yellow-400'}`}>
+                      {pressureDelta > 0 ? '+' : ''}{pressureDelta} hPa / {chartRange}
+                    </p>
+                    <p className="text-[10px] text-text-secondary mt-0.5">
+                      Gust spread {gustSpread} km/u · Zicht {Math.round(weather.current.vis_km)} km
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
               {/* ── 3. HOURLY SCROLL ── */}
               <div>
                 <SectionHeader icon={Clock} title="Komende uren"
                   right={<span className="text-[8px] font-black uppercase tracking-widest text-text-dim">Uurlijks</span>} />
                 <Card className="border border-border-subtle bg-surface-card rounded-2xl overflow-hidden">
-                  <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                  <div className="flex overflow-x-auto snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
                     {hourlyScroll.length === 0 ? (
                       <div className="flex items-center justify-center w-full py-8 gap-3">
                         <Clock className="w-7 h-7 text-brand/15" />
@@ -815,8 +936,8 @@ export default function WeatherForecast() {
                         <motion.div key={i}
                           initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.035 }}
-                          className={`flex flex-col items-center gap-1 px-3 py-3.5 shrink-0 relative ${isNow ? 'bg-brand/8' : ''}`}
-                          style={{ minWidth: 66 }}>
+                          className={`flex flex-col items-center gap-1 px-2.5 py-2.5 shrink-0 relative snap-start ${isNow ? 'bg-brand/8' : ''}`}
+                          style={{ minWidth: 62 }}>
                           {isNow && <div className="absolute top-0 left-0 right-0 h-[2px] bg-brand rounded-b" />}
                           <p className={`text-[8.5px] font-black uppercase tracking-wider ${isNow ? 'text-brand' : 'text-text-dim'}`}>
                             {isNow ? 'NU' : fmtHour(hour.time)}
@@ -849,7 +970,7 @@ export default function WeatherForecast() {
                   { icon: Wind,        label: 'Windstoten',      val: `${Math.round(weather.current.gust_kph)} km/u`,  color: 'text-brand',      bg: 'bg-brand/8'      },
                   { icon: Droplets,    label: 'Vochtigheid',     val: `${weather.current.humidity}%`,                  color: 'text-cyan-400',   bg: 'bg-cyan-500/8'   },
                 ].map(({ icon: Icon, label, val, color, bg }) => (
-                  <Card key={label} className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+                  <Card key={label} className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl">
                     <div className="flex items-center gap-2.5">
                       <div className={`w-8 h-8 rounded-lg ${bg} border border-border-subtle flex items-center justify-center ${color} shrink-0`}>
                         <Icon className="w-3.5 h-3.5" />
@@ -857,7 +978,7 @@ export default function WeatherForecast() {
                       {/* min-w-0 crucial: prevents child text from overflowing */}
                       <div className="min-w-0 flex-1">
                         <p className="text-[8px] font-black text-text-muted uppercase tracking-wide leading-none mb-1 truncate">{label}</p>
-                        <p className="text-[17px] font-black text-text-primary leading-none">{val}</p>
+                        <p className="text-[15px] font-black text-text-primary leading-none">{val}</p>
                       </div>
                     </div>
                   </Card>
@@ -865,15 +986,15 @@ export default function WeatherForecast() {
               </div>
 
               {/* ── 5. PRESSURE GAUGE + UV ── */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <Card className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Card className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="flex items-center gap-1.5 mb-2">
                     <Gauge className="w-3.5 h-3.5 text-brand" />
                     <p className="text-[8.5px] font-black uppercase tracking-widest text-text-muted">Luchtdruk</p>
                   </div>
                   <PressureGauge pressure={weather.current.pressure_mb} />
                 </Card>
-                <Card className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+                <Card className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="flex items-center gap-1.5 mb-2">
                     <Sun className="w-3.5 h-3.5 text-amber-400" />
                     <p className="text-[8.5px] font-black uppercase tracking-widest text-text-muted">UV Index</p>
@@ -883,21 +1004,21 @@ export default function WeatherForecast() {
               </div>
 
               {/* ── 6. WIND COMPASS ── */}
-              <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl">
+              <Card className="p-3 border border-border-subtle bg-surface-card rounded-2xl">
                 <SectionHeader icon={Compass} title="Wind & Richting" />
                 <WindCompass dir={weather.current.wind_dir} speed={weather.current.wind_kph} gusts={weather.current.gust_kph} />
               </Card>
 
               {/* ── 7. SUN + MOON ── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                <Card className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Card className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="flex items-center gap-1.5 mb-1">
                     <Sun className="w-3.5 h-3.5 text-amber-400" />
                     <p className="text-[8.5px] font-black uppercase tracking-widest text-text-muted">Zonneboog</p>
                   </div>
-                  <SunArc sunrise={today?.astro?.sunrise ?? ''} sunset={today?.astro?.sunset ?? ''} localtime={weather.location.localtime ?? ''} />
+                  <SunArc sunrise={today?.astro?.sunrise ?? ''} sunset={today?.astro?.sunset ?? ''} localtime={localtime} />
                 </Card>
-                <Card className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+                <Card className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="flex items-center gap-1.5 mb-3">
                     <Moon className="w-3.5 h-3.5 text-purple-400" />
                     <p className="text-[8.5px] font-black uppercase tracking-widest text-text-muted">Maanfase</p>
@@ -929,7 +1050,7 @@ export default function WeatherForecast() {
                     );
                     const dm = getScoreMeta(ds);
                     return (
-                      <Card key={day.date} className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+                      <Card key={day.date} className="p-2.5 border border-border-subtle bg-surface-card rounded-2xl">
                         <div className="flex items-center justify-between mb-2.5">
                           <div className="min-w-0">
                             <p className="text-sm font-black text-text-primary">
@@ -974,7 +1095,7 @@ export default function WeatherForecast() {
 
               {/* ── 9. PRESSURE TREND CHART ── */}
               {pressureChartData.length > 1 && (
-                <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl">
+                <Card className="p-3 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <TrendingDown className="w-3.5 h-3.5 text-brand" />
@@ -982,7 +1103,7 @@ export default function WeatherForecast() {
                     </div>
                     <RangeToggle value={chartRange} onChange={setChartRange} />
                   </div>
-                  <ResponsiveContainer width="100%" height={124}>
+                  <ResponsiveContainer width="100%" height={112}>
                     <AreaChart data={pressureChartData} margin={{ top: 4, right: 2, left: -22, bottom: 0 }}>
                       <defs>
                         <linearGradient id="pgChartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1009,7 +1130,7 @@ export default function WeatherForecast() {
 
               {/* ── 10. TEMP + RAIN CHART ── */}
               {tempRainChartData.length > 1 && (
-                <Card className="p-4 border border-border-subtle bg-surface-card rounded-2xl">
+                <Card className="p-3 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
@@ -1026,7 +1147,7 @@ export default function WeatherForecast() {
                       </div>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={130}>
+                  <ResponsiveContainer width="100%" height={116}>
                     <AreaChart data={tempRainChartData} margin={{ top: 4, right: 2, left: -22, bottom: 0 }}>
                       <defs>
                         <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1056,7 +1177,7 @@ export default function WeatherForecast() {
               {/* ── 11. FISHING ANALYSIS ── */}
               <div>
                 <SectionHeader icon={Anchor} title="Vissers analyse" />
-                <Card className="p-3.5 border border-border-subtle bg-surface-card rounded-2xl">
+                <Card className="p-3 border border-border-subtle bg-surface-card rounded-2xl">
                   <div className="space-y-2">
                     {[
                       {
