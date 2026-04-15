@@ -6,11 +6,13 @@ import {
   CloudRain,
   Compass,
   Droplets,
+  Expand,
   Eye,
   Fish,
   Gauge,
   LocateFixed,
   MapPin,
+  Minimize,
   Moon,
   RefreshCw,
   Search,
@@ -28,7 +30,10 @@ import { toast } from 'sonner';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -43,13 +48,14 @@ const DEFAULT_LOCATION = localStorage.getItem('weatherLocation') || 'Utrecht';
 const GEO_STORAGE_KEY = 'weatherGeo';
 const GEO_MODE_KEY = 'weatherGeoMode';
 
-type ChartRange = '8u' | '12u' | '24u';
+type ChartRange = '8u' | '12u' | '24u' | '48u';
 type MapOverlay = 'wind' | 'radar' | 'rain';
 
 const RANGE_HOURS: Record<ChartRange, number> = {
   '8u': 8,
   '12u': 12,
   '24u': 24,
+  '48u': 48,
 };
 
 type StoredGeo = {
@@ -309,6 +315,14 @@ function safeReadGeo(): StoredGeo | null {
   }
 }
 
+function getFishBarColor(score: number) {
+  if (score < 25) return '#ef4444';
+  if (score < 42) return '#f97316';
+  if (score < 58) return '#eab308';
+  if (score < 76) return '#22c55e';
+  return '#10b981';
+}
+
 function ScoreRing({
   score,
   size = 94,
@@ -424,13 +438,13 @@ function RangeToggle({
   onChange: (r: ChartRange) => void;
 }) {
   return (
-    <div className="flex bg-surface-soft rounded-xl p-1 gap-1">
-      {(['8u', '12u', '24u'] as ChartRange[]).map((range) => (
+    <div className="flex bg-surface-soft rounded-xl p-1 gap-1 overflow-x-auto">
+      {(['8u', '12u', '24u', '48u'] as ChartRange[]).map((range) => (
         <button
           key={range}
           type="button"
           onClick={() => onChange(range)}
-          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all whitespace-nowrap ${
             value === range
               ? 'bg-brand/20 text-brand border border-brand/25'
               : 'text-text-muted'
@@ -451,9 +465,9 @@ function MapOverlayToggle({
   onChange: (v: MapOverlay) => void;
 }) {
   const options: Array<{ key: MapOverlay; label: string }> = [
+    { key: 'radar', label: 'Regen' },
     { key: 'wind', label: 'Wind' },
-    { key: 'radar', label: 'Radar' },
-    { key: 'rain', label: 'Regen' },
+    { key: 'rain', label: 'Neerslag' },
   ];
 
   return (
@@ -476,52 +490,239 @@ function MapOverlayToggle({
   );
 }
 
-function WindyEmbed({
+function WindyFrame({
   lat,
   lon,
   overlay,
-  locationLabel,
+  fullScreen,
 }: {
   lat: number;
   lon: number;
   overlay: MapOverlay;
-  locationLabel: string;
+  fullScreen?: boolean;
 }) {
   const windyOverlay = overlay === 'rain' ? 'rain' : overlay === 'radar' ? 'radar' : 'wind';
 
-  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&width=650&height=760&zoom=8&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=true&metricWind=default&metricTemp=default&radarRange=-1`;
+  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=${fullScreen ? 9 : 8}&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=false&metricWind=default&metricTemp=default&radarRange=-1`;
 
   return (
+    <iframe
+      title="Windy live weather map"
+      src={src}
+      width="100%"
+      height="100%"
+      style={{ border: 0 }}
+      loading="lazy"
+      allowFullScreen
+    />
+  );
+}
+
+function WindyMapCard({
+  lat,
+  lon,
+  overlay,
+  onOverlayChange,
+  onToggleFullscreen,
+  isFullscreen,
+}: {
+  lat: number;
+  lon: number;
+  overlay: MapOverlay;
+  onOverlayChange: (overlay: MapOverlay) => void;
+  onToggleFullscreen: () => void;
+  isFullscreen: boolean;
+}) {
+  return (
     <Card className="p-0 border border-border-subtle bg-surface-card rounded-[28px] overflow-hidden">
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Waves className="w-4 h-4 text-brand" />
-            <p className="text-xl font-black text-text-primary tracking-tight">Live weerkaart</p>
-          </div>
-          <p className="text-[11px] text-text-muted leading-relaxed">
-            Realtime laag voor {locationLabel}. Snel wind, buien en fronten mobiel bekijken.
-          </p>
-        </div>
-        <Badge className="shrink-0">Live</Badge>
+      <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
+        <MapOverlayToggle value={overlay} onChange={onOverlayChange} />
+        <button
+          type="button"
+          onClick={onToggleFullscreen}
+          className="h-10 w-10 rounded-xl border border-border-subtle bg-surface-soft flex items-center justify-center shrink-0"
+        >
+          {isFullscreen ? (
+            <Minimize className="w-4 h-4 text-text-primary" />
+          ) : (
+            <Expand className="w-4 h-4 text-text-primary" />
+          )}
+        </button>
       </div>
 
       <div className="px-4 pb-4">
         <div className="rounded-[24px] overflow-hidden border border-border-subtle bg-black">
-          <div className="aspect-[16/12] sm:aspect-[16/10] min-h-[360px]">
-            <iframe
-              title="Windy live weather map"
-              src={src}
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              loading="lazy"
-              allowFullScreen
-            />
+          <div className="aspect-[16/12] sm:aspect-[16/10] min-h-[380px]">
+            <WindyFrame lat={lat} lon={lon} overlay={overlay} />
           </div>
         </div>
       </div>
     </Card>
+  );
+}
+
+function FullscreenMapModal({
+  open,
+  onClose,
+  lat,
+  lon,
+  overlay,
+  onOverlayChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  lat: number;
+  lon: number;
+  overlay: MapOverlay;
+  onOverlayChange: (overlay: MapOverlay) => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm p-3">
+      <div className="h-full w-full rounded-[28px] border border-white/10 bg-[#090d14] overflow-hidden flex flex-col">
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
+          <MapOverlayToggle value={overlay} onChange={onOverlayChange} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 w-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center shrink-0"
+          >
+            <Minimize className="w-4 h-4 text-white" />
+          </button>
+        </div>
+
+        <div className="flex-1 px-3 pb-3">
+          <div className="h-full w-full rounded-[24px] overflow-hidden border border-white/10 bg-black">
+            <WindyFrame lat={lat} lon={lon} overlay={overlay} fullScreen />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FishScoreBarChart({ data }: { data: any[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 10, right: 6, left: -18, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
+        <XAxis
+          dataKey="time"
+          tick={{ fill: '#64748b', fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          interval={0}
+        />
+        <YAxis
+          tick={{ fill: '#64748b', fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          domain={[0, 100]}
+        />
+        <Tooltip content={<ChartTip />} />
+        <Bar dataKey="Score" name="Score" radius={[8, 8, 0, 0]}>
+          {data.map((entry, index) => (
+            <Cell key={index} fill={getFishBarColor(entry.Score)} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function RainBarChart({ data }: { data: any[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={190}>
+      <BarChart data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
+        <XAxis
+          dataKey="time"
+          tick={{ fill: '#64748b', fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          interval={0}
+        />
+        <YAxis
+          tick={{ fill: '#64748b', fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          domain={[0, 100]}
+        />
+        <Tooltip content={<ChartTip />} />
+        <Bar dataKey="Regen" name="Regen" fill="#38bdf8" radius={[8, 8, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function TempAreaChart({ data }: { data: any[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={190}>
+      <AreaChart data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
+        <defs>
+          <linearGradient id="tempGradV2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F4C20D" stopOpacity={0.28} />
+            <stop offset="100%" stopColor="#F4C20D" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
+        <XAxis
+          dataKey="time"
+          tick={{ fill: '#64748b', fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          interval={0}
+        />
+        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+        <Tooltip content={<ChartTip />} />
+        <Area
+          type="monotone"
+          dataKey="Temp"
+          name="Temp"
+          stroke="#F4C20D"
+          strokeWidth={2.4}
+          fill="url(#tempGradV2)"
+          dot={false}
+          unit="°C"
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+function PressureAreaChart({ data }: { data: any[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={190}>
+      <AreaChart data={data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
+        <defs>
+          <linearGradient id="pressureGradV2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#84cc16" stopOpacity={0.25} />
+            <stop offset="100%" stopColor="#84cc16" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
+        <XAxis
+          dataKey="time"
+          tick={{ fill: '#64748b', fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          interval={0}
+        />
+        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} domain={['dataMin - 1', 'dataMax + 1']} />
+        <Tooltip content={<ChartTip />} />
+        <Area
+          type="monotone"
+          dataKey="Druk"
+          name="Druk"
+          stroke="#84cc16"
+          strokeWidth={2.2}
+          fill="url(#pressureGradV2)"
+          dot={false}
+          unit=" hPa"
+        />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -795,10 +996,11 @@ export default function WeatherForecast() {
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [searchValue, setSearchValue] = useState(DEFAULT_LOCATION);
-  const [chartRange, setChartRange] = useState<ChartRange>('8u');
-  const [mapOverlay, setMapOverlay] = useState<MapOverlay>('wind');
+  const [chartRange, setChartRange] = useState<ChartRange>('12u');
+  const [mapOverlay, setMapOverlay] = useState<MapOverlay>('radar');
   const [usingGeolocation, setUsingGeolocation] = useState(localStorage.getItem(GEO_MODE_KEY) === '1');
   const [geoLoading, setGeoLoading] = useState(false);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
   const initialLoadRef = useRef(false);
 
   const fetchWeatherForLocation = async (query: string) => {
@@ -933,13 +1135,33 @@ export default function WeatherForecast() {
     }));
   }, [chartHours]);
 
-  const tempRainChartData = useMemo(() => {
+  const tempChartData = useMemo(() => {
     return chartHours.map((h: any) => ({
       time: fmtHour(h.time),
       Temp: parseFloat((h.temp_c ?? 0).toFixed(1)),
+    }));
+  }, [chartHours]);
+
+  const rainChartData = useMemo(() => {
+    return chartHours.map((h: any) => ({
+      time: fmtHour(h.time),
       Regen: h.chance_of_rain ?? 0,
     }));
   }, [chartHours]);
+
+  const fishChartData = useMemo(() => {
+    return chartHours.map((h: any) => ({
+      time: fmtHour(h.time),
+      Score: calcFishScore(
+        h.temp_c ?? 0,
+        h.pressure_mb ?? weather?.current?.pressure_mb ?? 1013,
+        h.wind_kph ?? 0,
+        h.chance_of_rain ?? 0,
+        h.uv ?? weather?.current?.uv ?? 0,
+        today?.astro?.moon_phase ?? ''
+      ),
+    }));
+  }, [chartHours, today, weather]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1011,7 +1233,7 @@ export default function WeatherForecast() {
 
         {loading && (
           <div className="space-y-3 animate-pulse">
-            {[230, 500, 200, 190, 160, 160, 220].map((height, idx) => (
+            {[230, 500, 260, 220, 220, 220, 160, 220].map((height, idx) => (
               <div key={idx} style={{ height }} className="bg-surface-card/60 rounded-[28px]" />
             ))}
           </div>
@@ -1123,124 +1345,61 @@ export default function WeatherForecast() {
                 <SectionHeader
                   icon={Waves}
                   title="Live kaart"
-                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Windy</span>}
+                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Radar default</span>}
                 />
-                <MapOverlayToggle value={mapOverlay} onChange={setMapOverlay} />
-                <WindyEmbed
+                <WindyMapCard
                   lat={weather.location.lat}
                   lon={weather.location.lon}
                   overlay={mapOverlay}
-                  locationLabel={weather.location.name}
+                  onOverlayChange={setMapOverlay}
+                  onToggleFullscreen={() => setMapFullscreen(true)}
+                  isFullscreen={false}
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                {pressureChartData.length > 1 && (
-                  <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
-                    <div className="flex items-center justify-between mb-3 gap-2">
-                      <div className="flex items-center gap-2">
-                        <TrendingDown className="w-4 h-4 text-brand" />
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">
-                          Luchtdruk trend
-                        </p>
-                      </div>
-                      <RangeToggle value={chartRange} onChange={setChartRange} />
-                    </div>
+              <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <SectionHeader icon={Fish} title="Visscore per uur" />
+                  <RangeToggle value={chartRange} onChange={setChartRange} />
+                </div>
+                <FishScoreBarChart data={fishChartData} />
+                <p className="text-[11px] text-text-muted mt-2">
+                  Groen = sterkere uren. Geel = gemiddeld. Rood/oranje = minder gunstige momenten.
+                </p>
+              </Card>
 
-                    <ResponsiveContainer width="100%" height={180}>
-                      <AreaChart data={pressureChartData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--color-brand,#F4C20D)" stopOpacity={0.34} />
-                            <stop offset="100%" stopColor="var(--color-brand,#F4C20D)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
-                        <XAxis dataKey="time" tick={{ fill: '#4b5563', fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: '#4b5563', fontSize: 10 }} axisLine={false} tickLine={false} domain={['dataMin - 1', 'dataMax + 1']} />
-                        <Tooltip content={<ChartTip />} />
-                        <Area
-                          type="monotone"
-                          dataKey="Druk"
-                          name="Druk"
-                          stroke="var(--color-brand,#F4C20D)"
-                          strokeWidth={2.4}
-                          fill="url(#pressureGrad)"
-                          dot={false}
-                          unit=" hPa"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
+              <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                <SectionHeader
+                  icon={CloudRain}
+                  title="Neerslag forecast"
+                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{chartRange}</span>}
+                />
+                <RainBarChart data={rainChartData} />
+                <p className="text-[11px] text-text-muted mt-2">
+                  Snelle barview om buien en kans op regen in de komende uren te zien.
+                </p>
+              </Card>
 
-                    <p className="text-[11px] text-text-muted mt-2 leading-relaxed">
-                      Dalende druk = vaker activerende vis. Stijgende druk = vaker rustiger gedrag.
-                    </p>
-                  </Card>
-                )}
+              <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                <SectionHeader
+                  icon={Thermometer}
+                  title="Temperatuur trend"
+                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{chartRange}</span>}
+                />
+                <TempAreaChart data={tempChartData} />
+              </Card>
 
-                {tempRainChartData.length > 1 && (
-                  <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
-                    <div className="flex items-center justify-between mb-3 gap-2">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-brand" />
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-text-muted">
-                          Temperatuur & neerslag
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-3 h-0.5 bg-brand rounded" />
-                          <span className="text-[9px] text-text-dim font-bold">°C</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-3 h-0.5 bg-sky-400 rounded" />
-                          <span className="text-[9px] text-text-dim font-bold">%regen</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <ResponsiveContainer width="100%" height={190}>
-                      <AreaChart data={tempRainChartData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#F4C20D" stopOpacity={0.22} />
-                            <stop offset="100%" stopColor="#F4C20D" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="rainGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.18} />
-                            <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 6" stroke="#111d2e" vertical={false} />
-                        <XAxis dataKey="time" tick={{ fill: '#4b5563', fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: '#4b5563', fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<ChartTip />} />
-                        <Area
-                          type="monotone"
-                          dataKey="Temp"
-                          name="Temp"
-                          stroke="#F4C20D"
-                          strokeWidth={2.2}
-                          fill="url(#tempGrad)"
-                          dot={false}
-                          unit="°C"
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="Regen"
-                          name="Regen"
-                          stroke="#38bdf8"
-                          strokeWidth={2}
-                          fill="url(#rainGrad)"
-                          dot={false}
-                          unit="%"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </Card>
-                )}
-              </div>
+              <Card className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                <SectionHeader
+                  icon={TrendingDown}
+                  title="Luchtdruk trend"
+                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{chartRange}</span>}
+                />
+                <PressureAreaChart data={pressureChartData} />
+                <p className="text-[11px] text-text-muted mt-2">
+                  Dalende druk = vaker activerende vis. Stijgende druk = vaker rustiger gedrag.
+                </p>
+              </Card>
 
               <div>
                 <SectionHeader
@@ -1395,10 +1554,10 @@ export default function WeatherForecast() {
                     const meta = getScoreMeta(dayScore);
 
                     return (
-                      <Card key={day.date} className="p-3.5 border border-border-subtle bg-surface-card rounded-[28px]">
-                        <div className="flex items-center justify-between gap-3 mb-3">
+                      <Card key={day.date} className="p-4 border border-border-subtle bg-surface-card rounded-[28px]">
+                        <div className="flex items-start justify-between gap-3 mb-3">
                           <div className="min-w-0">
-                            <p className="text-base font-black text-text-primary">
+                            <p className="text-[16px] font-black text-text-primary">
                               {idx === 0 ? 'Vandaag' : idx === 1 ? 'Morgen' : fmtDayLong(day.date)}
                             </p>
                             <p className="text-[11px] text-text-muted capitalize truncate">
@@ -1409,31 +1568,33 @@ export default function WeatherForecast() {
                           <div className="flex items-center gap-2 shrink-0">
                             <img src={day.day.condition.icon} alt="" className="w-10 h-10" />
                             <div
-                              className="w-11 h-11 rounded-2xl border flex flex-col items-center justify-center"
+                              className="w-12 h-12 rounded-2xl border flex flex-col items-center justify-center"
                               style={{
                                 background: `${meta.color}18`,
                                 borderColor: `${meta.color}30`,
                                 color: meta.color,
                               }}
                             >
-                              <span className="text-[14px] font-black leading-none">{dayScore}</span>
+                              <span className="text-[15px] font-black leading-none">{dayScore}</span>
                               <span className="text-[7px] leading-none mt-0.5">vis</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {[
                             { label: 'Temp', value: `${Math.round(day.day.maxtemp_c)}° / ${Math.round(day.day.mintemp_c)}°` },
-                            { label: 'Regen', value: `${day.day.daily_chance_of_rain}%` },
+                            { label: 'Regen kans', value: `${day.day.daily_chance_of_rain}%` },
+                            { label: 'Neerslag', value: `${day.day.totalprecip_mm} mm` },
                             { label: 'Wind', value: `${Math.round(day.day.maxwind_kph)} km/u` },
+                            { label: 'Vocht', value: `${Math.round(day.day.avghumidity ?? 0)}%` },
                             { label: 'UV', value: String(day.day.uv) },
                           ].map((item) => (
-                            <div key={item.label} className="rounded-2xl bg-surface-soft border border-border-subtle px-2 py-2 text-center">
+                            <div key={item.label} className="rounded-2xl bg-surface-soft border border-border-subtle px-3 py-2.5">
                               <p className="text-[8px] font-black uppercase tracking-widest text-text-muted mb-1">
                                 {item.label}
                               </p>
-                              <p className="text-[11px] font-black text-text-primary leading-tight">
+                              <p className="text-[12px] font-black text-text-primary leading-tight">
                                 {item.value}
                               </p>
                             </div>
@@ -1510,6 +1671,17 @@ export default function WeatherForecast() {
           </AnimatePresence>
         )}
       </div>
+
+      {weather && (
+        <FullscreenMapModal
+          open={mapFullscreen}
+          onClose={() => setMapFullscreen(false)}
+          lat={weather.location.lat}
+          lon={weather.location.lon}
+          overlay={mapOverlay}
+          onOverlayChange={setMapOverlay}
+        />
+      )}
     </PageLayout>
   );
 }
