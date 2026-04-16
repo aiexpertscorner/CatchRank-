@@ -163,8 +163,8 @@ export default function Spots() {
             </div>
           </div>
 
-          {/* Filter Panel */}
-          {showFilters && (
+          {/* Filter Panel — hidden in map mode */}
+          {showFilters && viewMode !== 'map' && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -212,7 +212,7 @@ export default function Spots() {
 
         {/* Map View */}
         {viewMode === 'map' ? (
-          <div className="px-2 md:px-0 h-[calc(100dvh-260px)] min-h-80 flex flex-col">
+          <div className="px-2 md:px-0 h-[calc(100dvh-var(--nav-total-height)-215px)] min-h-80 flex flex-col">
             <SpotMap
               spots={filteredAndSorted}
               onSpotSelect={(id) => navigate(`/spots/${id}`)}

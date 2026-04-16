@@ -58,6 +58,8 @@ import { CatchForm } from '../../../components/CatchForm';
 import { LazyImage } from '../../../components/ui/LazyImage';
 import { normalizeMediaPath } from '../../../lib/media';
 import { repairCatchData } from '../services/catchDataRepair';
+import { resolveCoords } from '../../../lib/coordUtils';
+import LocationMiniMap from '../../spots/components/LocationMiniMap';
 
 type CatchWithMeta = Catch & {
   speciesGeneral?: string;
@@ -822,18 +824,38 @@ export default function CatchDetail() {
                   </h3>
                 </div>
 
-                <div className="space-y-3">
+                {/* Stek + city metadata */}
+                <div className="space-y-2 mb-4">
                   {keyLabel('Stek', catchData.spotName || (spot as any)?.title || (spot as any)?.name || '—')}
                   {keyLabel('Stad', catchData.city || '—')}
-                  {keyLabel('Latitude', parseNumericString(catchData.latitude) || '—')}
-                  {keyLabel('Longitude', parseNumericString(catchData.longitude) || '—')}
                 </div>
+
+                {/* Mini-map if coordinates available */}
+                {(() => {
+                  const coords = resolveCoords(catchData);
+                  if (!coords) return (
+                    <p className="text-xs text-text-dim italic mb-3">Geen GPS-coördinaten opgeslagen.</p>
+                  );
+                  return (
+                    <div className="mb-4">
+                      <LocationMiniMap
+                        lat={coords.lat}
+                        lng={coords.lng}
+                        label={catchData.spotName || catchData.city}
+                        height={160}
+                        showCoords
+                        showGoogleMapsBtn
+                        markerColor="#F4C20D"
+                      />
+                    </div>
+                  );
+                })()}
 
                 {catchData.spotId && (
                   <button
                     type="button"
                     onClick={() => navigate(`/spots/${catchData.spotId}`)}
-                    className="mt-4 w-full flex items-center justify-between rounded-2xl border border-border-subtle bg-surface-soft px-4 py-3 text-sm font-bold text-text-primary hover:border-accent/30 hover:text-accent transition-all"
+                    className="mt-1 w-full flex items-center justify-between rounded-2xl border border-border-subtle bg-surface-soft px-4 py-3 text-sm font-bold text-text-primary hover:border-accent/30 hover:text-accent transition-all"
                   >
                     <span className="flex items-center gap-2">
                       <LocateFixed className="w-4 h-4" />

@@ -30,6 +30,8 @@ import { Card, Badge } from '../../../components/ui/Base';
 import { LazyImage } from '../../../components/ui/LazyImage';
 import { resolveCatchImageSrc } from '../../../lib/catchUtils';
 import { getSessionImage } from '../../dashboard/utils/dashboardHelpers';
+import { resolveCoords } from '../../../lib/coordUtils';
+import LocationMiniMap from '../../spots/components/LocationMiniMap';
 import { motion } from 'motion/react';
 import { format, differenceInMinutes } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -414,6 +416,30 @@ export default function SessionDetail() {
             </Card>
           ))}
         </div>
+
+        {/* Session Location Mini-Map — primary spot coords */}
+        {(() => {
+          // Find the first linked spot that has resolvable coordinates
+          const primarySpot = Object.values(spots).find((s) => resolveCoords(s) !== null);
+          if (!primarySpot) return null;
+          const coords = resolveCoords(primarySpot)!;
+          const spotName = (primarySpot as any).title || primarySpot.name || 'Stek';
+          return (
+            <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
+              <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">
+                Locatie
+              </h3>
+              <LocationMiniMap
+                lat={coords.lat}
+                lng={coords.lng}
+                label={spotName}
+                height={160}
+                showCoords
+                showGoogleMapsBtn
+              />
+            </Card>
+          );
+        })()}
 
         {/* Participants */}
         {participants.length > 0 && (

@@ -45,6 +45,8 @@ import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { cn } from '../../../lib/utils';
 import { weatherService, WeatherData } from '../../weather/services/weatherService';
+import { resolveCoords } from '../../../lib/coordUtils';
+import LocationMiniMap from '../components/LocationMiniMap';
 
 /* ── Catch species helper ─────────────────────────── */
 function getCatchSpecies(c: Partial<Catch>): string {
@@ -404,7 +406,8 @@ export default function SpotDetail() {
   if (!spot) return null;
 
   const isOwner = profile?.uid === spot.userId;
-  const hasCoords = spot.coordinates?.lat && spot.coordinates?.lng;
+  const spotCoords = resolveCoords(spot);
+  const hasCoords = spotCoords !== null;
   const displayCatchCount = Math.max(catches.length, spot.stats?.totalCatches || 0);
   const displaySessionCount = Math.max(sessions.length, spot.stats?.totalSessions || 0);
 
@@ -531,8 +534,8 @@ export default function SpotDetail() {
         )}
 
         {/* Live Weather */}
-        {hasCoords && (
-          <WeatherWidget lat={spot.coordinates.lat} lng={spot.coordinates.lng} />
+        {hasCoords && spotCoords && (
+          <WeatherWidget lat={spotCoords.lat} lng={spotCoords.lng} />
         )}
 
         {/* Spot Insights */}
@@ -622,17 +625,16 @@ export default function SpotDetail() {
             <MapPin className="w-4 h-4 text-brand" />
             <h4 className="text-[9px] font-black text-text-muted uppercase tracking-widest">Locatie</h4>
           </div>
-          {hasCoords ? (
-            <a
-              href={`https://maps.google.com/?q=${spot.coordinates.lat},${spot.coordinates.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button className="w-full rounded-xl font-bold shadow-premium-accent">
-                <Navigation className="w-4 h-4 mr-2" />
-                Routebeschrijving
-              </Button>
-            </a>
+
+          {hasCoords && spotCoords ? (
+            <LocationMiniMap
+              lat={spotCoords.lat}
+              lng={spotCoords.lng}
+              label={(spot as any).title || spot.name}
+              height={188}
+              showCoords
+              showGoogleMapsBtn
+            />
           ) : (
             <p className="text-sm text-text-muted italic">Geen GPS-coördinaten opgeslagen.</p>
           )}
