@@ -5,6 +5,7 @@ import {
   Calendar,
   Fish,
   Zap,
+  Trophy,
   ChevronRight,
   History,
   Users,
@@ -54,6 +55,11 @@ const getSessionCatchCount = (session: Partial<Session>) =>
 const getSessionXp = (session: Partial<Session>) =>
   (session as any).stats?.totalXp ||
   (session as any).statsSummary?.totalXp ||
+  0;
+
+const getSessionSpeciesCount = (session: Partial<Session>) =>
+  (session as any).stats?.speciesCount ||
+  (session as any).statsSummary?.speciesCount ||
   0;
 
 const getSessionSpotName = (session: Partial<Session>) =>
@@ -344,6 +350,12 @@ export default function Sessions() {
                                   <Fish className="w-3 h-3" />
                                   {getSessionCatchCount(s)}
                                 </span>
+                                {getSessionSpeciesCount(s) > 0 && (
+                                  <span className="flex items-center gap-0.5 text-text-secondary font-medium">
+                                    <Trophy className="w-3 h-3" />
+                                    {getSessionSpeciesCount(s)}
+                                  </span>
+                                )}
                                 {getSessionXp(s) > 0 && (
                                   <span className="flex items-center gap-0.5 text-brand font-bold">
                                     <Zap className="w-3 h-3" />

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
+  ChevronRight,
   Fish,
   MapPin,
   Calendar,
@@ -29,7 +30,8 @@ import {
   Gauge,
   Sun,
   LocateFixed,
-  ChevronRight,
+  Maximize2,
+  X,
 } from 'lucide-react';
 import {
   doc,
@@ -208,6 +210,7 @@ export default function CatchDetail() {
   const [relatedCatches, setRelatedCatches] = useState<CatchWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
   const touchStartX = useRef<number | null>(null);
 
@@ -415,6 +418,7 @@ export default function CatchDetail() {
       <div className="max-w-4xl mx-auto pb-nav-pad">
         <div className="flex items-center justify-between mb-4 px-1">
           <button
+            type="button"
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 text-text-muted hover:text-text-primary transition-colors active:scale-95 py-2"
           >
@@ -425,6 +429,7 @@ export default function CatchDetail() {
           {isOwner && (
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setIsEditOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-card border border-border-subtle text-text-muted hover:text-accent hover:border-accent/30 transition-all text-xs font-bold"
               >
@@ -432,6 +437,7 @@ export default function CatchDetail() {
                 Bewerken
               </button>
               <button
+                type="button"
                 onClick={handleDelete}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-card border border-border-subtle text-text-muted hover:text-danger hover:border-danger/30 transition-all text-xs font-bold"
               >
@@ -443,113 +449,134 @@ export default function CatchDetail() {
         </div>
 
         <div className="space-y-4">
+          {/* ── Hero card: clean image + info strip below ── */}
           <div className="overflow-hidden rounded-[2rem] border border-border-subtle bg-surface-card">
-            <div className="relative">
-              {galleryImages.length > 0 ? (
-                <div
-                  className="relative aspect-[4/3] w-full overflow-hidden bg-surface-soft"
-                  onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
-                  onTouchEnd={(e) => {
-                    if (touchStartX.current === null) return;
-                    const dx = e.changedTouches[0].clientX - touchStartX.current;
-                    touchStartX.current = null;
-                    if (Math.abs(dx) < 40) return;
-                    if (dx < 0) setActiveImage((i) => Math.min(i + 1, galleryImages.length - 1));
-                    else setActiveImage((i) => Math.max(i - 1, 0));
-                  }}
+
+            {/* Image area — tap to open lightbox */}
+            {galleryImages.length > 0 ? (
+              <div
+                className="relative aspect-[4/3] w-full overflow-hidden bg-surface-soft cursor-zoom-in"
+                onClick={() => setIsLightboxOpen(true)}
+                onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+                onTouchEnd={(e) => {
+                  if (touchStartX.current === null) return;
+                  const dx = e.changedTouches[0].clientX - touchStartX.current;
+                  touchStartX.current = null;
+                  if (Math.abs(dx) < 40) return;
+                  if (dx < 0) setActiveImage((i) => Math.min(i + 1, galleryImages.length - 1));
+                  else setActiveImage((i) => Math.max(i - 1, 0));
+                }}
+              >
+                <LazyImage
+                  src={galleryImages[Math.min(activeImage, galleryImages.length - 1)]}
+                  alt={speciesName}
+                  className="rounded-none"
+                  wrapperClassName="w-full h-full"
+                />
+                {/* Subtle gradient — only bottom, light */}
+                <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent pointer-events-none" />
+
+                {/* Status badges — top left */}
+                <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                  {catchData.status === 'complete' ? (
+                    <Badge variant="success" className="backdrop-blur-md">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />Volledig
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning" className="backdrop-blur-md">
+                      <AlertCircle className="w-3 h-3 mr-1" />Concept
+                    </Badge>
+                  )}
+                  {catchData.isPrivate && (
+                    <Badge variant="secondary" className="bg-black/40 backdrop-blur-md border-white/10 text-white/80">
+                      Privé
+                    </Badge>
+                  )}
+                </div>
+
+                {/* XP badge — top right */}
+                {(catchData.xpEarned ?? 0) > 0 && (
+                  <div className="absolute top-3 right-3">
+                    <span className="inline-flex items-center gap-1 bg-accent text-bg-main px-2.5 py-1 rounded-xl text-[11px] font-black shadow-accent backdrop-blur-md">
+                      <Zap className="w-3 h-3" />+{catchData.xpEarned} XP
+                    </span>
+                  </div>
+                )}
+
+                {/* Expand button — bottom right */}
+                <button
+                  type="button"
+                  aria-label="Foto vergroten"
+                  onClick={(e) => { e.stopPropagation(); setIsLightboxOpen(true); }}
+                  className="absolute bottom-3 right-3 p-2 bg-black/40 backdrop-blur-md rounded-xl text-white/70 hover:text-white transition-colors"
                 >
-                  <LazyImage
-                    src={galleryImages[Math.min(activeImage, galleryImages.length - 1)]}
-                    alt={speciesName}
-                    className="rounded-none"
-                    wrapperClassName="w-full h-full"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-                  {galleryImages.length > 1 && (
-                    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
-                      {galleryImages.map((_, i) => (
-                        <span
-                          key={i}
-                          className={`block rounded-full transition-all ${i === activeImage ? 'w-4 h-1.5 bg-accent' : 'w-1.5 h-1.5 bg-white/50'}`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="aspect-[4/3] w-full flex items-center justify-center bg-gradient-to-br from-surface-card to-surface-soft">
-                  <div className="text-center space-y-3">
-                    <div className="w-20 h-20 rounded-3xl bg-accent/10 flex items-center justify-center mx-auto">
-                      <Fish className="w-10 h-10 text-accent/40" />
-                    </div>
-                    <p className="text-sm text-text-muted font-medium">Geen foto beschikbaar</p>
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+
+                {/* Gallery dots — bottom center */}
+                {galleryImages.length > 1 && (
+                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
+                    {galleryImages.map((_, i) => (
+                      <span
+                        key={i}
+                        className={`block rounded-full transition-all ${i === activeImage ? 'w-4 h-1.5 bg-accent' : 'w-1.5 h-1.5 bg-white/50'}`}
+                      />
+                    ))}
                   </div>
+                )}
+              </div>
+            ) : (
+              <div className="aspect-[4/3] w-full flex items-center justify-center bg-linear-to-br from-surface-card to-surface-soft">
+                <div className="text-center space-y-3">
+                  <div className="w-20 h-20 rounded-3xl bg-accent/10 flex items-center justify-center mx-auto">
+                    <Fish className="w-10 h-10 text-accent/40" />
+                  </div>
+                  <p className="text-sm text-text-muted font-medium">Geen foto beschikbaar</p>
                 </div>
+              </div>
+            )}
+
+            {/* Info strip — BELOW the image, no text on photo */}
+            <div className="px-5 py-4 border-t border-border-subtle">
+              {speciesGroup && speciesGroup !== speciesName && (
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">{speciesGroup}</p>
               )}
-
-              <div className="absolute left-0 right-0 bottom-0 p-5 sm:p-6">
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      {catchData.status === 'complete' ? (
-                        <Badge variant="success">
-                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                          Volledig
-                        </Badge>
-                      ) : (
-                        <Badge variant="warning">
-                          <AlertCircle className="w-3 h-3 mr-1" />
-                          Concept
-                        </Badge>
-                      )}
-
-                      {speciesGroup && speciesGroup !== speciesName && (
-                        <Badge variant="secondary">{speciesGroup}</Badge>
-                      )}
-
-                      {catchData.isPrivate ? (
-                        <Badge variant="secondary">Privé</Badge>
-                      ) : null}
-                    </div>
-
-                    <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white leading-tight">
-                      {speciesName}
-                    </h1>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm font-semibold text-white/80">
-                      <span className="flex items-center gap-1.5">
-                        <Ruler className="w-4 h-4" />
-                        {formatLength(catchData.length)}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Scale className="w-4 h-4" />
-                        {formatWeight(catchData.weight)}
-                      </span>
-                      {catchData.spotName && (
-                        <span className="flex items-center gap-1.5">
-                          <MapPin className="w-4 h-4" />
-                          {catchData.spotName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {(catchData.xpEarned ?? 0) > 0 && (
-                    <div className="flex items-center gap-2 bg-accent/95 text-bg-main px-4 py-2.5 rounded-2xl backdrop-blur-md shrink-0 shadow-lg">
-                      <Zap className="w-4 h-4" />
-                      <span className="text-sm font-black">+{catchData.xpEarned} XP</span>
-                    </div>
-                  )}
-                </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight leading-tight">
+                {speciesName}
+              </h1>
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-sm font-semibold text-text-secondary">
+                {catchData.length != null && (
+                  <span className="flex items-center gap-1.5">
+                    <Ruler className="w-3.5 h-3.5 text-text-muted" />
+                    {formatLength(catchData.length)}
+                  </span>
+                )}
+                {catchData.weight != null && (
+                  <span className="flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-text-muted" />
+                    {formatWeight(catchData.weight)}
+                  </span>
+                )}
+                {(catchData.spotName || (spot as any)?.title || (spot as any)?.name) && (
+                  <span className="flex items-center gap-1.5 text-text-muted">
+                    <MapPin className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate max-w-[160px]">
+                      {catchData.spotName || (spot as any)?.title || (spot as any)?.name}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
 
+            {/* Gallery thumbnails strip (multi-image) */}
             {galleryImages.length > 1 && (
               <div className="p-3 border-t border-border-subtle bg-surface-card">
                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
                   {galleryImages.map((img, index) => (
                     <button
                       key={`${img}-${index}`}
+                      type="button"
+                      aria-label={`Foto ${index + 1}`}
                       onClick={() => setActiveImage(index)}
                       className={`relative w-20 h-20 rounded-2xl overflow-hidden border transition-all shrink-0 ${
                         activeImage === index
@@ -721,9 +748,11 @@ export default function CatchDetail() {
                     {galleryImages.map((img, index) => (
                       <button
                         key={`${img}-grid-${index}`}
+                        type="button"
+                        aria-label={`Foto ${index + 1} openen`}
                         onClick={() => {
                           setActiveImage(index);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          setIsLightboxOpen(true);
                         }}
                         className="aspect-square rounded-2xl overflow-hidden border border-border-subtle bg-surface-soft"
                       >
@@ -743,6 +772,7 @@ export default function CatchDetail() {
 
                     {(spot || catchData.spotId) && catchData.spotId && (
                       <button
+                        type="button"
                         onClick={() => navigate(`/spots/${catchData.spotId}`)}
                         className="text-xs font-bold text-accent hover:underline"
                       >
@@ -801,6 +831,7 @@ export default function CatchDetail() {
 
                 {catchData.spotId && (
                   <button
+                    type="button"
                     onClick={() => navigate(`/spots/${catchData.spotId}`)}
                     className="mt-4 w-full flex items-center justify-between rounded-2xl border border-border-subtle bg-surface-soft px-4 py-3 text-sm font-bold text-text-primary hover:border-accent/30 hover:text-accent transition-all"
                   >
@@ -814,6 +845,7 @@ export default function CatchDetail() {
 
                 {catchData.sessionId && (
                   <button
+                    type="button"
                     onClick={() => navigate(`/sessions/${catchData.sessionId}`)}
                     className="mt-3 w-full flex items-center justify-between rounded-2xl border border-border-subtle bg-surface-soft px-4 py-3 text-sm font-bold text-text-primary hover:border-accent/30 hover:text-accent transition-all"
                   >
@@ -1009,6 +1041,69 @@ export default function CatchDetail() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Fullscreen Lightbox ── */}
+      {isLightboxOpen && (
+        <div
+          className="fixed inset-0 z-200 bg-black/97 flex items-center justify-center"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          {/* Close */}
+          <button
+            type="button"
+            aria-label="Sluiten"
+            className="absolute top-4 right-4 z-10 p-2.5 bg-white/10 rounded-xl text-white/70 hover:text-white hover:bg-white/20 transition-all"
+            onClick={() => setIsLightboxOpen(false)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          {/* Prev */}
+          {galleryImages.length > 1 && activeImage > 0 && (
+            <button
+              type="button"
+              aria-label="Vorige foto"
+              className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-3 bg-white/10 rounded-xl text-white/70 hover:text-white hover:bg-white/20 transition-all"
+              onClick={(e) => { e.stopPropagation(); setActiveImage(i => Math.max(i - 1, 0)); }}
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Next */}
+          {galleryImages.length > 1 && activeImage < galleryImages.length - 1 && (
+            <button
+              type="button"
+              aria-label="Volgende foto"
+              className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-3 bg-white/10 rounded-xl text-white/70 hover:text-white hover:bg-white/20 transition-all"
+              onClick={(e) => { e.stopPropagation(); setActiveImage(i => Math.min(i + 1, galleryImages.length - 1)); }}
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Image */}
+          <img
+            src={galleryImages[Math.min(activeImage, galleryImages.length - 1)]}
+            alt={speciesName}
+            className="max-w-full max-h-full object-contain px-14 py-12 select-none"
+            onClick={(e) => e.stopPropagation()}
+            draggable={false}
+          />
+
+          {/* Dots */}
+          {galleryImages.length > 1 && (
+            <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-2 pointer-events-none">
+              {galleryImages.map((_, i) => (
+                <span
+                  key={i}
+                  className={`block rounded-full transition-all ${i === activeImage ? 'w-5 h-1.5 bg-accent' : 'w-1.5 h-1.5 bg-white/40'}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </PageLayout>
   );
 }

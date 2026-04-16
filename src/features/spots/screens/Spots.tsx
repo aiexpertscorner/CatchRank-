@@ -27,6 +27,8 @@ import { Card, Button, Badge } from '../../../components/ui/Base';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { SpotModal } from '../../../components/SpotModal';
+import { LazyImage } from '../../../components/ui/LazyImage';
+import { resolveSpotImageSrc } from '../../../lib/catchUtils';
 
 /**
  * Spots Screen
@@ -256,12 +258,13 @@ export default function Spots() {
                     className="group border border-border-subtle bg-surface-card hover:border-brand/30 transition-all rounded-2xl overflow-hidden relative cursor-pointer"
                   >
                     <div className="flex items-center gap-4 p-5">
-                      <div className="w-16 h-16 rounded-xl bg-surface-soft flex items-center justify-center text-brand border border-border-subtle group-hover:scale-110 transition-transform duration-500 shadow-sm overflow-hidden flex-shrink-0">
-                        {s.mainPhotoURL ? (
-                          <img src={s.mainPhotoURL} alt={(s as any).title || s.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          <MapPin className="w-8 h-8" />
-                        )}
+                      <div className="w-16 h-16 rounded-xl border border-border-subtle overflow-hidden shrink-0 group-hover:scale-110 transition-transform duration-500">
+                        <LazyImage
+                          src={resolveSpotImageSrc(s as any)}
+                          alt={(s as any).title || s.name}
+                          wrapperClassName="w-full h-full"
+                          fallbackIconSize={28}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
