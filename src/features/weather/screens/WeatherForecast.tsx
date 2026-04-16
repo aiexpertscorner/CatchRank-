@@ -6,11 +6,13 @@ import {
   CloudRain,
   Compass,
   Droplets,
+  Expand,
   Eye,
   Fish,
   Gauge,
   LocateFixed,
   MapPin,
+  Minimize,
   Moon,
   RefreshCw,
   Search,
@@ -446,40 +448,109 @@ function StatPill({
   );
 }
 
-function WindyMapCard({
+function WindyFrame({
+  lat,
+  lon,
+  overlay,
+  compact = false,
+}: {
+  lat: number;
+  lon: number;
+  overlay: MapOverlay;
+  compact?: boolean;
+}) {
+  const windyOverlay = overlay === 'rain' ? 'rain' : overlay === 'radar' ? 'radar' : 'wind';
+
+  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=${compact ? 8 : 9}&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=false&metricWind=default&metricTemp=default&radarRange=-1`;
+
+  return (
+    <iframe
+      title="Windy live weather map"
+      src={src}
+      width="100%"
+      height="100%"
+      style={{ border: 0 }}
+      loading="lazy"
+      allowFullScreen
+    />
+  );
+}
+
+function FullscreenMapModal({
+  open,
+  onClose,
   lat,
   lon,
   overlay,
   onOverlayChange,
 }: {
+  open: boolean;
+  onClose: () => void;
   lat: number;
   lon: number;
   overlay: MapOverlay;
   onOverlayChange: (overlay: MapOverlay) => void;
 }) {
-  const windyOverlay = overlay === 'rain' ? 'rain' : overlay === 'radar' ? 'radar' : 'wind';
+  if (!open) return null;
 
-  const src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=8&level=surface&overlay=${windyOverlay}&product=ecmwf&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=true&metricWind=default&metricTemp=default&radarRange=-1`;
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm p-3">
+      <div className="h-full w-full rounded-[28px] border border-white/10 bg-[#090d14] overflow-hidden flex flex-col">
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
+          <MapOverlayToggle value={overlay} onChange={onOverlayChange} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 w-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center shrink-0"
+          >
+            <Minimize className="w-4 h-4 text-white" />
+          </button>
+        </div>
 
+        <div className="flex-1 px-3 pb-3">
+          <div className="h-full w-full rounded-[24px] overflow-hidden border border-white/10 bg-black">
+            <WindyFrame lat={lat} lon={lon} overlay={overlay} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WindyMapCard({
+  lat,
+  lon,
+  overlay,
+  onOverlayChange,
+  onOpenFullscreen,
+}: {
+  lat: number;
+  lon: number;
+  overlay: MapOverlay;
+  onOverlayChange: (overlay: MapOverlay) => void;
+  onOpenFullscreen: () => void;
+}) {
   return (
     <Card className="p-0 border border-border-subtle bg-surface-card rounded-[28px] overflow-hidden">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
         <MapOverlayToggle value={overlay} onChange={onOverlayChange} />
-        <Badge>Live</Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge>Live</Badge>
+          <button
+            type="button"
+            onClick={onOpenFullscreen}
+            className="h-10 w-10 rounded-xl border border-border-subtle bg-surface-soft flex items-center justify-center"
+            aria-label="Open fullscreen map"
+          >
+            <Expand className="w-4 h-4 text-text-primary" />
+          </button>
+        </div>
       </div>
 
       <div className="px-4 pb-4">
         <div className="rounded-[24px] overflow-hidden border border-border-subtle bg-black">
-          <div className="aspect-[16/10] min-h-[250px] max-h-[320px]">
-            <iframe
-              title="Windy live weather map"
-              src={src}
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              loading="lazy"
-              allowFullScreen
-            />
+          <div className="aspect-[16/10] min-h-[270px] max-h-[340px]">
+            <WindyFrame lat={lat} lon={lon} overlay={overlay} compact />
           </div>
         </div>
       </div>
@@ -838,6 +909,7 @@ export default function WeatherForecast() {
   const [discipline, setDiscipline] = useState<FishingDiscipline>('karper');
   const [usingGeolocation, setUsingGeolocation] = useState(localStorage.getItem(GEO_MODE_KEY) === '1');
   const [geoLoading, setGeoLoading] = useState(false);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
   const initialLoadRef = useRef(false);
 
   const fetchWeatherForLocation = async (query: string) => {
@@ -1066,7 +1138,7 @@ export default function WeatherForecast() {
 
         {loading && (
           <div className="space-y-3 animate-pulse">
-            {[220, 360, 220, 170, 170, 170, 150, 210].map((height, idx) => (
+            {[220, 320, 220, 170, 170, 170, 150, 210].map((height, idx) => (
               <div key={idx} style={{ height }} className="bg-surface-card/60 rounded-[28px]" />
             ))}
           </div>
@@ -1176,13 +1248,14 @@ export default function WeatherForecast() {
                 <SectionHeader
                   icon={Waves}
                   title="Live kaart"
-                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Compact mobiel</span>}
+                  right={<span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Map first</span>}
                 />
                 <WindyMapCard
                   lat={weather.location.lat}
                   lon={weather.location.lon}
                   overlay={mapOverlay}
                   onOverlayChange={setMapOverlay}
+                  onOpenFullscreen={() => setMapFullscreen(true)}
                 />
               </div>
 
@@ -1230,7 +1303,7 @@ export default function WeatherForecast() {
                               </span>
                             </div>
                             <p className="text-[11px] text-text-muted">
-                              Mooie aaneengesloten uren om gericht te plannen, verkassen of juist langer te blijven zitten.
+                              Mooie aaneengesloten uren om gericht te plannen, te verkassen of langer te blijven zitten.
                             </p>
                           </div>
                         );
@@ -1457,9 +1530,7 @@ export default function WeatherForecast() {
                             <p className="text-[16px] font-black text-text-primary">
                               {idx === 0 ? 'Vandaag' : idx === 1 ? 'Morgen' : fmtDayLong(day.date)}
                             </p>
-                            <p className="text-[11px] text-text-muted capitalize truncate">
-                              {day.day.condition.text}
-                            </p>
+                            <p className="text-[11px] text-text-muted capitalize truncate">{day.day.condition.text}</p>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
@@ -1550,6 +1621,17 @@ export default function WeatherForecast() {
           </AnimatePresence>
         )}
       </div>
+
+      {weather && (
+        <FullscreenMapModal
+          open={mapFullscreen}
+          onClose={() => setMapFullscreen(false)}
+          lat={weather.location.lat}
+          lon={weather.location.lon}
+          overlay={mapOverlay}
+          onOverlayChange={setMapOverlay}
+        />
+      )}
     </PageLayout>
   );
 }
