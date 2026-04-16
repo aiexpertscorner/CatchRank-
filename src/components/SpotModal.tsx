@@ -9,6 +9,9 @@ import {
   Anchor,
   Globe,
   Lock,
+  Users,
+  Shield,
+  Tag,
   ChevronRight,
   ChevronLeft,
   Fish,
@@ -90,6 +93,7 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
     waterBodyName: editingSpot?.waterBodyName || '',
     description: editingSpot?.description || '',
     visibility: editingSpot?.visibility || 'private',
+    spotCategory: editingSpot?.spotCategory || ('' as Spot['spotCategory'] | ''),
     isFavorite: editingSpot?.isFavorite || false,
     mainPhotoURL: editingSpot?.mainPhotoURL || '',
     targetSpecies: editingSpot?.targetSpecies || [] as string[],
@@ -111,6 +115,7 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
         waterBodyName: editingSpot.waterBodyName || '',
         description: editingSpot.description || '',
         visibility: editingSpot.visibility || 'private',
+        spotCategory: editingSpot.spotCategory || '',
         isFavorite: editingSpot.isFavorite || false,
         mainPhotoURL: editingSpot.mainPhotoURL || '',
         targetSpecies: editingSpot.targetSpecies || [],
@@ -132,6 +137,7 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
         waterBodyName: '',
         description: '',
         visibility: 'private',
+        spotCategory: '',
         isFavorite: false,
         mainPhotoURL: '',
         targetSpecies: [],
@@ -289,9 +295,10 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
     if (!profile) return;
     setLoading(true);
     try {
-      const { latInput, lngInput, ...rest } = formData;
+      const { latInput, lngInput, spotCategory, ...rest } = formData;
       const spotData = {
         ...rest,
+        ...(spotCategory ? { spotCategory } : {}),
         authorName: profile.displayName,
         authorPhoto: profile.photoURL || '',
       };
@@ -432,6 +439,44 @@ export const SpotModal: React.FC<SpotModalProps> = ({ isOpen, onClose, onSuccess
                       className="h-16 rounded-2xl bg-surface-soft/30 border-border-subtle focus:border-accent font-bold text-lg"
                     />
                   </div>
+                </div>
+
+                {/* Spot Category — map marker type */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] ml-1">
+                    Kaart Categorie <span className="normal-case font-medium tracking-normal opacity-60">(optioneel)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { id: '',           label: 'Auto',       color: '#5E646F', icon: null },
+                      { id: 'public',     label: 'Openbaar',   color: '#F4C20D', icon: <Globe className="w-3.5 h-3.5" /> },
+                      { id: 'private',    label: 'Privé',      color: '#5E646F', icon: <Lock className="w-3.5 h-3.5" /> },
+                      { id: 'friends',    label: 'Vrienden',   color: '#5FA8FF', icon: <Users className="w-3.5 h-3.5" /> },
+                      { id: 'club',       label: 'Club',       color: '#29C36A', icon: <Shield className="w-3.5 h-3.5" /> },
+                      { id: 'betaalwater', label: 'Betaalwater', color: '#F0A83A', icon: <Tag className="w-3.5 h-3.5" /> },
+                    ] as { id: string; label: string; color: string; icon: React.ReactNode }[]).map((opt) => {
+                      const isActive = formData.spotCategory === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, spotCategory: opt.id as any }))}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all',
+                            isActive
+                              ? 'border-accent text-accent bg-accent/10'
+                              : 'border-border-subtle text-text-muted bg-surface-soft hover:border-brand/30 hover:text-text-secondary'
+                          )}
+                        >
+                          {opt.icon && opt.icon}
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-text-dim ml-1">
+                    Bepaalt de kleur van je marker op de kaart. "Auto" volgt je zichtbaarheidsinstelling.
+                  </p>
                 </div>
 
                 <div className="space-y-3">

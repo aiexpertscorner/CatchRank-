@@ -13,11 +13,11 @@ import {
   TrendingUp,
   Map as MapIcon,
   Layers,
-  Maximize2,
   Anchor,
   Star,
   SlidersHorizontal
 } from 'lucide-react';
+import SpotMap from '../components/SpotMap';
 import { useAuth } from '../../../App';
 import { collection, query, where, onSnapshot, doc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
@@ -212,30 +212,12 @@ export default function Spots() {
 
         {/* Map View */}
         {viewMode === 'map' ? (
-          <Card className="aspect-video md:aspect-[21/9] bg-surface-soft border border-border-subtle rounded-2xl md:rounded-[2.5rem] flex items-center justify-center relative overflow-hidden group">
-            <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/map/1920/1080')] bg-cover bg-center opacity-40 grayscale group-hover:grayscale-0 transition-all duration-1000" />
-            <div className="absolute inset-0 bg-gradient-to-t from-bg-main via-transparent to-transparent" />
-            <div className="relative z-10 text-center space-y-4">
-              <div className="w-16 h-16 bg-brand/10 rounded-full flex items-center justify-center mx-auto border border-brand/20 animate-pulse">
-                <MapPin className="w-8 h-8 text-brand" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-xl font-bold text-text-primary tracking-tight">Interactieve Kaart</h3>
-                <p className="text-xs text-text-secondary font-medium">Mapbox integratie in ontwikkeling voor fase 3.</p>
-              </div>
-              <Button variant="secondary" size="sm" className="rounded-xl font-bold">
-                <Maximize2 className="w-4 h-4 mr-2" />
-                Open Kaart
-              </Button>
-            </div>
-            {filteredAndSorted.slice(0, 5).map((s, i) => (
-              <div
-                key={i}
-                className="absolute w-3 h-3 bg-brand rounded-full shadow-[0_0_10px_rgba(244,194,13,0.5)] border-2 border-white/20"
-                style={{ top: `${25 + (i * 12)}%`, left: `${20 + (i * 13)}%` }}
-              />
-            ))}
-          </Card>
+          <div className="px-2 md:px-0 h-[calc(100dvh-260px)] min-h-80 flex flex-col">
+            <SpotMap
+              spots={filteredAndSorted}
+              onSpotSelect={(id) => navigate(`/spots/${id}`)}
+            />
+          </div>
         ) : (
           /* List View */
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-2 md:px-0">

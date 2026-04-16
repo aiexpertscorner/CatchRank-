@@ -428,6 +428,13 @@ export interface Spot {
   photoURLs?: string[];
   mainPhotoURL?: string;
 
+  /**
+   * Map display category — controls marker color/icon on the SpotMap.
+   * Separate from visibility (which controls data access).
+   * Falls back to visibility if not set.
+   */
+  spotCategory?: 'public' | 'private' | 'friends' | 'club' | 'betaalwater';
+
   createdAt?: AnyTimestamp;
   updatedAt?: AnyTimestamp;
 

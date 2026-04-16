@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Krub:wght@400;500;600;700&display=swap');
+@import 'maplibre-gl/dist/maplibre-gl.css';
 @import "tailwindcss";
 
 @theme {
@@ -287,3 +288,113 @@
      pb-nav-pad   → padding-bottom: var(--page-pb)
      max-h-modal  → max-height: var(--modal-max-height)
    ========================================================================= */
+
+/* ==========================================================================
+   MapLibre GL — CatchRank Dark Theme Overrides
+   ========================================================================== */
+
+/* Controls background */
+.maplibregl-ctrl-group {
+  background: #17181C !important;
+  border: 1px solid #2A2D35 !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+}
+
+.maplibregl-ctrl-group button {
+  background: #17181C !important;
+  color: #B6BBC6 !important;
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: #1D1F24 !important;
+  color: #F4C20D !important;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid #2A2D35 !important;
+}
+
+.maplibregl-ctrl-icon {
+  filter: invert(0.7) sepia(0) !important;
+}
+
+.maplibregl-ctrl-icon:hover {
+  filter: invert(0) sepia(1) saturate(3) hue-rotate(5deg) !important;
+}
+
+/* Attribution — minimal */
+.maplibregl-ctrl-attrib {
+  background: rgba(16,17,20,0.75) !important;
+  border-radius: 8px !important;
+  font-size: 9px !important;
+  color: #5E646F !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: #7C838F !important;
+}
+
+/* Popup wrapper */
+.maplibregl-popup-content {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4) !important;
+  overflow: hidden;
+}
+
+.maplibregl-popup-close-button {
+  color: #7C838F !important;
+  font-size: 18px !important;
+  top: 6px !important;
+  right: 8px !important;
+  width: 24px !important;
+  height: 24px !important;
+  background: rgba(16,17,20,0.8) !important;
+  border-radius: 6px !important;
+  line-height: 24px !important;
+  text-align: center !important;
+}
+
+.maplibregl-popup-close-button:hover {
+  color: #F5F6F7 !important;
+  background: #2A2D35 !important;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: #17181C !important;
+}
+
+/* Geolocate control */
+.maplibregl-ctrl-geolocate {
+  background: #17181C !important;
+}
+
+/* Controls positioning — above bottom nav */
+.cr-map-container .maplibregl-ctrl-bottom-right {
+  bottom: calc(var(--bottom-nav-height, 64px) + var(--safe-area-bottom, 0px) + 16px) !important;
+  right: 12px !important;
+}
+
+.cr-map-container .maplibregl-ctrl-bottom-left {
+  bottom: calc(var(--bottom-nav-height, 64px) + var(--safe-area-bottom, 0px) + 16px) !important;
+}
+
+.cr-map-container .maplibregl-ctrl-top-right {
+  top: 12px !important;
+  right: 12px !important;
+}
+
+/* Marker pulse animation for active/selected markers — transform only (GPU-safe) */
+@keyframes markerPulse {
+  0%, 100% { transform: rotate(-45deg) scale(1); }
+  50% { transform: rotate(-45deg) scale(1.18); }
+}
+
+.cr-marker-active .cr-marker-pin {
+  animation: markerPulse 1.4s ease-in-out infinite;
+}
