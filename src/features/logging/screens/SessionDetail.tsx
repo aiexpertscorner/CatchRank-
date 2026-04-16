@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   Clock,
   Fish,
+  History,
   MapPin,
   Zap,
   Calendar,
@@ -17,6 +18,8 @@ import {
   Wind,
   User,
   Trophy,
+  Droplets,
+  Gauge,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
 import { doc, getDoc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
@@ -25,7 +28,8 @@ import { Session, Catch, Spot, UserProfile } from '../../../types';
 import { PageLayout } from '../../../components/layout/PageLayout';
 import { Card, Badge } from '../../../components/ui/Base';
 import { LazyImage } from '../../../components/ui/LazyImage';
-import { resolveCatchImageSrc, resolveSessionImageSrc } from '../../../lib/catchUtils';
+import { resolveCatchImageSrc } from '../../../lib/catchUtils';
+import { getSessionImage } from '../../dashboard/utils/dashboardHelpers';
 import { motion } from 'motion/react';
 import { format, differenceInMinutes } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -165,13 +169,31 @@ export default function SessionDetail() {
         const sessionData = { id: sessionDoc.id, ...sessionDoc.data() } as Session;
         setSession(sessionData);
 
+        // Primary: query catches that reference this session
         const catchQuery = query(
           collection(db, COLLECTIONS.CATCHES),
           where('sessionId', '==', id),
           orderBy('timestamp', 'asc')
         );
         const catchSnap = await getDocs(catchQuery);
-        const catchList = catchSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Catch));
+        let catchList = catchSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Catch));
+
+        // Fallback for migrated sessions: fetch via linkedCatchIds on the session doc
+        const linkedIds: string[] = (sessionData as any).linkedCatchIds || [];
+        if (catchList.length === 0 && linkedIds.length > 0) {
+          const linkedDocs = await Promise.all(
+            linkedIds.map((cid) => getDoc(doc(db, COLLECTIONS.CATCHES, cid)))
+          );
+          catchList = linkedDocs
+            .filter((d) => d.exists())
+            .map((d) => ({ id: d.id, ...d.data() } as Catch))
+            .sort((a: any, b: any) => {
+              const ta = a.timestamp?.toDate?.()?.getTime?.() ?? a.timestamp ?? 0;
+              const tb = b.timestamp?.toDate?.()?.getTime?.() ?? b.timestamp ?? 0;
+              return (typeof ta === 'number' ? ta : new Date(ta).getTime()) -
+                     (typeof tb === 'number' ? tb : new Date(tb).getTime());
+            });
+        }
         setCatches(catchList);
 
         const spotTimeline = getSessionSpotTimeline(sessionData);
@@ -246,9 +268,10 @@ export default function SessionDetail() {
   const statusCfg = STATUS_CONFIG[sessionStatus] ?? STATUS_CONFIG.completed;
 
   const sessionStats = getSessionStats(session);
-  const totalXp =
-    catches.reduce((sum, c: any) => sum + (c.xpEarned ?? 0), 0) +
-    (sessionStats.totalXp ?? 0);
+  // Use stored totalXp as authoritative; fallback to sum of individual catch XP
+  const storedXp: number = sessionStats.totalXp ?? 0;
+  const catchXp = catches.reduce((sum, c: any) => sum + (c.xpEarned ?? 0), 0);
+  const totalXp = storedXp > 0 ? storedXp : catchXp;
 
   const speciesSet = new Set(catches.map((c) => getCatchSpecies(c)).filter(Boolean));
   const isOwner = getSessionOwnerId(session) === profile?.uid;
@@ -273,10 +296,10 @@ export default function SessionDetail() {
         {/* Header Card */}
         <Card className="bg-surface-card border border-border-subtle rounded-2xl overflow-hidden">
           {/* Session photo — hero */}
-          {resolveSessionImageSrc(session as any) ? (
+          {getSessionImage(session) ? (
             <div className="w-full h-52 overflow-hidden">
               <LazyImage
-                src={resolveSessionImageSrc(session as any)}
+                src={getSessionImage(session)}
                 alt="Sessie foto"
                 wrapperClassName="w-full h-full"
               />
@@ -289,7 +312,7 @@ export default function SessionDetail() {
           <div className="p-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-black text-text-primary tracking-tight leading-tight truncate">
+              <h1 className="text-xl font-black text-text-primary tracking-tight leading-tight line-clamp-2">
                 {getSessionName(session)}
               </h1>
               {getSessionDescription(session) && (
@@ -306,6 +329,14 @@ export default function SessionDetail() {
               {statusCfg.label}
             </Badge>
           </div>
+
+          {/* Spot name from session data */}
+          {((session as any).spotName || (session as any).locationName || (session as any).spotTitle) && (
+            <p className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-text-muted mb-3">
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              {(session as any).spotName || (session as any).locationName || (session as any).spotTitle}
+            </p>
+          )}
 
           {/* Date + Duration */}
           <div className="flex flex-wrap gap-3 text-xs text-text-muted font-medium">
@@ -346,7 +377,9 @@ export default function SessionDetail() {
           {[
             {
               label: 'Vangsten',
-              value: catches.length,
+              value: catches.length > 0
+                ? catches.length
+                : (sessionStats.totalFish ?? sessionStats.totalCatches ?? 0),
               icon: <Fish className="w-4 h-4 text-accent" />,
               accent: 'text-accent',
             },
@@ -558,65 +591,61 @@ export default function SessionDetail() {
               Weersomstandigheden
             </h3>
             <div className="grid grid-cols-2 gap-2">
-              {weatherStart && (
-                <div className="p-3 bg-surface-soft rounded-xl">
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-wider mb-2">
-                    Start
-                  </p>
-                  <div className="space-y-1.5">
-                    {weatherStart.temp != null && (
+              {[
+                { label: 'Start', w: weatherStart },
+                { label: 'Einde', w: weatherEnd },
+              ]
+                .filter((x) => x.w)
+                .map(({ label, w }) => (
+                  <div key={label} className="p-3 bg-surface-soft rounded-xl space-y-1.5">
+                    <p className="text-[9px] font-black text-text-muted uppercase tracking-wider">
+                      {label}
+                    </p>
+                    {w.conditions && (
+                      <p className="text-[11px] font-semibold text-text-primary capitalize leading-tight">
+                        {w.conditions}
+                      </p>
+                    )}
+                    {w.tempC != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                        <Thermometer className="w-3.5 h-3.5 text-accent" />
-                        {weatherStart.temp}°C
+                        <Thermometer className="w-3.5 h-3.5 text-accent shrink-0" />
+                        {w.tempC}°C
+                        {w.feelslikeC != null && w.feelslikeC !== w.tempC && (
+                          <span className="text-text-muted">(voelt {w.feelslikeC}°)</span>
+                        )}
                       </div>
                     )}
-                    {weatherStart.windSpeed != null && (
+                    {w.windKph != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                        <Wind className="w-3.5 h-3.5 text-blue-400" />
-                        {weatherStart.windSpeed} km/u
+                        <Wind className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        {w.windKph} km/u {w.windDir || ''}
                       </div>
                     )}
-                    {weatherStart.description && (
-                      <p className="text-xs text-text-muted capitalize">
-                        {weatherStart.description}
+                    {w.humidityPct != null && (
+                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        <Droplets className="w-3.5 h-3.5 text-blue-300 shrink-0" />
+                        {w.humidityPct}%
+                      </div>
+                    )}
+                    {w.pressureMb != null && (
+                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        <Gauge className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                        {w.pressureMb} mb
+                      </div>
+                    )}
+                    {w.moonPhase && (
+                      <p className="text-[10px] text-text-muted">
+                        🌙 {w.moonPhase}
                       </p>
                     )}
                   </div>
-                </div>
-              )}
-
-              {weatherEnd && (
-                <div className="p-3 bg-surface-soft rounded-xl">
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-wider mb-2">
-                    Einde
-                  </p>
-                  <div className="space-y-1.5">
-                    {weatherEnd.temp != null && (
-                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                        <Thermometer className="w-3.5 h-3.5 text-accent" />
-                        {weatherEnd.temp}°C
-                      </div>
-                    )}
-                    {weatherEnd.windSpeed != null && (
-                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                        <Wind className="w-3.5 h-3.5 text-blue-400" />
-                        {weatherEnd.windSpeed} km/u
-                      </div>
-                    )}
-                    {weatherEnd.description && (
-                      <p className="text-xs text-text-muted capitalize">
-                        {weatherEnd.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+                ))}
             </div>
           </Card>
         )}
 
         {/* Notes */}
-        {(session as any).notes && typeof (session as any).notes === 'string' && (
+        {(session as any).notes && typeof (session as any).notes === 'string' && (session as any).notes.trim() !== '' && (
           <Card className="bg-surface-card border border-border-subtle rounded-2xl p-4">
             <h3 className="text-xs font-black text-text-muted uppercase tracking-widest mb-2">
               Notities

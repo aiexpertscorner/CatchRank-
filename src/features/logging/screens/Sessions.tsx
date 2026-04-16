@@ -15,8 +15,8 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { LazyImage } from '../../../components/ui/LazyImage';
-import { resolveSessionImageSrc } from '../../../lib/catchUtils';
 import { Session } from '../../../types';
+import { getSessionImage } from '../../dashboard/utils/dashboardHelpers';
 import { PageLayout, PageHeader } from '../../../components/layout/PageLayout';
 import { Card, Button } from '../../../components/ui/Base';
 import { format } from 'date-fns';
@@ -295,7 +295,7 @@ export default function Sessions() {
                       const start = getSessionStart(s);
                       const startDate =
                         start?.toDate?.() ?? (start ? new Date(start) : null);
-                      const imgSrc = resolveSessionImageSrc(s as any);
+                      const imgSrc = getSessionImage(s);
                       const spotName = getSessionSpotName(s);
 
                       return (
