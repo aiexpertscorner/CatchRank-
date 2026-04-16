@@ -10,7 +10,7 @@ interface LogoProps {
 
 export default function Logo({
   className,
-  withText = true,
+  withText = false,
   size = 'md',
 }: LogoProps) {
   const [imgError, setImgError] = useState(false);
