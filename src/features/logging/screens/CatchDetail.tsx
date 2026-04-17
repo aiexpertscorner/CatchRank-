@@ -228,7 +228,7 @@ export default function CatchDetail() {
 
         if (!catchDoc.exists()) {
           toast.error('Vangst niet gevonden');
-          navigate('/catches');
+          navigate('/logboek/vangsten');
           return;
         }
 
@@ -301,7 +301,7 @@ export default function CatchDetail() {
     try {
       await deleteDoc(doc(db, 'catches_v2', catchData.id));
       toast.success('Vangst verwijderd');
-      navigate('/catches');
+      navigate('/logboek/vangsten');
     } catch (error) {
       console.error(error);
       toast.error('Fout bij verwijderen');

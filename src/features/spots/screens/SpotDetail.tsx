@@ -258,7 +258,7 @@ export default function SpotDetail() {
           setSpot({ id: docSnap.id, ...docSnap.data() } as Spot);
         } else {
           toast.error('Stek niet gevonden');
-          navigate('/spots');
+          navigate('/logboek/stekken');
         }
       } catch (error) {
         console.error('Error fetching spot:', error);
@@ -360,7 +360,7 @@ export default function SpotDetail() {
     try {
       await deleteDoc(doc(db, 'spots_v2', id));
       toast.success('Stek verwijderd');
-      navigate('/spots');
+      navigate('/logboek/stekken');
     } catch (error) {
       toast.error('Fout bij verwijderen stek');
     }

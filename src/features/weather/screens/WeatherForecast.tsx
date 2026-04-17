@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Anchor,
-  ArrowLeft,
   Cloud,
   CloudRain,
   Compass,
@@ -23,7 +22,6 @@ import {
   Wind,
   Zap,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -898,8 +896,6 @@ function buildForecastEngineInput(weather: WeatherData, discipline: FishingDisci
 }
 
 export default function WeatherForecast() {
-  const navigate = useNavigate();
-
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState(DEFAULT_LOCATION);
@@ -1113,11 +1109,6 @@ export default function WeatherForecast() {
 
       <div className="space-y-3 pb-28">
         <div className="flex items-center gap-2.5 flex-wrap">
-          <Button variant="secondary" onClick={() => navigate('/')} className="h-9 rounded-xl px-3.5 text-sm">
-            <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-            Dashboard
-          </Button>
-
           <Button
             variant="ghost"
             className="h-9 rounded-xl px-3.5 text-sm"

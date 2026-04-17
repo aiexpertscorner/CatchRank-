@@ -1,23 +1,21 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Fish, 
-  MapPin, 
-  History, 
-  BarChart3, 
-  Trophy, 
-  Users, 
-  Wrench,
+import {
+  LayoutDashboard,
   BookOpen,
+  Cloud,
+  BarChart3,
+  Trophy,
+  Users,
+  Wrench,
   User,
   ShoppingBag,
+  MessageSquare,
   ChevronLeft,
   ChevronRight,
   LogOut,
   Settings,
   HelpCircle,
-  MessageSquare
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import Logo from '../Logo';
@@ -25,17 +23,16 @@ import { useAuth } from '../../App';
 import { Button } from '../ui/Base';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Fish, label: 'Logboek', path: '/catches' },
-  { icon: MessageSquare, label: 'Vraag Dick', path: '/tools/ask-dick' },
-  { icon: History, label: 'Sessies', path: '/sessions' },
-  { icon: MapPin, label: 'Stekken', path: '/spots' },
-  { icon: BarChart3, label: 'Statistieken', path: '/stats' },
-  { icon: Trophy, label: 'Rankings', path: '/rankings' },
-  { icon: Users, label: 'Community', path: '/clubs' },
-  { icon: ShoppingBag, label: 'Mijn Gear', path: '/gear' },
-  { icon: Wrench, label: 'Tools', path: '/tools' },
-  { icon: BookOpen, label: 'Kennis', path: '/knowledge' },
+  { icon: LayoutDashboard, label: 'Dashboard',   path: '/'                  },
+  { icon: BookOpen,        label: 'Logboek',     path: '/logboek'           },
+  { icon: MessageSquare,   label: 'Vraag Dick',  path: '/tools/ask-dick'    },
+  { icon: BarChart3,       label: 'Statistieken',path: '/stats'             },
+  { icon: Trophy,          label: 'Rankings',    path: '/rankings'          },
+  { icon: Users,           label: 'Community',   path: '/clubs'             },
+  { icon: Cloud,           label: 'Weer',        path: '/weather-forecast'  },
+  { icon: ShoppingBag,     label: 'Mijn Gear',   path: '/gear'              },
+  { icon: Wrench,          label: 'Tools',       path: '/tools'             },
+  { icon: BookOpen,        label: 'Kennis',      path: '/knowledge'         },
 ];
 
 export const Sidebar: React.FC = () => {

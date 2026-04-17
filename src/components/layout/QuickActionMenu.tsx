@@ -77,16 +77,16 @@ export const QuickActionMenu: React.FC<QuickActionMenuProps> = ({ className }) =
         setIsQuickCatchOpen(true);
         break;
       case 'session':
-        navigate('/sessions');
+        navigate('/logboek/sessies');
         break;
       case 'spot':
-        navigate('/spots');
+        navigate('/logboek/stekken');
         break;
       case 'gear':
         navigate('/gear');
         break;
       case 'draft':
-        navigate('/catches?filter=draft');
+        navigate('/logboek/vangsten?filter=draft');
         break;
       default:
         break;

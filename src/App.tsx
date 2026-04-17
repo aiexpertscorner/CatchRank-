@@ -27,6 +27,7 @@ import Profile from './features/auth/screens/Profile';
 import Settings from './features/auth/screens/Settings';
 import Catches from './features/logging/screens/Catches';
 import CatchDetail from './features/logging/screens/CatchDetail';
+import Logboek from './features/logging/screens/Logboek';
 import Sessions from './features/logging/screens/Sessions';
 import SessionDetail from './features/logging/screens/SessionDetail';
 import Spots from './features/spots/screens/Spots';
@@ -322,12 +323,24 @@ export default function App() {
               }
             >
               <Route path="/" element={<Dashboard />} />
-              <Route path="/catches" element={<Catches />} />
-              <Route path="/catches/:id" element={<CatchDetail />} />
-              <Route path="/sessions" element={<Sessions />} />
+
+              {/* Logboek hub — Vangsten / Sessies / Stekken in tabs */}
+              <Route path="/logboek" element={<Logboek />}>
+                <Route index element={<Navigate to="vangsten" replace />} />
+                <Route path="vangsten" element={<Catches />} />
+                <Route path="sessies"  element={<Sessions />} />
+                <Route path="stekken"  element={<Spots />} />
+              </Route>
+
+              {/* Detail screens — top-level, unchanged */}
+              <Route path="/catches/:id"  element={<CatchDetail />} />
               <Route path="/sessions/:id" element={<SessionDetail />} />
-              <Route path="/spots" element={<Spots />} />
-              <Route path="/spots/:id" element={<SpotDetail />} />
+              <Route path="/spots/:id"    element={<SpotDetail />} />
+
+              {/* Backward-compat redirects for bookmarks / old links */}
+              <Route path="/catches"  element={<Navigate to="/logboek/vangsten" replace />} />
+              <Route path="/sessions" element={<Navigate to="/logboek/sessies"  replace />} />
+              <Route path="/spots"    element={<Navigate to="/logboek/stekken"  replace />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/rankings" element={<Rankings />} />
               <Route path="/clubs" element={<Clubs />} />

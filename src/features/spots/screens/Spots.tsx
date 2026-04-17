@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Plus,
   MapPin,
@@ -45,6 +45,8 @@ const WATER_TYPE_LABELS: Record<string, string> = {
 export default function Spots() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isEmbedded = location.pathname.startsWith('/logboek');
   const [spots, setSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,23 +110,8 @@ export default function Spots() {
     { id: 'favorites', label: 'Favorieten eerst' },
   ];
 
-  return (
-    <PageLayout>
-      <PageHeader
-        title="Mijn Stekken"
-        subtitle={`${spots.length} locaties opgeslagen`}
-        actions={
-          <Button
-            icon={<Plus className="w-4 h-4" />}
-            className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
-            onClick={() => setIsModalOpen(true)}
-          >
-            Nieuwe Stek
-          </Button>
-        }
-      />
-
-      <div className="space-y-6 pb-nav-pad">
+  const listContent = (
+    <div className="space-y-6 pb-nav-pad">
         {/* Search & View Toggle */}
         <section className="flex flex-col gap-3 px-2 md:px-0">
           <div className="flex gap-2">
@@ -318,11 +305,46 @@ export default function Spots() {
           </div>
         )}
       </div>
+  );
+
+  return (
+    <>
+      {isEmbedded ? (
+        <>
+          <div className="flex justify-end px-2 md:px-0 mb-3">
+            <Button
+              icon={<Plus className="w-4 h-4" />}
+              className="rounded-xl h-9 px-4 text-xs font-bold shadow-premium-accent"
+              onClick={() => setIsModalOpen(true)}
+            >
+              Nieuwe Stek
+            </Button>
+          </div>
+          {listContent}
+        </>
+      ) : (
+        <PageLayout>
+          <PageHeader
+            title="Mijn Stekken"
+            subtitle={`${spots.length} locaties opgeslagen`}
+            actions={
+              <Button
+                icon={<Plus className="w-4 h-4" />}
+                className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+                onClick={() => setIsModalOpen(true)}
+              >
+                Nieuwe Stek
+              </Button>
+            }
+          />
+          {listContent}
+        </PageLayout>
+      )}
 
       <SpotModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
-    </PageLayout>
+    </>
   );
 }

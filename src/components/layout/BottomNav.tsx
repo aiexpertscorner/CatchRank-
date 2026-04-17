@@ -1,61 +1,86 @@
 import React, { useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Fish,
+  BookOpen,
   Trophy,
   User,
-  History,
-  MapPin
+  Cloud,
+  Package,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { QuickActionMenu } from './QuickActionMenu';
 
+// Paths that should light up the Logboek tab (catches/sessions/spots sub-paths
+// cover the case where history.back() lands on a legacy redirect briefly)
+const LOGBOEK_PATHS = ['/logboek', '/catches', '/sessions', '/spots'];
+
 const leftNavItems = [
-  { icon: LayoutDashboard, label: 'Home', path: '/' },
-  { icon: Fish, label: 'Logboek', path: '/catches' },
-  { icon: History, label: 'Sessies', path: '/sessions' },
+  { icon: LayoutDashboard, label: 'Home',     path: '/' },
+  { icon: BookOpen,        label: 'Logboek',  path: '/logboek', matchPaths: LOGBOEK_PATHS },
+  { icon: Trophy,          label: 'Rankings', path: '/rankings' },
 ];
 
 const rightNavItems = [
-  { icon: MapPin,   label: 'Stekken',  path: '/spots' },
-  { icon: Trophy,   label: 'Rankings', path: '/rankings' },
-  { icon: User,     label: 'Profiel',  path: '/profile' },
+  { icon: Cloud,   label: 'Weer',    path: '/weather-forecast' },
+  { icon: Package, label: 'Gear',    path: '/gear'             },
+  { icon: User,    label: 'Profiel', path: '/profile'          },
 ];
 
-function NavItem({ icon: Icon, label, path }: { icon: React.ElementType; label: string; path: string }) {
+function NavItem({
+  icon: Icon,
+  label,
+  path,
+  matchPaths,
+}: {
+  icon: React.ElementType;
+  label: string;
+  path: string;
+  matchPaths?: string[];
+}) {
+  const location = useLocation();
+  const extraActive = matchPaths
+    ? matchPaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))
+    : false;
+
   return (
     <NavLink
       to={path}
       end={path === '/'}
-      className={({ isActive }) => cn(
-        'flex flex-col items-center gap-0.5 transition-all active:scale-90 relative py-1 min-w-0',
-        isActive ? 'text-accent' : 'text-text-muted hover:text-text-primary'
-      )}
+      className={({ isActive }) => {
+        const active = isActive || extraActive;
+        return cn(
+          'flex flex-col items-center gap-0.5 transition-all active:scale-90 relative py-1 min-w-0',
+          active ? 'text-accent' : 'text-text-muted hover:text-text-primary'
+        );
+      }}
     >
-      {({ isActive }) => (
-        <>
-          <div className={cn(
-            'p-1 rounded-xl transition-all duration-300',
-            isActive ? 'bg-accent/10' : 'bg-transparent'
-          )}>
-            <Icon className={cn('w-5 h-5 transition-all duration-300', isActive ? 'scale-110 text-accent' : 'scale-100')} />
-          </div>
-          <span className={cn(
-            'text-[9px] font-black uppercase tracking-[0.1em] transition-colors leading-none',
-            isActive ? 'text-accent' : 'text-text-muted'
-          )}>
-            {label}
-          </span>
-          {isActive && (
-            <motion.div
-              layoutId={`nav-indicator-${path}`}
-              className="absolute -top-0.5 w-1 h-1 rounded-full bg-accent shadow-[0_0_6px_rgba(244,194,13,0.6)]"
-            />
-          )}
-        </>
-      )}
+      {({ isActive }) => {
+        const active = isActive || extraActive;
+        return (
+          <>
+            <div className={cn(
+              'p-1 rounded-xl transition-all duration-300',
+              active ? 'bg-accent/10' : 'bg-transparent'
+            )}>
+              <Icon className={cn('w-5 h-5 transition-all duration-300', active ? 'scale-110 text-accent' : 'scale-100')} />
+            </div>
+            <span className={cn(
+              'text-[9px] font-black uppercase tracking-widest transition-colors leading-none',
+              active ? 'text-accent' : 'text-text-muted'
+            )}>
+              {label}
+            </span>
+            {active && (
+              <motion.div
+                layoutId={`nav-indicator-${path}`}
+                className="absolute -top-0.5 w-1 h-1 rounded-full bg-accent shadow-[0_0_6px_rgba(244,194,13,0.6)]"
+              />
+            )}
+          </>
+        );
+      }}
     </NavLink>
   );
 }

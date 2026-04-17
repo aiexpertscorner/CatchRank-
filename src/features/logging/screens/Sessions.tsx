@@ -12,7 +12,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../../App';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { LazyImage } from '../../../components/ui/LazyImage';
@@ -81,6 +81,8 @@ const isSessionArchivedHistory = (session: Partial<Session>) => {
 export default function Sessions() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isEmbedded = location.pathname.startsWith('/logboek');
   const { activeSession } = useSession();
 
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -168,29 +170,8 @@ export default function Sessions() {
 
   const historySessions = sessions.filter(isSessionArchivedHistory);
 
-  return (
-    <PageLayout>
-      <PageHeader
-        title="Vis Sessies"
-        subtitle={
-          activeSession
-            ? 'Je bent momenteel aan het vissen!'
-            : `${sessions.length} sessies aan de waterkant`
-        }
-        actions={
-          !activeSession && (
-            <Button
-              icon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsSessionModalOpen(true)}
-              className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
-            >
-              Nieuwe Sessie
-            </Button>
-          )
-        }
-      />
-
-      <div className="space-y-6 md:space-y-8 pb-nav-pad">
+  const listContent = (
+    <div className="space-y-6 md:space-y-8 pb-nav-pad">
         {/* Pending Invitations */}
         {pendingInvitations.length > 0 && profile && (
           <section className="px-2 md:px-0 space-y-4">
@@ -393,6 +374,49 @@ export default function Sessions() {
           )}
         </AnimatePresence>
       </div>
+  );
+
+  return (
+    <>
+      {isEmbedded ? (
+        <>
+          {!activeSession && (
+            <div className="flex justify-end px-2 md:px-0 mb-3">
+              <Button
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => setIsSessionModalOpen(true)}
+                className="rounded-xl h-9 px-4 text-xs font-bold shadow-premium-accent"
+              >
+                Nieuwe Sessie
+              </Button>
+            </div>
+          )}
+          {listContent}
+        </>
+      ) : (
+        <PageLayout>
+          <PageHeader
+            title="Vis Sessies"
+            subtitle={
+              activeSession
+                ? 'Je bent momenteel aan het vissen!'
+                : `${sessions.length} sessies aan de waterkant`
+            }
+            actions={
+              !activeSession && (
+                <Button
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => setIsSessionModalOpen(true)}
+                  className="rounded-xl h-11 px-6 font-bold shadow-premium-accent"
+                >
+                  Nieuwe Sessie
+                </Button>
+              )
+            }
+          />
+          {listContent}
+        </PageLayout>
+      )}
 
       {/* Session Modal */}
       <AnimatePresence>
@@ -403,6 +427,6 @@ export default function Sessions() {
           />
         )}
       </AnimatePresence>
-    </PageLayout>
+    </>
   );
 }

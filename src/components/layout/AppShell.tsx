@@ -8,32 +8,29 @@ import { cn } from '../../lib/utils';
 import { X, Menu } from 'lucide-react';
 import Logo from '../Logo';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Fish, 
-  MapPin, 
-  History, 
-  BarChart3, 
-  Trophy, 
-  Users, 
-  Wrench,
+import {
+  LayoutDashboard,
   BookOpen,
+  Cloud,
+  BarChart3,
+  Trophy,
+  Users,
+  Wrench,
   User,
-  LogOut
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../App';
 
 const mobileNavItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Fish, label: 'Logboek', path: '/catches' },
-  { icon: History, label: 'Sessies', path: '/sessions' },
-  { icon: MapPin, label: 'Stekken', path: '/spots' },
-  { icon: BarChart3, label: 'Statistieken', path: '/stats' },
-  { icon: Trophy, label: 'Rankings', path: '/rankings' },
-  { icon: Users, label: 'Community', path: '/clubs' },
-  { icon: Wrench, label: 'Tools', path: '/tools' },
-  { icon: BookOpen, label: 'Kennis', path: '/knowledge' },
-  { icon: User, label: 'Profiel', path: '/profile' },
+  { icon: LayoutDashboard, label: 'Dashboard',    path: '/'                 },
+  { icon: BookOpen,        label: 'Logboek',      path: '/logboek'          },
+  { icon: BarChart3,       label: 'Statistieken', path: '/stats'            },
+  { icon: Trophy,          label: 'Rankings',     path: '/rankings'         },
+  { icon: Users,           label: 'Community',    path: '/clubs'            },
+  { icon: Cloud,           label: 'Weer',         path: '/weather-forecast' },
+  { icon: Wrench,          label: 'Tools',        path: '/tools'            },
+  { icon: BookOpen,        label: 'Kennis',       path: '/knowledge'        },
+  { icon: User,            label: 'Profiel',      path: '/profile'          },
 ];
 
 export const AppShell: React.FC = () => {

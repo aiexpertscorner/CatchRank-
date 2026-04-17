@@ -30,7 +30,7 @@ import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { QuickCatchModal } from '../../../components/QuickCatchModal';
 import { CatchForm } from '../../../components/CatchForm';
 
@@ -50,6 +50,8 @@ type CatchWithMeta = Catch & {
 export default function Catches() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isEmbedded = location.pathname.startsWith('/logboek');
 
   const [catches, setCatches] = useState<CatchWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,36 +173,8 @@ export default function Catches() {
     return filtered; // date desc — already ordered by Firestore query
   }, [catches, searchQuery, filterSpecies, filterStatus, sortBy]);
 
-  return (
-    <PageLayout>
-      <PageHeader
-        title="Mijn Vangsten"
-        subtitle={`${catches.length} vangsten gelogd`}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              icon={<Camera className="w-4 h-4" />}
-              onClick={() => setIsQuickCatchOpen(true)}
-              className="rounded-xl h-11 px-4 font-bold hidden sm:flex"
-            >
-              Quick
-            </Button>
-            <Button
-              icon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingCatch(null);
-                setIsCatchFormOpen(true);
-              }}
-              className="rounded-xl h-11 px-5 sm:px-6 font-bold shadow-premium-accent"
-            >
-              Vangst Loggen
-            </Button>
-          </div>
-        }
-      />
-
-      <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-nav-pad">
+  const listContent = (
+    <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-nav-pad">
         <section className="flex flex-col lg:flex-row gap-3 px-2 md:px-0">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
@@ -504,6 +478,60 @@ export default function Catches() {
           </Card>
         )}
       </div>
+  );
+
+  return (
+    <>
+      {isEmbedded ? (
+        <>
+          {/* Embedded action bar — shown instead of PageHeader when inside Logboek hub */}
+          <div className="flex items-center justify-end gap-2 px-2 md:px-0 mb-3">
+            <Button
+              variant="secondary"
+              icon={<Camera className="w-4 h-4" />}
+              onClick={() => setIsQuickCatchOpen(true)}
+              className="rounded-xl h-9 px-3 text-xs font-bold"
+            >
+              Quick
+            </Button>
+            <Button
+              icon={<Plus className="w-4 h-4" />}
+              onClick={() => { setEditingCatch(null); setIsCatchFormOpen(true); }}
+              className="rounded-xl h-9 px-4 text-xs font-bold shadow-premium-accent"
+            >
+              Vangst Loggen
+            </Button>
+          </div>
+          {listContent}
+        </>
+      ) : (
+        <PageLayout>
+          <PageHeader
+            title="Mijn Vangsten"
+            subtitle={`${catches.length} vangsten gelogd`}
+            actions={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  icon={<Camera className="w-4 h-4" />}
+                  onClick={() => setIsQuickCatchOpen(true)}
+                  className="rounded-xl h-11 px-4 font-bold hidden sm:flex"
+                >
+                  Quick
+                </Button>
+                <Button
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => { setEditingCatch(null); setIsCatchFormOpen(true); }}
+                  className="rounded-xl h-11 px-5 sm:px-6 font-bold shadow-premium-accent"
+                >
+                  Vangst Loggen
+                </Button>
+              </div>
+            }
+          />
+          {listContent}
+        </PageLayout>
+      )}
 
       <AnimatePresence>
         {isQuickCatchOpen && (
@@ -546,6 +574,6 @@ export default function Catches() {
           </div>
         )}
       </AnimatePresence>
-    </PageLayout>
+    </>
   );
 }

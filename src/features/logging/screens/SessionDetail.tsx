@@ -164,7 +164,7 @@ export default function SessionDetail() {
         const sessionDoc = await getDoc(doc(db, COLLECTIONS.SESSIONS, id));
 
         if (!sessionDoc.exists()) {
-          navigate('/sessions');
+          navigate('/logboek/sessies');
           return;
         }
 
