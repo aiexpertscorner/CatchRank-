@@ -1,11 +1,22 @@
-import { doc, updateDoc, increment, getDoc } from 'firebase/firestore';
+import {
+  doc,
+  updateDoc,
+  increment,
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'sonner';
 
 /**
- * XP & Level Service
- * Central source of truth for all XP/level progression logic.
- * Handles XP accumulation, level calculation, and toast notifications.
+ * XP & Level Service — aligned to Dart LevelingService (leveling_service.dart)
+ *
+ * Level thresholds and rank titles match the Flutter app exactly so that
+ * migrated catch XP values produce the same level results in both platforms.
  */
 
 export interface LevelConfig {
@@ -35,94 +46,45 @@ export interface XpResult {
 }
 
 /**
- * Level thresholds and titles.
- * Designed for a fishing app: ~10-15 complete catches per level in early game,
- * scaling to require consistent long-term activity at higher levels.
+ * Level thresholds — exact match to Dart LevelingService.levelXpFloor.
+ *
+ * L2=150, L4=800, L6=2200, L8=4800, L10=10000
  */
 export const LEVEL_CONFIG: LevelConfig[] = [
-  { level: 1,  xpRequired: 0,      title: 'Beginner' },
-  { level: 2,  xpRequired: 150,    title: 'Hobby Visser' },
-  { level: 3,  xpRequired: 400,    title: 'Visser' },
-  { level: 4,  xpRequired: 800,    title: 'Actieve Visser' },
-  { level: 5,  xpRequired: 1400,   title: 'Ervaren Visser' },
-  { level: 6,  xpRequired: 2200,   title: 'Gevorderde Visser' },
-  { level: 7,  xpRequired: 3200,   title: 'Doorgewinterde Visser' },
-  { level: 8,  xpRequired: 4500,   title: 'Expert Visser' },
-  { level: 9,  xpRequired: 6000,   title: 'Senior Expert' },
-  { level: 10, xpRequired: 8000,   title: 'Pro Visser' },
-  { level: 11, xpRequired: 10500,  title: 'Elite Visser' },
-  { level: 12, xpRequired: 13500,  title: 'Master Visser' },
-  { level: 13, xpRequired: 17000,  title: 'Champion Visser' },
-  { level: 14, xpRequired: 21500,  title: 'Grand Champion' },
-  { level: 15, xpRequired: 27000,  title: 'Meestervisser' },
-  { level: 16, xpRequired: 34000,  title: 'Senior Meester' },
-  { level: 17, xpRequired: 43000,  title: 'Grand Master' },
-  { level: 18, xpRequired: 54000,  title: 'Legende' },
-  { level: 19, xpRequired: 68000,  title: 'Onsterfelijke Visser' },
-  { level: 20, xpRequired: 85000,  title: 'De Vis Meester' },
+  { level: 1,  xpRequired: 0,     title: 'Beginner' },
+  { level: 2,  xpRequired: 150,   title: 'Rookie' },
+  { level: 3,  xpRequired: 400,   title: 'Rookie' },
+  { level: 4,  xpRequired: 800,   title: 'Gevorderd' },
+  { level: 5,  xpRequired: 1400,  title: 'Gevorderd' },
+  { level: 6,  xpRequired: 2200,  title: 'Pro Visser' },
+  { level: 7,  xpRequired: 3300,  title: 'Pro Visser' },
+  { level: 8,  xpRequired: 4800,  title: 'Big Game Angler' },
+  { level: 9,  xpRequired: 6800,  title: 'Big Game Angler' },
+  { level: 10, xpRequired: 10000, title: 'CatchRank Legend' },
 ];
 
-export const MAX_LEVEL = LEVEL_CONFIG.length;
+export const MAX_LEVEL = 10;
 
 /**
- * XP bonus by species general category (rarity tier).
- * Maps common Dutch sport fish to an extra XP bonus on top of the catch base.
+ * XP multiplier per level — Dart LevelingService.xpMultiplierForLevel().
+ * Applied when awarding XP so higher-level players earn slightly less per catch.
+ *   L1–3:  1.0×
+ *   L4–6:  0.9×
+ *   L7–9:  0.8×
+ *   L10:   0.7×
  */
-const SPECIES_XP_BONUS: Record<string, number> = {
-  'meerval': 20,
-  'karper': 15,
-  'zeebaars': 12,
-  'snoekbaars': 10,
-  'snoek': 8,
-  'roofblei': 6,
-  'forel': 5,
-  'winde': 3,
-  'baars': 0,
-  'brasem': 0,
-};
+export function xpMultiplierForLevel(level: number): number {
+  if (level >= 10) return 0.7;
+  if (level >= 7)  return 0.8;
+  if (level >= 4)  return 0.9;
+  return 1.0;
+}
 
 /**
- * XP bonus for specific species variants (on top of general bonus).
- * Rewards catching rare or notable variants of common species.
+ * Apply level multiplier to a base XP amount — Dart applyLevelMultiplier().
  */
-const SPECIES_SPECIFIC_XP_BONUS: Record<string, number> = {
-  // Carp variants
-  'wilde karper': 8,
-  'spiegelkarper': 5,
-  'lederkarper': 7,
-  'grasskarper': 4,
-  'koikarper': 3,
-  // Pike-perch variants
-  'spiegelsnoekbaars': 5,
-  // Trout variants
-  'regenboogforel': 3,
-  'beekforel': 5,
-  'zeeforel': 8,
-  'meerforel': 6,
-  // Catfish
-  'europese meerval': 20,
-  'amerikaanse hondsvis': 5,
-  // Bass / other
-  'grote mond baars': 8,
-  'kleine mond baars': 6,
-  'zeebaars': 12,
-  // Pike
-  'snoek': 8,
-};
-
-/**
- * Returns extra XP bonus based on species.
- * Checks speciesSpecific first (more precise), falls through to speciesGeneral.
- * Case-insensitive match against Dutch common names.
- */
-export function getSpeciesXpBonus(speciesGeneral: string, speciesSpecific?: string): number {
-  if (speciesSpecific) {
-    const specificKey = speciesSpecific.toLowerCase().trim();
-    const specificBonus = SPECIES_SPECIFIC_XP_BONUS[specificKey];
-    if (specificBonus !== undefined) return specificBonus;
-  }
-  const key = speciesGeneral.toLowerCase().trim();
-  return SPECIES_XP_BONUS[key] ?? 0;
+export function applyLevelMultiplier(baseXp: number, userLevel: number): number {
+  return Math.round(baseXp * xpMultiplierForLevel(userLevel));
 }
 
 /**
@@ -140,7 +102,7 @@ export function calculateLevelFromXp(xp: number): number {
 }
 
 /**
- * Returns the display title for a given level.
+ * Returns the display title for a given level (Dart getRankTitle equivalent).
  */
 export function getLevelTitle(level: number): string {
   const config = LEVEL_CONFIG.find(l => l.level === level);
@@ -181,11 +143,11 @@ export function getLevelProgress(xp: number): LevelProgress {
 /**
  * Awards XP to a user and updates their level if they crossed a threshold.
  *
- * Uses Firestore increment() for atomic XP addition.
- * One read + one write per XP event — acceptable for this use frequency.
- * Shows toast notifications for XP gain and level-ups.
+ * Applies the level multiplier from Dart's applyLevelMultiplier() so higher-
+ * level users earn slightly less per catch.
  *
- * Dev-safe: returns early if userId or amount is invalid without throwing.
+ * Uses Firestore increment() for atomic XP addition.
+ * One read + one write per XP event.
  */
 export const xpService = {
   async addXpToUser(userId: string, amount: number): Promise<XpResult> {
@@ -194,8 +156,6 @@ export const xpService = {
     }
 
     const userRef = doc(db, 'users', userId);
-
-    // Single read to get current state for level comparison
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) {
       return { prevXp: 0, newXp: 0, prevLevel: 1, newLevel: 1, didLevelUp: false, xpAdded: 0 };
@@ -205,33 +165,78 @@ export const xpService = {
     const prevXp: number = userData?.xp ?? 0;
     const prevLevel: number = userData?.level ?? 1;
 
-    const newXp = prevXp + amount;
+    // Apply level multiplier (Dart applyLevelMultiplier)
+    const adjustedAmount = applyLevelMultiplier(amount, prevLevel);
+
+    const newXp = prevXp + adjustedAmount;
     const newLevel = calculateLevelFromXp(newXp);
     const didLevelUp = newLevel > prevLevel;
 
-    // Atomic write — use increment() to avoid race conditions
     const updateData: Record<string, unknown> = {
-      xp: increment(amount),
+      xp: increment(adjustedAmount),
+      total_xp: increment(adjustedAmount),
     };
     if (newLevel !== prevLevel) {
       updateData.level = newLevel;
+      updateData.rank_title = getLevelTitle(newLevel);
     }
 
     await updateDoc(userRef, updateData);
 
-    // Toast notifications — level-up gets priority over regular XP toast
     if (didLevelUp) {
       toast.success(`Level Up! Je bent nu Level ${newLevel}`, {
         description: `${getLevelTitle(newLevel)} — blijf vangen voor meer XP!`,
         duration: 6000,
       });
     } else {
-      toast.success(`+${amount} XP verdiend`, {
+      toast.success(`+${adjustedAmount} XP verdiend`, {
         description: 'Goed gedaan! Blijf loggen voor meer progressie.',
         duration: 2500,
       });
     }
 
-    return { prevXp, newXp, prevLevel, newLevel, didLevelUp, xpAdded: amount };
+    return { prevXp, newXp, prevLevel, newLevel, didLevelUp, xpAdded: adjustedAmount };
   },
 };
+
+/**
+ * Full XP sync — matches Dart LevelingService.syncUserStats().
+ *
+ * Reads ALL catches_v2 for the user, sums xpEarned (fallback: xp field),
+ * recalculates level and rank_title, writes back to users/{uid}.
+ *
+ * Called once per session from the dashboard backfill hook to ensure
+ * migrated Flutter catches are properly reflected in user.xp.
+ */
+export async function syncUserXpFromCatches(userId: string): Promise<void> {
+  if (!userId) return;
+
+  const catchesSnap = await getDocs(
+    query(collection(db, 'catches_v2'), where('userId', '==', userId))
+  );
+
+  let totalXp = 0;
+  let catchCount = 0;
+
+  catchesSnap.docs.forEach(d => {
+    const c = d.data();
+    const raw = c.xpEarned ?? c.xp ?? 0;
+    const xp = typeof raw === 'number' ? raw : (parseInt(String(raw)) || 0);
+    totalXp += xp;
+    catchCount++;
+  });
+
+  if (totalXp < 0) totalXp = 0;
+
+  const level = calculateLevelFromXp(totalXp);
+  const rankTitle = getLevelTitle(level);
+
+  await updateDoc(doc(db, 'users', userId), {
+    xp: totalXp,
+    total_xp: totalXp,
+    level,
+    rank_title: rankTitle,
+    catch_count: catchCount,
+    last_stats_update: serverTimestamp(),
+  });
+}

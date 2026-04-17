@@ -88,6 +88,12 @@ export interface UserProfile {
 
   lastActive?: AnyTimestamp;
   createdAt?: AnyTimestamp;
+
+  /** Dart-aligned fields written by syncUserXpFromCatches() */
+  rank_title?: string;          // e.g. 'Pro Visser', 'CatchRank Legend'
+  total_xp?: number;            // Legacy Flutter field name (kept for compat)
+  catch_count?: number;         // Count of catches used for XP sync
+  last_stats_update?: any;      // Firestore Timestamp — throttle guard for sync
 }
 
 /* -------------------------------------------------------------------------- */

@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Fish,
-  ShoppingBag,
+  Trophy,
   User,
   History,
   MapPin
@@ -19,9 +19,9 @@ const leftNavItems = [
 ];
 
 const rightNavItems = [
-  { icon: MapPin, label: 'Stekken', path: '/spots' },
-  { icon: ShoppingBag, label: 'Gear', path: '/gear' },
-  { icon: User, label: 'Profiel', path: '/profile' },
+  { icon: MapPin,   label: 'Stekken',  path: '/spots' },
+  { icon: Trophy,   label: 'Rankings', path: '/rankings' },
+  { icon: User,     label: 'Profiel',  path: '/profile' },
 ];
 
 function NavItem({ icon: Icon, label, path }: { icon: React.ElementType; label: string; path: string }) {

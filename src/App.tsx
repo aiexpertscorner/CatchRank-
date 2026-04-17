@@ -13,6 +13,7 @@ import {
   browserSessionPersistence,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { syncUserXpFromCatches } from './services/xpService';
 import { auth, db } from './lib/firebase';
 import { UserProfile } from './types';
 import { AppShell } from './components/layout/AppShell';
@@ -86,6 +87,9 @@ function normalizeUserProfile(data: Record<string, any>, uid: string): UserProfi
     stats,
     favoriteSpecies,
     onboardingStatus,
+    rank_title: data.rank_title ?? undefined,
+    total_xp: data.total_xp ?? xp,
+    catch_count: data.catch_count ?? stats.totalCatches,
   } as UserProfile;
 }
 
@@ -129,7 +133,15 @@ export default function App() {
         const userDoc = await getDoc(ref);
 
         if (userDoc.exists()) {
-          setProfile(normalizeUserProfile(userDoc.data(), firebaseUser.uid));
+          const rawData = userDoc.data();
+          setProfile(normalizeUserProfile(rawData, firebaseUser.uid));
+
+          // Self-heal for Flutter-migrated users: if total_xp > 0 but xp is 0/missing,
+          // the Rankings query (where xp > 0) will exclude this user. Sync in background
+          // to write xp field to Firestore so they appear in Rankings on next page load.
+          if ((rawData.total_xp ?? 0) > 0 && (rawData.xp ?? 0) === 0) {
+            syncUserXpFromCatches(firebaseUser.uid).catch(console.error);
+          }
         } else {
           const newProfile: UserProfile = {
             uid: firebaseUser.uid,

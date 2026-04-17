@@ -4,10 +4,9 @@
  * Responsibilities:
  *  1. Real-time listeners for recent catches + sessions (onSnapshot)
  *  2. One-time load of stats (cached), spots and gear as secondary data
- *  3. XP backfill: catches_v2 records without xpEarned get their XP
- *     calculated and written back. User profile XP is updated if the
- *     derived total exceeds what is currently stored. Runs once per
- *     browser session (localStorage gate).
+ *  3. XP sync: backfills any catches missing xpEarned with the Dart formula,
+ *     then runs a full syncUserXpFromCatches() to sum ALL catch XP (including
+ *     migrated Flutter catches) into user.xp. Runs once per browser session.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -21,18 +20,13 @@ import {
   getDocs,
   writeBatch,
   doc,
-  updateDoc,
-  increment,
-  getDoc,
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Catch, Session, Spot, GearItem } from '../../../types';
 import { statsService, UserStats } from '../../../services/statsService';
 import { gearService } from '../../gear/services/gearService';
-import {
-  getSpeciesXpBonus,
-  calculateLevelFromXp,
-} from '../../../services/xpService';
+import { syncUserXpFromCatches } from '../../../services/xpService';
+import { loggingService } from '../../logging/services/loggingService';
 import { getSpotCatchCount } from '../utils/dashboardHelpers';
 
 const COLLECTIONS = {
@@ -41,66 +35,48 @@ const COLLECTIONS = {
   SESSIONS: 'sessions_v2',
 } as const;
 
-const XP_BASE_CATCH = 10; // base XP for a complete catch
-
-const backfillKey = (uid: string) => `catchrank_xp_backfill_${uid}`;
+/**
+ * Session storage key — use _v2_ suffix to force one-time re-run on all
+ * existing browser sessions after the XP formula update.
+ */
+const syncKey = (uid: string) => `catchrank_xp_sync_v2_${uid}`;
 
 /* ─────────────────────────────────────────────────────────────────
-   XP backfill — runs once per browser session per user
+   XP sync — runs once per browser session per user.
+
+   Step A: backfill any catches that are missing xpEarned (e.g. new
+           catches created before XP was calculated) using the Dart formula.
+   Step B: full sync — sum ALL catches' xpEarned (including migrated Flutter
+           catches) into user.xp via syncUserXpFromCatches().
    ───────────────────────────────────────────────────────────────── */
 
-async function runXpBackfillIfNeeded(
+async function syncUserXpIfStale(
   userId: string,
   catches: Catch[]
 ): Promise<void> {
-  // Gate: only run once per session
-  if (sessionStorage.getItem(backfillKey(userId))) return;
-  sessionStorage.setItem(backfillKey(userId), '1');
+  if (sessionStorage.getItem(syncKey(userId))) return;
+  sessionStorage.setItem(syncKey(userId), '1');
 
-  // Catches that are not drafts and have no xpEarned set (includes migrated records without status)
+  // Step A: backfill catches missing xpEarned with Dart formula
   const needsXp = catches.filter(
     (c) =>
       c.status !== 'draft' &&
-      (c.xpEarned === undefined || c.xpEarned === null || c.xpEarned === 0)
+      (c.xpEarned == null || c.xpEarned === 0)
   );
 
-  if (needsXp.length === 0) return;
-
-  // Calculate & batch-write xpEarned per catch
-  const batch = writeBatch(db);
-  let totalNewXp = 0;
-
-  for (const c of needsXp) {
-    const speciesGeneral =
-      (c as any).speciesGeneral || c.species || '';
-    const speciesSpecific =
-      (c as any).speciesSpecific || '';
-    const speciesBonus = getSpeciesXpBonus(speciesGeneral, speciesSpecific);
-    const xpEarned = XP_BASE_CATCH + speciesBonus;
-
-    if (c.id) {
-      batch.update(doc(db, COLLECTIONS.CATCHES, c.id), { xpEarned });
+  if (needsXp.length > 0) {
+    const batch = writeBatch(db);
+    for (const c of needsXp) {
+      const xp = loggingService.calculateXP(c);
+      if (c.id) {
+        batch.update(doc(db, COLLECTIONS.CATCHES, c.id), { xpEarned: xp });
+      }
     }
-    totalNewXp += xpEarned;
+    await batch.commit();
   }
 
-  await batch.commit();
-
-  if (totalNewXp <= 0) return;
-
-  // Add the newly calculated XP to the user's profile (atomic increment)
-  const userRef = doc(db, 'users', userId);
-  const userSnap = await getDoc(userRef);
-  if (!userSnap.exists()) return;
-
-  const currentXp: number = userSnap.data()?.xp ?? 0;
-  const newXp = currentXp + totalNewXp;
-  const newLevel = calculateLevelFromXp(newXp);
-
-  await updateDoc(userRef, {
-    xp: increment(totalNewXp),
-    level: newLevel,
-  });
+  // Step B: full sync — reads all catches_v2, sums xpEarned, writes user profile
+  await syncUserXpFromCatches(userId);
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -171,8 +147,8 @@ export function useDashboardData(userId: string | undefined): DashboardData {
           .slice(0, 4);
         setFavoriteSpots(sortedSpots);
 
-        // XP backfill for migrated catches
-        await runXpBackfillIfNeeded(userId, allCatches);
+        // XP sync: backfill missing xpEarned + full sum into user profile
+        await syncUserXpIfStale(userId, allCatches);
       } catch (err) {
         console.error('[Dashboard] secondary data error:', err);
       } finally {

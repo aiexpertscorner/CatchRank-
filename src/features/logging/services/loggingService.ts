@@ -16,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { Catch, Session, Spot, UserProfile } from '../../../types';
-import { xpService, getSpeciesXpBonus } from '../../../services/xpService';
+import { xpService } from '../../../services/xpService';
 import { bustStatsCache } from '../../../services/statsService';
 
 const COLLECTIONS = {
@@ -504,20 +504,77 @@ export const loggingService = {
     await updateDoc(doc(db, COLLECTIONS.SPOTS, spotId), updateData);
   },
 
-  calculateXP(data: Partial<Catch>): number {
-    let xp = 25;
+  /**
+   * XP calculator — exact match to Dart XPCalculator.calculate().
+   *
+   * Formula:
+   *   Base: +10 (always) + photo(10) + length(5) + weight(5) + bait(5) + notes(5)
+   *   Completeness bonus over 7 fields: 70%→+5, 90%→+10, 100%→+15
+   *   Night catch (22:00–06:00): +10
+   *   Big fish (>= 90 cm): +25
+   *   Event flags (optional): newSpecies(+20), newSpot(+15), personalRecord(+30)
+   *   Cap: 110 XP
+   */
+  calculateXP(
+    data: Partial<Catch>,
+    opts?: {
+      isNewSpecies?: boolean;
+      isNewSpot?: boolean;
+      isPersonalRecord?: boolean;
+    }
+  ): number {
+    let xp = 0;
 
-    const speciesGeneral = mapCatchSpeciesGeneral(data);
-    const speciesSpecific = mapCatchSpeciesSpecific(data);
-    if (speciesGeneral) xp += getSpeciesXpBonus(speciesGeneral, speciesSpecific ?? undefined);
+    // ── Base: always awarded for logging ──
+    xp += 10;
 
-    if (data.length && data.length > 50) xp += 15;
-    if (data.weight && data.weight > 2000) xp += 20;
-    if (mapCatchImage(data)) xp += 10;
-    if (data.weather || data.weatherSnapshot) xp += 5;
-    if (data.notes && String(data.notes).length > 20) xp += 5;
+    // ── Field bonuses ──
+    const img = mapCatchImage(data);
+    if (img) xp += 10;
+    if (data.length != null) xp += 5;
+    if (data.weight != null) xp += 5;
+    const bait = (data as any).bait || (data as any).baitGeneral || (data as any).baitSpecific;
+    if (bait && String(bait).trim()) xp += 5;
+    const notes = String((data as any).notes || '').trim();
+    if (notes) xp += 5;
 
-    return xp;
+    // ── Completeness bonus (7 fields: speciesGeneral, speciesSpecific, spotId, length, weight, bait, mainImage) ──
+    const comValues = [
+      mapCatchSpeciesGeneral(data),
+      mapCatchSpeciesSpecific(data),
+      data.spotId,
+      data.length,
+      data.weight,
+      bait,
+      img,
+    ];
+    const filled = comValues.filter(v => v != null && String(v).trim() !== '').length;
+    const ratio = filled / comValues.length;
+    if (ratio >= 1.0)      xp += 15;
+    else if (ratio >= 0.9) xp += 10;
+    else if (ratio >= 0.7) xp +=  5;
+
+    // ── Night catch bonus (22:00–06:00) ──
+    const ts = (data as any).timestamp;
+    if (ts) {
+      try {
+        const d: Date = ts?.toDate?.() instanceof Date ? ts.toDate()
+          : ts instanceof Date ? ts : new Date(ts);
+        const h = d.getHours();
+        if (h >= 22 || h < 6) xp += 10;
+      } catch { /* ignore bad timestamp */ }
+    }
+
+    // ── Big fish bonus (>= 90 cm default threshold) ──
+    if (data.length != null && data.length >= 90) xp += 25;
+
+    // ── Event bonuses (optional, context-dependent) ──
+    if (opts?.isNewSpecies)     xp += 20;
+    if (opts?.isNewSpot)        xp += 15;
+    if (opts?.isPersonalRecord) xp += 30;
+
+    // ── Cap at 110 XP ──
+    return Math.min(xp, 110);
   },
 
   calculateIncompleteFields(data: Partial<Catch>): string[] {
